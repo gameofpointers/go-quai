@@ -96,6 +96,8 @@ type Engine interface {
 	// consensus rules that happen at finalization (e.g. block rewards).
 	FinalizeAndAssemble(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, manifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error)
 
+	FinalizeAtIndex(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, index int)
+
 	// Seal generates a new sealing request for the given input block and pushes
 	// the result into the given channel.
 	//
@@ -109,6 +111,12 @@ type Engine interface {
 	// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 	// that a new block should have.
 	CalcDifficulty(chain ChainHeaderReader, parent *types.Header) *big.Int
+
+	// CalcDifficultyAtIndex is the difficulty adjustment algorithm. It returns the difficulty
+	// that a new block should have.
+	CalcDifficultyAtIndex(chain ChainHeaderReader, genesis common.Hash, parent, parentOfParent *types.Header, context int) *big.Int
+
+	GetDifficultyOrder(header *types.Header) (int, error)
 
 	// IsDomCoincident returns true if this block satisfies the difficulty order
 	// of a dominant chain. If this node does not have a dominant chain (i.e.

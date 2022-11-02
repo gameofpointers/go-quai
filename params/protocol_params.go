@@ -18,9 +18,9 @@ package params
 
 import "math/big"
 
-const (
-	GasLimitBoundDivisor uint64 = 1024      // The bound divisor of the gas limit, used in update calculations.
-	MinGasLimit          uint64 = 100000    // Minimum the gas limit may ever be.
+const ( // The bound divisor of the gas limit, used in update calculations.
+	GasLimitBoundDivisor uint64 = 1024 // Minimum the gas limit may ever be.
+	MinGasLimit          uint64 = 1000000
 	GenesisGasLimit      uint64 = 471238800 // Gas limit of the Genesis block.
 
 	MaximumExtraDataSize  uint64 = 32    // Maximum size extra data may be after Genesis.
@@ -159,7 +159,7 @@ var (
 	MinimumDifficulty      = []*big.Int{PrimeMinDifficulty, RegionMinDifficulty, ZoneMinDifficulty} // The minimum that the difficulty may ever be.
 	GenesisDifficulty      = []*big.Int{PrimeMinDifficulty, RegionMinDifficulty, ZoneMinDifficulty} // Difficulty of the Genesis block.
 	DurationLimit          = []*big.Int{big.NewInt(1000), big.NewInt(100), big.NewInt(10)}          // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	GardenDurationLimit    = []*big.Int{big.NewInt(150), big.NewInt(30), big.NewInt(3)}             // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	OrchardDurationLimit   = []*big.Int{big.NewInt(150), big.NewInt(30), big.NewInt(3)}             // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
+	GardenDurationLimit    = []*big.Int{big.NewInt(27), big.NewInt(9), big.NewInt(3)}               // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
+	OrchardDurationLimit   = []*big.Int{big.NewInt(300), big.NewInt(30), big.NewInt(3)}             // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit     = []*big.Int{big.NewInt(24), big.NewInt(7), big.NewInt(2)}               // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 )

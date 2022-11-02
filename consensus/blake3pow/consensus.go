@@ -343,6 +343,62 @@ func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, pa
 	return x
 }
 
+// CalcDifficultyAtIndex is the difficulty adjustment algorithm. It returns
+// the difficulty that a new block should have when created at time
+// given the parent block's time and difficulty at a given context.
+func (blake3pow *Blake3pow) CalcDifficultyAtIndex(chain consensus.ChainHeaderReader, genesis common.Hash, parent, parentOfParent *types.Header, context int) *big.Int {
+	return CalcDifficultyAtIndex(chain.Config(), genesis, parent, parentOfParent, context)
+}
+
+// CalcDifficultyAtIndex is the difficulty adjustment algorithm. It returns
+// the difficulty that a new block should have when created at time
+// given the parent block's time and difficulty.
+// NOTE: This is essentially the Ethereum DAA, without a 'difficulty bomb'
+func CalcDifficultyAtIndex(config *params.ChainConfig, genesis common.Hash, parent *types.Header, parentOfParent *types.Header, context int) *big.Int {
+	// https://github.com/ethereum/EIPs/issues/100.
+	// algorithm:
+	// diff = (parent_diff +
+	//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
+	//        ) + 2^(periodCount - 2)
+
+	// time is set to the parent time and taking the difference between the parent and its parent time
+	time := parent.Time()
+	if parent.Hash() == genesis {
+		return parent.Difficulty(context)
+	}
+
+	bigTime := new(big.Int).SetUint64(time)
+	bigParentTime := new(big.Int).SetUint64(parentOfParent.Time())
+
+	// holds intermediate values to make the algo easier to read & audit
+	x := new(big.Int)
+	y := new(big.Int)
+
+	// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // duration_limit
+	x.Sub(bigTime, bigParentTime)
+	x.Div(x, params.OrchardDurationLimit[context])
+	if parent.UncleHash(context) == types.EmptyUncleHash {
+		x.Sub(big1, x)
+	} else {
+		x.Sub(big2, x)
+	}
+	// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
+	if x.Cmp(bigMinus99) < 0 {
+		x.Set(bigMinus99)
+	}
+	// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
+	y.Div(parent.Difficulty(context), params.DifficultyBoundDivisor)
+	x.Mul(y, x)
+	x.Add(parent.Difficulty(context), x)
+
+	// minimum difficulty can ever be (before exponential factor)
+	if x.Cmp(params.MinimumDifficulty[context]) < 0 {
+		x.Set(params.MinimumDifficulty[context])
+	}
+
+	return x
+}
+
 func (blake3pow *Blake3pow) IsDomCoincident(header *types.Header) bool {
 	nodeCtx := common.NodeLocation.Context()
 
@@ -447,6 +503,56 @@ type headerData struct {
 	Time          uint64
 	Extra         []byte
 	Nonce         types.BlockNonce
+}
+
+// This function determines the difficulty order of a block
+func (blake3pow *Blake3pow) GetDifficultyOrder(header *types.Header) (int, error) {
+	if header == nil {
+		return common.HierarchyDepth, errors.New("no header provided")
+	}
+	blockhash := blake3pow.SealHash(header)
+
+	for i, difficulty := range header.DifficultyArray() {
+		if difficulty != nil && big.NewInt(0).Cmp(difficulty) < 0 {
+			target := new(big.Int).Div(big2e256, difficulty)
+			if new(big.Int).SetBytes(blockhash.Bytes()).Cmp(target) <= 0 {
+				return i, nil
+			}
+		}
+	}
+	return -1, errors.New("block does not satisfy minimum difficulty")
+}
+
+// FinalizeAtIndex implements consensus.Engine, accumulating the block and uncle rewards,
+// setting the final state on the header at an index.
+func (blake3pow *Blake3pow) FinalizeAtIndex(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, index int) {
+	// Accumulate any block and uncle rewards and commit the final state root
+	accumulateRewardsAtIndex(chain.Config(), state, header, uncles, index)
+	root, _ := state.IntermediateRoot(chain.Config().IsEIP158(header.Number(index)))
+	header.SetRoot(root, index)
+}
+
+// accumulateRewardsAtIndex credits the coinbase of the given block with the mining
+// reward. The total reward consists of the static block reward and rewards for
+// included uncles. The coinbase of each uncle block is also rewarded.
+func accumulateRewardsAtIndex(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, index int) {
+
+	// Select the correct block reward based on chain progression
+	blockReward := misc.CalculateRewardWithIndex(index)
+	// Accumulate the rewards for the miner and any included uncles
+	reward := new(big.Int).Set(blockReward)
+	r := new(big.Int)
+	for _, uncle := range uncles {
+		r.Add(uncle.Number(index), big8)
+		r.Sub(r, header.Number(index))
+		r.Mul(r, blockReward)
+		r.Div(r, big8)
+		state.AddBalance(uncle.Coinbase(index), r)
+
+		r.Div(blockReward, big32)
+		reward.Add(reward, r)
+	}
+	state.AddBalance(header.Coinbase(index), reward)
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
