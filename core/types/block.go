@@ -867,3 +867,12 @@ func (m BlockManifest) Len() int { return len(m) }
 func (m BlockManifest) EncodeIndex(i int, w *bytes.Buffer) {
 	rlp.Encode(w, m[i])
 }
+
+func (m BlockManifest) Hash() common.Hash {
+	return rlpHash(m)
+}
+
+type PendingEtxs struct {
+	Header *Header
+	Etxs   []Transactions
+}

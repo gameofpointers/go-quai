@@ -67,6 +67,9 @@ const (
 	NewPooledTransactionHashesMsg = 0x08
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
+
+	GetPendingEtxsMsg = 0x0b
+	PendingEtxsMsg    = 0x0c
 )
 
 var (
@@ -316,6 +319,32 @@ type PooledTransactionsRLPPacket66 struct {
 	PooledTransactionsRLPPacket
 }
 
+// GetPendingEtxsPacket represents a pending etx query.
+type GetPendingEtxsPacket []common.Hash
+
+type GetPendingEtxsPacket66 struct {
+	RequestId uint64
+	GetPendingEtxsPacket
+}
+
+type PendingEtxsPacket struct {
+	PendingEtxs []types.PendingEtxs
+}
+
+type PendingEtxsPacket66 struct {
+	RequestId uint64
+	PendingEtxsPacket
+}
+
+// PendingHeaderRLPPacket is used for pending etxs, when we already have it encoded
+type PendingEtxsRLPPacket []rlp.RawValue
+
+// PendingEtxsRLPPacket66 is the eth-66 version of PendingEtxsRLPPacket
+type PendingEtxsRLPPacket66 struct {
+	RequestId uint64
+	PendingEtxsRLPPacket
+}
+
 func (*StatusPacket) Name() string { return "Status" }
 func (*StatusPacket) Kind() byte   { return StatusMsg }
 
@@ -360,3 +389,9 @@ func (*GetPooledTransactionsPacket) Kind() byte   { return GetPooledTransactions
 
 func (*PooledTransactionsPacket) Name() string { return "PooledTransactions" }
 func (*PooledTransactionsPacket) Kind() byte   { return PooledTransactionsMsg }
+
+func (*GetPendingEtxsPacket) Name() string { return "GetPendingEtxs" }
+func (*GetPendingEtxsPacket) Kind() byte   { return GetPendingEtxsMsg }
+
+func (*PendingEtxsPacket) Name() string { return "PendingEtxs" }
+func (*PendingEtxsPacket) Kind() byte   { return PendingEtxsMsg }

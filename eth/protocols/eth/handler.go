@@ -57,6 +57,10 @@ const (
 	// containing 200+ transactions nowadays, the practical limit will always
 	// be softResponseLimit.
 	maxReceiptsServe = 1024
+
+	// maxPendingEtxsServe is the maximum number of pending etxs to serve. This
+	// number is mostly there to limit the number of disk lookups.
+	maxPendingEtxsServe = 1024
 )
 
 // Handler is a callback to invoke from an outside runner after the boilerplate
@@ -186,6 +190,8 @@ var eth65 = map[uint64]msgHandler{
 	NewPooledTransactionHashesMsg: handleNewPooledTransactionHashes,
 	GetPooledTransactionsMsg:      handleGetPooledTransactions,
 	PooledTransactionsMsg:         handlePooledTransactions,
+	PendingEtxsMsg:                handlePendingEtxs,
+	GetPendingEtxsMsg:             handleGetPendingEtxs,
 }
 
 var eth66 = map[uint64]msgHandler{
@@ -204,6 +210,8 @@ var eth66 = map[uint64]msgHandler{
 	ReceiptsMsg:              handleReceipts66,
 	GetPooledTransactionsMsg: handleGetPooledTransactions66,
 	PooledTransactionsMsg:    handlePooledTransactions66,
+	PendingEtxsMsg:           handlePendingEtxs66,
+	GetPendingEtxsMsg:        handleGetPendingEtxs66,
 }
 
 // handleMessage is invoked whenever an inbound message is received from a remote
