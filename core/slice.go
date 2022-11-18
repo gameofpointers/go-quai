@@ -49,9 +49,10 @@ type Slice struct {
 	domUrl     string
 	subClients []*quaiclient.Client
 
-	scope              event.SubscriptionScope
-	downloaderWaitFeed event.Feed
-	missingBodyFeed    event.Feed
+	scope                  event.SubscriptionScope
+	downloaderWaitFeed     event.Feed
+	missingBodyFeed        event.Feed
+	missingPendingEtxsFeed event.Feed
 
 	pendingEtxs *lru.Cache
 
@@ -294,10 +295,12 @@ func (sl *Slice) CollectSubRollups(b *types.Block) ([]types.Transactions, error)
 			// Look for pending ETXs first in pending ETX cache, then in database
 			if res, ok := sl.pendingEtxs.Get(hash); ok && res != nil {
 				pendingEtxs = res.([]types.Transactions)
-			} else if res := rawdb.ReadPendingEtxs(sl.sliceDb, hash); res.Header != nil {
+			} else if res := rawdb.ReadPendingEtxs(sl.sliceDb, hash); res != nil {
 				pendingEtxs = res.Etxs
 			} else {
 				log.Warn("unable to find pending etxs for hash in manifest", "hash:", hash.String())
+				// Send the pendingEtxs to the feed for broadcast
+				sl.missingPendingEtxsFeed.Send(hash)
 				return nil, ErrPendingEtxNotFound
 			}
 			for ctx := nodeCtx; ctx < common.HierarchyDepth; ctx++ {
@@ -812,6 +815,10 @@ func (sl *Slice) AddPendingBlockBody(root common.Hash, body *types.Body) {
 
 func (sl *Slice) GetPendingBlockBody(root common.Hash) *types.Body {
 	return sl.miner.worker.GetPendingBlockBody(root)
+}
+
+func (sl *Slice) SubscribeMissingPendingEtxsEvent(ch chan<- common.Hash) event.Subscription {
+	return sl.scope.Track(sl.missingPendingEtxsFeed.Subscribe(ch))
 }
 
 // MakeDomClient creates the quaiclient for the given domurl
