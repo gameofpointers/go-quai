@@ -360,6 +360,32 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, ann)
 }
 
+func handleNewPendingEtxsHashes(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of new pending etxs hashes just arrived.
+	ann := new(NewPendingEtxsHashesPacket)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	// Mark the hashes as present at the remote node
+	for _, pEtxs := range *ann {
+		peer.markPendingEtxs(pEtxs.Hash)
+	}
+	// Deliver them all to the backend for queuing
+	return backend.Handle(peer, ann)
+}
+
+func handleNewPendingEtxs(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of new pending etxs announcements just arrived
+	ann := new(NewPendingEtxsPacket)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	// Mark the peer as owning the block
+	peer.markPendingEtxs(ann.Header.Hash())
+
+	return backend.Handle(peer, ann)
+}
+
 func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	// A batch of headers arrived to one of our previous requests
 	res := new(BlockHeadersPacket)

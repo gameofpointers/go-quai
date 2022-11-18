@@ -101,6 +101,12 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	case *eth.PendingEtxsPacket:
 		return h.downloader.DeliverPendingEtxs(peer.ID(), packet.PendingEtxs)
 
+	case *eth.NewPendingEtxsHashesPacket:
+		return h.pendingEtxsFetcher.Notify(peer.ID(), *packet)
+
+	case *eth.NewPendingEtxsPacket:
+		return h.pendingEtxsFetcher.Enqueue(peer.ID(), *packet)
+
 	default:
 		return fmt.Errorf("unexpected eth packet type: %T", packet)
 	}

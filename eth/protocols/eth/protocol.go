@@ -68,8 +68,10 @@ const (
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
 
-	GetPendingEtxsMsg = 0x0b
-	PendingEtxsMsg    = 0x0c
+	GetPendingEtxsMsg       = 0x0b
+	PendingEtxsMsg          = 0x0c
+	NewPendingEtxsMsg       = 0x11
+	NewPendingEtxsHashesMsg = 0x12
 )
 
 var (
@@ -345,6 +347,38 @@ type PendingEtxsRLPPacket66 struct {
 	PendingEtxsRLPPacket
 }
 
+// NewPendingEtxsPacket is the network packet for the block propagation message.
+type NewPendingEtxsPacket struct {
+	Header      *types.Header
+	PendingEtxs []types.Transactions
+}
+
+// NewPendingEtxsHashesPacket is the network packet for the block announcements.
+type NewPendingEtxsHashesPacket []struct {
+	Hash   common.Hash // Hash of one particular pending etxs header being announced
+	Number uint64      // Number of one particular pending etxs header being announced
+}
+
+// NewPendingEtxsHashesPacket66 the ethh/66 version of the network packet for the block announcements.
+type NewPendingEtxsHashesPacket66 []struct {
+	RequestId uint64
+	NewPendingEtxsHashesPacket
+}
+
+// Unpack retrieves the block hashes and numbers from the announcement packet
+// and returns them in a split flat format that's more consistent with the
+// internal data structures.
+func (p *NewPendingEtxsHashesPacket) Unpack() ([]common.Hash, []uint64) {
+	var (
+		hashes  = make([]common.Hash, len(*p))
+		numbers = make([]uint64, len(*p))
+	)
+	for i, body := range *p {
+		hashes[i], numbers[i] = body.Hash, body.Number
+	}
+	return hashes, numbers
+}
+
 func (*StatusPacket) Name() string { return "Status" }
 func (*StatusPacket) Kind() byte   { return StatusMsg }
 
@@ -395,3 +429,9 @@ func (*GetPendingEtxsPacket) Kind() byte   { return GetPendingEtxsMsg }
 
 func (*PendingEtxsPacket) Name() string { return "PendingEtxs" }
 func (*PendingEtxsPacket) Kind() byte   { return PendingEtxsMsg }
+
+func (*NewPendingEtxsPacket) Name() string { return "NewPendingEtxs" }
+func (*NewPendingEtxsPacket) Kind() byte   { return NewPendingEtxsMsg }
+
+func (*NewPendingEtxsHashesPacket) Name() string { return "NewPendingEtxsHashes" }
+func (*NewPendingEtxsHashesPacket) Kind() byte   { return NewPendingEtxsHashesMsg }
