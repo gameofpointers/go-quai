@@ -876,3 +876,18 @@ type PendingEtxs struct {
 	Header *Header
 	Etxs   []Transactions
 }
+
+func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
+	if p == nil || p.Header == nil || p.Etxs == nil {
+		return false
+	}
+	if len(p.Etxs) < common.HierarchyDepth {
+		return false
+	}
+	for ctx, etxs := range p.Etxs {
+		if DeriveSha(etxs, hasher) != p.Header.EtxHash(ctx) {
+			return false
+		}
+	}
+	return true
+}
