@@ -308,6 +308,29 @@ func answerGetPendingEtxsQuery(backend Backend, query GetPendingEtxsPacket, peer
 	return pendingEtxs
 }
 
+func handleGetOnePendingEtxs(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block pending etxs retrieval message
+	var query GetOnePendingEtxsPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	// TODO: fetch the pending etx for the given block hash.
+	response := types.PendingEtxs{}
+	return peer.SendOnePendingEtxs(response)
+}
+
+func handleGetOnePendingEtxs66(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block pending etxs retrieval message
+	var query GetOnePendingEtxsPacket66
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	requestTracker.Fulfil(peer.id, peer.version, NewBlockMsg, query.RequestId)
+	// TODO: fetch the pending etx for the given block hash.
+	response := types.PendingEtxs{}
+	return peer.SendOnePendingEtxs(response)
+}
+
 func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	// A batch of new block announcements just arrived
 	ann := new(NewBlockHashesPacket)

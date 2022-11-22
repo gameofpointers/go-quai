@@ -72,6 +72,8 @@ const (
 	PendingEtxsMsg          = 0x0c
 	NewPendingEtxsMsg       = 0x11
 	NewPendingEtxsHashesMsg = 0x12
+	GetOnePendingEtxsMsg    = 0x13
+	OnePendingEtxsMsg       = 0x14
 )
 
 var (
@@ -321,6 +323,14 @@ type PooledTransactionsRLPPacket66 struct {
 	PooledTransactionsRLPPacket
 }
 
+// GetOnePendingEtxsPacket represents a pending etx query
+type GetOnePendingEtxsPacket common.Hash
+
+type GetOnePendingEtxsPacket66 struct {
+	RequestId uint64
+	GetOnePendingEtxsPacket
+}
+
 // GetPendingEtxsPacket represents a pending etx query.
 type GetPendingEtxsPacket []common.Hash
 
@@ -426,6 +436,9 @@ func (*PooledTransactionsPacket) Kind() byte   { return PooledTransactionsMsg }
 
 func (*GetPendingEtxsPacket) Name() string { return "GetPendingEtxs" }
 func (*GetPendingEtxsPacket) Kind() byte   { return GetPendingEtxsMsg }
+
+func (*GetOnePendingEtxsPacket) Name() string { return "GetOnePendingEtxs" }
+func (*GetOnePendingEtxsPacket) Kind() byte   { return GetOnePendingEtxsMsg }
 
 func (*PendingEtxsPacket) Name() string { return "PendingEtxs" }
 func (*PendingEtxsPacket) Kind() byte   { return PendingEtxsMsg }

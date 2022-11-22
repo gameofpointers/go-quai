@@ -391,6 +391,14 @@ func (p *Peer) SendNewPendingEtxs(pendingEtxs types.PendingEtxs) error {
 	})
 }
 
+// SendOnePendingEtxs propagates an entire block to a remote peer.
+func (p *Peer) SendOnePendingEtxs(pendingEtxs types.PendingEtxs) error {
+	return p2p.Send(p.rw, NewPendingEtxsMsg, &NewPendingEtxsPacket{
+		Header:      pendingEtxs.Header,
+		PendingEtxs: pendingEtxs.Etxs,
+	})
+}
+
 // AsyncSendNewPendingEtxs queues an entire pendingEtxs for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
 func (p *Peer) AsyncSendNewPendingEtxs(pendingEtxs types.PendingEtxs) {
@@ -663,4 +671,19 @@ func (p *Peer) RequestPendingEtxs(hashes []common.Hash) error {
 		})
 	}
 	return p2p.Send(p.rw, GetPendingEtxsMsg, GetPendingEtxsPacket(hashes))
+}
+
+// RequestOnePendingEtx fetches a pendingEtx for a given block hash from a remote node.
+func (p *Peer) RequestOnePendingEtxs(hash common.Hash) error {
+	p.Log().Debug("Fetching a pending etx", "hash", hash)
+	if p.Version() >= ETH66 {
+		id := rand.Uint64()
+
+		requestTracker.Track(p.id, p.version, GetOnePendingEtxsMsg, OnePendingEtxsMsg, id)
+		return p2p.Send(p.rw, GetOnePendingEtxsMsg, &GetOnePendingEtxsPacket66{
+			RequestId:               id,
+			GetOnePendingEtxsPacket: GetOnePendingEtxsPacket(hash),
+		})
+	}
+	return p2p.Send(p.rw, GetOnePendingEtxsMsg, GetOnePendingEtxsPacket(hash))
 }
