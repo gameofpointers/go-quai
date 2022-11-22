@@ -26,14 +26,43 @@ type ExternalTx struct {
 	// the origin chain indeed confirmed emission of that ETX.
 }
 
-// PendingEtxs are ETXs which have been emitted from a block, but are not yet
-// referencable through the block manifest. Once a coincident block is found,
-// the dominant nodes will collect all pending ETXs from each block listed in
-// the manifest, and mark them referencable so they may be included at the
-// destination chain.
+// PendingEtxs are ETXs which have been emitted in a subordinate block. The
+// block is not valid in dominant chains, but dominant chains relay the pending
+// ETXs to other chains in the network to facilitate ETX forward propagation.
+//
+// A dominant chain does not have the state to check correctness or acceptability
+// of these ETXs in the subordinate chains, but it does need to know that these
+// ETXs are valid against a block header which came from a subordinate chain.
+// For this reason, we indlude a header from the subordinate chain.
 type PendingEtxs struct {
-	Header *Header        `json:"header" gencodec:"required"`
-	Etxs   []Transactions `json:"etxs"   gencodec:"required"`
+	Header *Header `json:"header" gencodec:"required"`
+	// Etxs array contains ETXs from the chain which produced this block, and a
+	// subordinate rollup of ETXs for that chain's subordinate (if it has one).
+	// Etxs[originCtx] = external transactions in origin CTX
+	// (optional) Etxs[originCtx+1] = rollup of ETXs emitted by originCtx+1
+	Etxs []Transactions `json:"etxs"   gencodec:"required"`
+}
+
+func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
+	nodeCtx := common.NodeLocation.Context()
+	if p == nil || p.Header == nil || p.Etxs == nil {
+		return false
+	}
+	if len(p.Etxs) < common.HierarchyDepth {
+		return false
+	}
+	// pending ETXs must have originated from our subordinate context.
+	singletonCtx := nodeCtx + 1
+	rollupCtx := singletonCtx + 1
+	// singletonCtx must exist and must match hash
+	if singletonCtx >= len(p.Etxs) || DeriveSha(p.Etxs[singletonCtx], hasher) != p.Header.EtxHash(singletonCtx) {
+		return false
+	}
+	// rollupCtx may not exist (i.e. if we are a region node), but if it is, the rollup hash must match
+	if rollupCtx < len(p.Etxs) && DeriveSha(p.Etxs[rollupCtx], hasher) != p.Header.EtxRollupHash(rollupCtx) {
+		return false
+	}
+	return true
 }
 
 // copy creates a deep copy of the transaction data and initializes all fields.
@@ -65,24 +94,23 @@ func (tx *ExternalTx) copy() TxData {
 }
 
 // accessors for innerTx.
-func (tx *ExternalTx) txType() byte                { return ExternalTxType }
-func (tx *ExternalTx) chainID() *big.Int           { panic("external TX does not have chain ID") }
-func (tx *ExternalTx) protected() bool             { return true }
-func (tx *ExternalTx) accessList() AccessList      { return tx.AccessList }
-func (tx *ExternalTx) data() []byte                { return tx.Data }
-func (tx *ExternalTx) gas() uint64                 { return tx.Gas }
-func (tx *ExternalTx) gasFeeCap() *big.Int         { return tx.GasFeeCap }
-func (tx *ExternalTx) gasTipCap() *big.Int         { return tx.GasTipCap }
-func (tx *ExternalTx) gasPrice() *big.Int          { return tx.GasFeeCap }
-func (tx *ExternalTx) value() *big.Int             { return tx.Value }
-func (tx *ExternalTx) nonce() uint64               { return tx.Nonce }
-func (tx *ExternalTx) to() *common.Address         { return tx.To }
-func (tx *ExternalTx) etxGasLimit() uint64         { panic("external TX does not have etxGasLimit") }
-func (tx *ExternalTx) etxGasPrice() *big.Int       { panic("external TX does not have etxGasPrice") }
-func (tx *ExternalTx) etxGasTip() *big.Int         { panic("external TX does not have etxGasTip") }
-func (tx *ExternalTx) etxData() []byte	           { panic("external TX does not have etxData") }
-func (tx *ExternalTx) etxAccessList() AccessList   { panic("external TX does not have etxAccessList") }
-
+func (tx *ExternalTx) txType() byte              { return ExternalTxType }
+func (tx *ExternalTx) chainID() *big.Int         { panic("external TX does not have chain ID") }
+func (tx *ExternalTx) protected() bool           { return true }
+func (tx *ExternalTx) accessList() AccessList    { return tx.AccessList }
+func (tx *ExternalTx) data() []byte              { return tx.Data }
+func (tx *ExternalTx) gas() uint64               { return tx.Gas }
+func (tx *ExternalTx) gasFeeCap() *big.Int       { return tx.GasFeeCap }
+func (tx *ExternalTx) gasTipCap() *big.Int       { return tx.GasTipCap }
+func (tx *ExternalTx) gasPrice() *big.Int        { return tx.GasFeeCap }
+func (tx *ExternalTx) value() *big.Int           { return tx.Value }
+func (tx *ExternalTx) nonce() uint64             { return tx.Nonce }
+func (tx *ExternalTx) to() *common.Address       { return tx.To }
+func (tx *ExternalTx) etxGasLimit() uint64       { panic("external TX does not have etxGasLimit") }
+func (tx *ExternalTx) etxGasPrice() *big.Int     { panic("external TX does not have etxGasPrice") }
+func (tx *ExternalTx) etxGasTip() *big.Int       { panic("external TX does not have etxGasTip") }
+func (tx *ExternalTx) etxData() []byte           { panic("external TX does not have etxData") }
+func (tx *ExternalTx) etxAccessList() AccessList { panic("external TX does not have etxAccessList") }
 
 func (tx *ExternalTx) rawSignatureValues() (v, r, s *big.Int) {
 	// Signature values are ignored for external transactions
@@ -91,9 +119,4 @@ func (tx *ExternalTx) rawSignatureValues() (v, r, s *big.Int) {
 
 func (tx *ExternalTx) setSignatureValues(chainID, v, r, s *big.Int) {
 	// Signature values are ignored for external transactions
-}
-
-type PendingEtxs struct {
-	Header *Header
-	Etxs   []Transactions
 }
