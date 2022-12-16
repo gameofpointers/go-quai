@@ -253,7 +253,9 @@ func (sl *Slice) relayPh(pendingHeaderWithTermini types.PendingHeader, updateMin
 		}
 	} else if !domOrigin {
 		for i := range sl.subClients {
-			sl.subClients[i].SubRelayPendingHeader(context.Background(), pendingHeaderWithTermini, reorg, location)
+			if sl.subClients[i] != nil {
+				sl.subClients[i].SubRelayPendingHeader(context.Background(), pendingHeaderWithTermini, reorg, location)
+			}
 		}
 	}
 }
