@@ -920,7 +920,7 @@ func (q *queue) DeliverPendingEtxs(id string, pendingEtxs []types.PendingEtxs) (
 	validate := func(index int, header *types.Header) error {
 		// validate all the contexts
 		for i := 0; i < common.HierarchyDepth; i++ {
-			if types.DeriveSha(pendingEtxs[index].Etxs[i], trieHasher) != pendingEtxs[index].Header.EtxHash(i) {
+			if !pendingEtxs[i].IsValid(trieHasher) {
 				return errInvalidPendingEtxs
 			}
 		}
