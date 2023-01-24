@@ -39,25 +39,25 @@ import (
 )
 
 const (
-	alpha           = 3                     // Kademlia concurrency factor
-	bucketSize      = 16 * common.NumChains // Kademlia bucket size
-	maxReplacements = 10 * common.NumChains // Size of per-bucket replacement list
+	alpha           = 6  // Kademlia concurrency factor
+	bucketSize      = 16 // Kademlia bucket size
+	maxReplacements = 10 // Size of per-bucket replacement list
 
 	// We keep buckets for the upper 1/15 of distances because
 	// it's very unlikely we'll ever encounter a node that's closer.
 	hashBits          = len(common.Hash{}) * 8
-	nBuckets          = hashBits / 15       // Number of buckets
+	nBuckets          = hashBits            // Number of buckets
 	bucketMinDistance = hashBits - nBuckets // Log distance of closest bucket
 
 	// IP address limits.
-	bucketIPLimit, bucketSubnet = 2 * common.NumChains, 24  // Up to 2x num chains in network
-	tableIPLimit, tableSubnet   = 10 * common.NumChains, 24 // Up to 10x num chains in network
+	bucketIPLimit, bucketSubnet = 24, 24 // at most 2 addresses from the same /24
+	tableIPLimit, tableSubnet   = 24, 24
 
 	refreshInterval    = 30 * time.Minute
 	revalidateInterval = 10 * time.Second
 	copyNodesInterval  = 30 * time.Second
-	seedMinTableTime   = 5 * time.Minute
-	seedCount          = 30
+	seedMinTableTime   = 1 * time.Second
+	seedCount          = 50
 	seedMaxAge         = 5 * 24 * time.Hour
 )
 
