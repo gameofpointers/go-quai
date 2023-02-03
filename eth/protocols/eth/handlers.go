@@ -252,17 +252,6 @@ func handlePendingEtxs(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, ann)
 }
 
-func handleGetOnePendingEtxs(backend Backend, msg Decoder, peer *Peer) error {
-	// Decode the block pending etxs retrieval message
-	var query GetOnePendingEtxsPacket
-	if err := msg.Decode(&query); err != nil {
-		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
-	}
-	pendingEtxs := backend.Core().GetPendingEtxs(query.Hash)
-	log.Trace("Completing  a pendingEtxs request for", "Hash", pendingEtxs.Header.Hash())
-	return peer.SendPendingEtxs(*pendingEtxs)
-}
-
 func handleGetOnePendingEtxs66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the block pending etxs retrieval message
 	var query GetOnePendingEtxsPacket66
