@@ -19,20 +19,21 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rlp"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
 	maxFutureHeaders        = 1800 // Maximum number of future headers we can store in cache
 	maxFutureTime           = 30   // Max time into the future (in seconds) we will accept a block
-	futureHeaderTtl         = 60   // Time (in seconds) a header is allowed to live in the futureHeader cache
 	futureHeaderRetryPeriod = 3    // Time (in seconds) before retrying to append future headers
+	futureHeaderAgeDist     = 10
 )
 
 type Core struct {
 	sl     *Slice
 	engine consensus.Engine
 
-	futureHeaders *types.TimedCache
+	futureHeaders *lru.Cache
 
 	quit chan struct{} // core quit channel
 }
@@ -49,7 +50,7 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.H
 		quit:   make(chan struct{}),
 	}
 
-	futureHeaders, _ := types.NewTimedCache(maxFutureHeaders, futureHeaderTtl)
+	futureHeaders, _ := lru.New(maxFutureHeaders)
 	c.futureHeaders = futureHeaders
 
 	go c.updateFutureHeaders()
@@ -110,7 +111,12 @@ func (c *Core) procfutureHeaders() {
 	headers := make([]*types.Header, 0, c.futureHeaders.Len())
 	for _, hash := range c.futureHeaders.Keys() {
 		if header, exist := c.futureHeaders.Peek(hash); exist {
-			headers = append(headers, header.(*types.Header))
+			// If the header is more than 10 blocks behind the current height, we remove it from the futureHeader cache
+			if header.(*types.Header).NumberU64()+futureHeaderAgeDist < c.CurrentHeader().NumberU64() {
+				c.futureHeaders.Remove(header.(*types.Header).Hash())
+			} else {
+				headers = append(headers, header.(*types.Header))
+			}
 		}
 	}
 	if len(headers) > 0 {
