@@ -162,8 +162,11 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	if err != nil {
 		return nil, err
 	}
-	// HLCR
-	reorg = sl.hlcr(td)
+
+	if !domOrigin {
+		// HLCR
+		reorg = sl.hlcr(td)
+	}
 
 	// Upate the local pending header
 	localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(block)
