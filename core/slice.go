@@ -181,15 +181,20 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("TD: ", td, "domTd: ", domTd, "domOrigin: ", domOrigin)
 	if !domOrigin {
 		// HLCR
 		currTermini := sl.hc.GetTerminiByHash(sl.hc.CurrentHeader().Hash())
-		if(currTermini[nodeCtx] != newTermini[nodeCtx]) && nodeCtx != common.PRIME_CTX {
-			reorg = sl.hlcr(currTermini[nodeCtx], newTermini[nodeCtx])
+		fmt.Println("New Termini", newTermini)
+		fmt.Println("Curr Termini", currTermini)
+		if(nodeCtx != common.PRIME_CTX && currTermini[TerminusIndex] != newTermini[TerminusIndex]) {
+			reorg = sl.hlcr(currTermini[TerminusIndex], newTermini[TerminusIndex])
 		} else {
 			reorg = sl.reorg(td)
 		}
 	}
+
+	fmt.Println("Reorg: ", reorg)
 
 	// Upate the local pending header
 	localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(block)
@@ -464,7 +469,7 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.Header, domTerminus commo
 // Reorg externTd to the currentHead Td and returns true if externTd is greater
 func (sl *Slice) reorg(externTd *big.Int) bool {
 	currentTd := sl.hc.GetTdByHash(sl.hc.CurrentHeader().Hash())
-	log.Debug("Local reorg:", "Header hash:", sl.hc.CurrentHeader().Hash(), "currentTd:", currentTd, "externTd:", externTd)
+	log.Info("Local reorg:", "Header hash:", sl.hc.CurrentHeader().Hash(), "currentTd:", currentTd, "externTd:", externTd)
 	reorg := currentTd.Cmp(externTd) < 0
 	//TODO need to handle the equal td case
 	// https://github.com/dominant-strategies/go-quai/issues/430
@@ -475,7 +480,7 @@ func (sl *Slice) reorg(externTd *big.Int) bool {
 func (sl *Slice) hlcr(currTermini common.Hash, newTermini common.Hash) bool {
 	currentTd := sl.hc.GetTdByHash(currTermini)
 	externTd := sl.hc.GetTdByHash(newTermini)
-	log.Debug("HLCR:", "Header hash:", sl.hc.CurrentHeader().Hash(), "currentTd:", currentTd, "externTd:", externTd)
+	log.Info("HLCR:", "Header hash:", sl.hc.CurrentHeader().Hash(), "currentTd:", currentTd, "externTd:", externTd)
 	reorg := currentTd.Cmp(externTd) < 0
 	//TODO need to handle the equal td case
 	// https://github.com/dominant-strategies/go-quai/issues/430
