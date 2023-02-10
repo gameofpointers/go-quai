@@ -517,6 +517,7 @@ func (sl *Slice) SubRelayPendingHeader(pendingHeader types.PendingHeader, reorg 
 			bestPh, exists := sl.phCache[sl.pendingHeaderHeadHash]
 			if exists {
 				log.Info("SubRelayPendingHeader", "number:", bestPh.Header.NumberArray(), "parents:", bestPh.Header.ParentHashArray(), "terminus:", bestPh.Termini, "hash:", sl.pendingHeaderHeadHash)
+				bestPh.Header.SetLocation(common.NodeLocation)
 				sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
 			}
 		}
