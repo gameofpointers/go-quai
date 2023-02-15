@@ -23,17 +23,19 @@ import (
 )
 
 const (
-	maxFutureHeaders        = 1800 // Maximum number of future headers we can store in cache
-	maxFutureTime           = 30   // Max time into the future (in seconds) we will accept a block
-	futureHeaderTtl         = 300  // Time (in seconds) a header is allowed to live in the futureHeader cache
-	futureHeaderRetryPeriod = 3    // Time (in seconds) before retrying to append future headers
+	maxFutureHeaders            = 1800 // Maximum number of future headers we can store in cache
+	maxFutureTime               = 30   // Max time into the future (in seconds) we will accept a block
+	futureHeaderTtl             = 300  // Time (in seconds) a header is allowed to live in the futureHeader cache
+	futureHeaderRetryPeriod     = 3    // Time (in seconds) before retrying to append future headers
+	downloaderHeaderRetryPeriod = 2    // Time (in seconds) before retrying to append future headers
 )
 
 type Core struct {
 	sl     *Slice
 	engine consensus.Engine
 
-	futureHeaders *timedcache.TimedCache
+	futureHeaders     *timedcache.TimedCache
+	downloaderHeaders *timedcache.TimedCache
 
 	quit chan struct{} // core quit channel
 }
@@ -53,11 +55,16 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.H
 	futureHeaders, _ := timedcache.New(maxFutureHeaders, futureHeaderTtl)
 	c.futureHeaders = futureHeaders
 
+	downloaderHeaders, _ := timedcache.New(maxFutureHeaders, futureHeaderTtl)
+	c.downloaderHeaders = downloaderHeaders
+
 	go c.updateFutureHeaders()
+	go c.updateDownloaderHeaders()
+
 	return c, nil
 }
 
-func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
+func (c *Core) InsertChain(blocks types.Blocks, downloader bool) (int, error) {
 	nodeCtx := common.NodeLocation.Context()
 	domWait := false
 	for i, block := range blocks {
@@ -75,7 +82,11 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 					err.Error() == consensus.ErrUnknownAncestor.Error() ||
 					err.Error() == ErrSubNotSyncedToDom.Error() ||
 					err.Error() == ErrDomClientNotUp.Error() {
-					c.addfutureHeader(block.Header())
+					if downloader {
+						c.addDownloaderHeader(block.Header())
+					} else {
+						c.addfutureHeader(block.Header())
+					}
 					return i, ErrAddedFutureCache
 				}
 				if err == ErrKnownBlock {
@@ -90,9 +101,8 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 
 			// Remove the header from the future headers cache since the block append was succesful
 			c.futureHeaders.Remove(block.Hash())
-
-			// Resume the downloader if paused
-			c.sl.downloaderWaitFeed.Send(false) 
+			// Remove the header from the downloader headers cache since the block append was succesful
+			c.downloaderHeaders.Remove(block.Hash())
 
 			// If we have a dom, send the dom any pending ETXs which will become
 			// referencable by this block. When this block is referenced in the dom's
@@ -108,6 +118,63 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 		}
 	}
 	return len(blocks), nil
+}
+
+// procDownloaderHeaders sorts the future block cache and attempts to append
+func (c *Core) procDownloaderHeaders() {
+	headers := make([]*types.Header, 0, c.downloaderHeaders.Len())
+	for _, hash := range c.downloaderHeaders.Keys() {
+		if header, exist := c.downloaderHeaders.Peek(hash); exist {
+			headers = append(headers, header.(*types.Header))
+		}
+	}
+	if len(headers) > 0 {
+		sort.Slice(headers, func(i, j int) bool {
+			return headers[i].NumberU64() < headers[j].NumberU64()
+		})
+
+		for _, head := range headers {
+			block, err := c.sl.ConstructLocalBlock(head)
+			if err != nil {
+				if err.Error() == ErrBodyNotFound.Error() {
+					c.addDownloaderHeader(head)
+				}
+				log.Debug("could not construct block from downloader header", "err:", err)
+			} else {
+				_, err := c.InsertChain([]*types.Block{block}, true)
+				if err == nil {
+					// Resume the downloader if paused
+					c.sl.downloaderWaitFeed.Send(false)
+				}
+			}
+		}
+	}
+}
+
+// addfutureHeader adds a block to the downloader block cache
+func (c *Core) addDownloaderHeader(header *types.Header) error {
+	max := uint64(time.Now().Unix() + maxFutureTime)
+	if header.Time() > max {
+		return fmt.Errorf("downloader block timestamp %v > allowed %v", header.Time(), max)
+	}
+	if !c.downloaderHeaders.Contains(header.Hash()) {
+		c.downloaderHeaders.Add(header.Hash(), header)
+	}
+	return nil
+}
+
+// updateDownloaderHeaders is a time to procDownloaderHeaders
+func (c *Core) updateDownloaderHeaders() {
+	downloaderHeaderTimer := time.NewTicker(downloaderHeaderRetryPeriod * time.Second)
+	defer downloaderHeaderTimer.Stop()
+	for {
+		select {
+		case <-downloaderHeaderTimer.C:
+			c.procDownloaderHeaders()
+		case <-c.quit:
+			return
+		}
+	}
 }
 
 // procfutureHeaders sorts the future block cache and attempts to append
@@ -131,7 +198,7 @@ func (c *Core) procfutureHeaders() {
 				}
 				log.Debug("could not construct block from future header", "err:", err)
 			} else {
-				c.InsertChain([]*types.Block{block})
+				c.InsertChain([]*types.Block{block}, false)
 			}
 		}
 	}
