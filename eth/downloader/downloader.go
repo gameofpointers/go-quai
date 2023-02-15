@@ -142,7 +142,7 @@ type Core interface {
 	AddPendingEtxs(pendingEtxs types.PendingEtxs) error
 
 	// InsertChain inserts a batch of blocks into the local chain.
-	InsertChain(types.Blocks) (int, error)
+	InsertChain(types.Blocks, bool) (int, error)
 
 	// Snapshots returns the core snapshot tree to paused it during sync.
 	Snapshots() *snapshot.Tree
@@ -156,20 +156,20 @@ type Core interface {
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 func New(stateDb ethdb.Database, mux *event.TypeMux, core Core, dropPeer peerDropFn) *Downloader {
 	dl := &Downloader{
-		stateDB:         stateDb,
-		mux:             mux,
-		queue:           newQueue(blockCacheMaxItems, blockCacheInitialItems),
-		peers:           newPeerSet(),
-		core:            core,
-		dropPeer:        dropPeer,
-		headerCh:        make(chan dataPack, 1),
-		bodyCh:          make(chan dataPack, 1),
-		receiptCh:       make(chan dataPack, 1),
-		bodyWakeCh:      make(chan bool, 1),
-		receiptWakeCh:   make(chan bool, 1),
-		pauseCh:         make(chan bool, 1),
-		headerProcCh:    make(chan []*types.Header, 10),
-		quitCh:          make(chan struct{}),
+		stateDB:       stateDb,
+		mux:           mux,
+		queue:         newQueue(blockCacheMaxItems, blockCacheInitialItems),
+		peers:         newPeerSet(),
+		core:          core,
+		dropPeer:      dropPeer,
+		headerCh:      make(chan dataPack, 1),
+		bodyCh:        make(chan dataPack, 1),
+		receiptCh:     make(chan dataPack, 1),
+		bodyWakeCh:    make(chan bool, 1),
+		receiptWakeCh: make(chan bool, 1),
+		pauseCh:       make(chan bool, 10),
+		headerProcCh:  make(chan []*types.Header, 10),
+		quitCh:        make(chan struct{}),
 	}
 
 	return dl
@@ -1178,9 +1178,9 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	for i, result := range results {
 		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles, result.ExtTransactions, result.SubManifest)
 	}
-	if index, err := d.core.InsertChain(blocks); err != nil {
+	if index, err := d.core.InsertChain(blocks, true); err != nil {
 		if err.Error() == core.ErrAddedFutureCache.Error() {
-			d.pauseCh<-true // Pause the downloader
+			d.pauseCh <- true // Pause the downloader
 			return nil
 		}
 		if index < len(results) {
