@@ -43,7 +43,7 @@ const (
 	txChanSize = 4096
 
 	// missingBodyChanSize is the size of channel listening to missingBodyEvent.
-	missingBodyChanSize = 10
+	missingBodyChanSize = 1000
 
 	// missingPendingEtxsChanSize is the size of channel listening to the MissingPendingEtxsEvent
 	missingPendingEtxsChanSize = 10
