@@ -376,7 +376,7 @@ func CalcDifficultyAtIndex(config *params.ChainConfig, genesis common.Hash, pare
 
 	// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // duration_limit
 	x.Sub(bigTime, bigParentTime)
-	x.Div(x, params.OrchardDurationLimit[context])
+	x.Div(x, params.GardenDurationLimit[context])
 	if parent.UncleHash(context) == types.EmptyUncleHash {
 		x.Sub(big1, x)
 	} else {

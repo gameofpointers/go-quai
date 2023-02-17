@@ -16,8 +16,8 @@ import (
 func main() {
 	var (
 		testdb  = rawdb.NewMemoryDatabase()
-		genesis = core.DefaultColosseumGenesisBlock().MustCommit(testdb)
-		fn      = "colosseum_knot.rlp"
+		genesis = core.DefaultGardenGenesisBlock().MustCommit(testdb)
+		fn      = "garden_knot.rlp"
 	)
 
 	blake3Config := blake3pow.Config{
