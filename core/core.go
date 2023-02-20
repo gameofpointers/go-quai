@@ -38,7 +38,9 @@ type Core struct {
 	sl     *Slice
 	engine consensus.Engine
 
-	futureHeaders *timedcache.TimedCache
+	futureHeaders     *timedcache.TimedCache
+	missingParentFeed event.Feed
+	scope             event.SubscriptionScope
 
 	quit chan struct{} // core quit channel
 }
@@ -117,6 +119,13 @@ func (c *Core) procfutureHeaders() {
 	for _, hash := range c.futureHeaders.Keys() {
 		if header, exist := c.futureHeaders.Peek(hash); exist {
 			header := header.(*types.Header)
+			// If we have an unknown ancestor try and get the parent from the peers
+			// This is a secondary fetching on top of the parent fetching in the block fetcher
+			// If the future header already has the parent do not request for the parent
+			_, exist := c.futureHeaders.Peek(header.ParentHash())
+			if !exist && !c.HasBlock(header.ParentHash(), header.NumberU64()-1) {
+				c.missingParentFeed.Send(header.ParentHash())
+			}
 			if block, err := c.sl.ConstructLocalBlock(header); err == nil {
 				blocks = append(blocks, block)
 			} else if err.Error() != ErrBodyNotFound.Error() &&
@@ -162,6 +171,10 @@ func (c *Core) updateFutureHeaders() {
 			return
 		}
 	}
+}
+
+func (c *Core) SubscribeMissingParentEvent(ch chan<- common.Hash) event.Subscription {
+	return c.scope.Track(c.missingParentFeed.Subscribe(ch))
 }
 
 // InsertChainWithoutSealVerification works exactly the same
