@@ -124,6 +124,11 @@ func (c *Core) procfutureHeaders() {
 				log.Debug("could not construct block from future header", "err", err)
 				c.removeFutureHeader(header)
 			} else {
+				if err.Error() == ErrBodyNotFound.Error() {
+					c.sl.missingBodyFeed.Send(header.Hash())
+				} else if err.Error() == consensus.ErrUnknownAncestor.Error() {
+					c.sl.missingParentFeed.Send(header.ParentHash())
+				}
 				log.Debug("still waiting for body of future header", "hash", hash)
 			}
 		}
@@ -162,6 +167,10 @@ func (c *Core) updateFutureHeaders() {
 			return
 		}
 	}
+}
+
+func (c *Core) SubscribeMissingParentEvent(ch chan<- common.Hash) event.Subscription {
+	return c.sl.SubscribeMissingParentEvent(ch)
 }
 
 // InsertChainWithoutSealVerification works exactly the same

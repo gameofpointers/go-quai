@@ -51,6 +51,7 @@ type Slice struct {
 	subAppendFeed          event.Feed
 	missingBodyFeed        event.Feed
 	missingPendingEtxsFeed event.Feed
+	missingParentFeed      event.Feed
 
 	pendingEtxs *lru.Cache
 
@@ -141,6 +142,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		// If body is not found
 		if err.Error() == ErrBodyNotFound.Error() {
 			sl.missingBodyFeed.Send(header)
+		}
+		if err.Error() == consensus.ErrUnknownAncestor.Error() {
+			sl.missingParentFeed.Send(header.ParentHash())
 		}
 		return nil, err
 	}
@@ -803,6 +807,10 @@ func (sl *Slice) GetPendingBlockBody(header *types.Header) *types.Body {
 
 func (sl *Slice) SubscribeMissingPendingEtxsEvent(ch chan<- common.Hash) event.Subscription {
 	return sl.scope.Track(sl.missingPendingEtxsFeed.Subscribe(ch))
+}
+
+func (sl *Slice) SubscribeMissingParentEvent(ch chan<- common.Hash) event.Subscription {
+	return sl.scope.Track(sl.missingParentFeed.Subscribe(ch))
 }
 
 // MakeDomClient creates the quaiclient for the given domurl
