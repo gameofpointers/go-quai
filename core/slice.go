@@ -141,9 +141,11 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	if err != nil {
 		// If body is not found
 		if err.Error() == ErrBodyNotFound.Error() {
+			fmt.Println("TraceCh: Putting the header to request the missing body: ", header.Hash())
 			sl.missingBodyFeed.Send(header)
 		}
 		if err.Error() == consensus.ErrUnknownAncestor.Error() {
+			fmt.Println("TraceCh: Putting the request for the missing parent: ", header.ParentHash())
 			sl.missingParentFeed.Send(header.ParentHash())
 		}
 		return nil, err
@@ -274,6 +276,7 @@ func (sl *Slice) backfillPETXs(header *types.Header, subManifest types.BlockMani
 	for _, hash := range subManifest {
 		if petxs := rawdb.ReadPendingEtxs(sl.sliceDb, hash); petxs == nil {
 			// Send the pendingEtxs to the feed for broadcast
+			fmt.Println("TraceCh: Putting the request for the missing pendingEtxs: ", hash)
 			sl.missingPendingEtxsFeed.Send(hash)
 		}
 	}

@@ -18,6 +18,7 @@ package eth
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -452,13 +453,14 @@ func (h *handler) missingBodyLoop() {
 	for {
 		select {
 		case header := <-h.missingBodyCh:
+			fmt.Println("TraceCh: Read from Missing body: ", header.Hash())
 			shuffledPeers := h.getShuffledPeers()
+
 			// Check if any of the peers have the body
 			for _, peer := range shuffledPeers {
 				log.Debug("Fetching the missing body from", "peer", peer.ID(), "hash", header.Hash(), "number", header.NumberU64())
 				h.blockFetcher.Notify(peer.ID(), header.Hash(), header.NumberU64(), time.Now(), peer.RequestOneHeader, peer.RequestBodies)
 			}
-
 		case <-h.missingBodySub.Err():
 			return
 		}
@@ -471,6 +473,7 @@ func (h *handler) missingPendingEtxsLoop() {
 	for {
 		select {
 		case hash := <-h.missingPendingEtxsCh:
+			fmt.Println("TraceCh: Read from Missing PendingEtxs: ", hash)
 			shuffledPeers := h.getShuffledPeers()
 			// Check if any of the peers have the body
 			for _, peer := range shuffledPeers {
@@ -491,6 +494,7 @@ func (h *handler) missingParentLoop() {
 	for {
 		select {
 		case hash := <-h.missingParentCh:
+			fmt.Println("TraceCh: Read from Missing Parent: ", hash)
 			shuffledPeers := h.getShuffledPeers()
 			// Check if any of the peers have the body
 			for _, peer := range shuffledPeers {

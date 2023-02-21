@@ -125,8 +125,10 @@ func (c *Core) procfutureHeaders() {
 				c.removeFutureHeader(header)
 			} else {
 				if err.Error() == ErrBodyNotFound.Error() {
+					fmt.Println("TraceCh: Putting the request for the missing body: ", header.Hash())
 					c.sl.missingBodyFeed.Send(header.Hash())
 				} else if err.Error() == consensus.ErrUnknownAncestor.Error() {
+					fmt.Println("TraceCh: Putting the request for the missing parent: ", header.ParentHash())
 					c.sl.missingParentFeed.Send(header.ParentHash())
 				}
 				log.Debug("still waiting for body of future header", "hash", hash)
