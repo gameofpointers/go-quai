@@ -389,8 +389,8 @@ func DefaultGardenGenesisBlock() *Genesis {
 		Knot:       ReadKnot("./core/knot/garden_knot.rlp"),
 		Nonce:      69,
 		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
+		Difficulty: []*big.Int{big.NewInt(72048576), big.NewInt(8148576), big.NewInt(948576)},
 		GasLimit:   []uint64{1000000, 1000000, 1000000},
-		Difficulty: []*big.Int{big.NewInt(32048576), big.NewInt(8048576), big.NewInt(2048576)},
 		Alloc:      decodePrealloc(gardenAllocData),
 	}
 }
