@@ -52,12 +52,12 @@ const (
 	// maxQueuedBlocks is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
 	// that might cover uncles should be enough.
-	maxQueuedBlocks = 4
+	maxQueuedBlocks = 20
 
 	// maxQueuedBlockAnns is the maximum number of block announcements to queue up before
 	// dropping broadcasts. Similarly to block propagations, there's no point to queue
 	// above some healthy uncle limit, so use that.
-	maxQueuedBlockAnns = 4
+	maxQueuedBlockAnns = 20
 )
 
 // max is a helper function which returns the larger of the two given integers.
