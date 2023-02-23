@@ -184,12 +184,13 @@ func CheckRelayIP(sender, addr net.IP) error {
 	if IsSpecialNetwork(addr) {
 		return errSpecial
 	}
-	if addr.IsLoopback() && !sender.IsLoopback() {
-		return errLoopback
-	}
-	if IsLAN(addr) && !IsLAN(sender) {
-		return errLAN
-	}
+	// if addr.IsLoopback() && !sender.IsLoopback() {
+	// 	log.Debug("Address Is Loopback", "Address:", addr)
+	// 	return errLoopback
+	// }
+	// if IsLAN(addr) && !IsLAN(sender) {
+	// 	return errLAN
+	// }
 	return nil
 }
 
