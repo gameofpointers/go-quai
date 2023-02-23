@@ -188,9 +188,9 @@ func CheckRelayIP(sender, addr net.IP) error {
 	// 	log.Debug("Address Is Loopback", "Address:", addr)
 	// 	return errLoopback
 	// }
-	if IsLAN(addr) && !IsLAN(sender) {
-		return errLAN
-	}
+	// if IsLAN(addr) && !IsLAN(sender) {
+	// 	return errLAN
+	// }
 	return nil
 }
 
