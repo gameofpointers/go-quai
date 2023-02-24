@@ -263,7 +263,7 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 		return nil // We're in sync.
 	}
 	fmt.Println("TraceCh: All good initiate sync")
-	return op
+	return nil
 }
 
 func peerToSyncOp(mode downloader.SyncMode, p *eth.Peer) *chainSyncOp {
