@@ -94,6 +94,7 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 			} else if err.Error() != ErrKnownBlock.Error() {
 				log.Info("Append failed.", "hash", block.Hash(), "err", err)
 			}
+			//TODO: there maybe an optimization by adding removeFutureBlock but could cause brittleness if all errors above aren't accounted for
 		}
 	}
 	return len(blocks), nil
