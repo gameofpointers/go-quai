@@ -31,11 +31,13 @@ import (
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/rlp"
+	mathutil "modernc.org/mathutil"
 )
 
 var (
 	EmptyRootHash  = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 	EmptyUncleHash = RlpHash([]*Header(nil))
+	big2e256       = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil) // 2^256
 )
 
 const C_mantBits = 64
@@ -675,6 +677,80 @@ func (h *Header) EmptyReceipts() bool {
 	return h.ReceiptHash() == EmptyRootHash
 }
 
+func (h *Header) CalcS() *big.Int {
+	order := h.CalcOrder()
+	intrinsicS := h.CalcIntrinsicS()
+	switch order {
+	case common.PRIME_CTX:
+		totalS := big.NewInt(0).Add(h.ParentEntropy(common.PRIME_CTX), h.ParentDeltaS(common.REGION_CTX))
+		totalS.Add(totalS, h.ParentDeltaS(common.ZONE_CTX))
+		totalS.Add(totalS, intrinsicS)
+		return totalS
+	case common.REGION_CTX:
+		totalS := big.NewInt(0).Add(h.ParentEntropy(common.REGION_CTX), h.ParentDeltaS(common.ZONE_CTX))
+		totalS.Add(totalS, intrinsicS)
+		return totalS
+	case common.ZONE_CTX:
+		totalS := big.NewInt(0).Add(h.ParentEntropy(common.ZONE_CTX), intrinsicS)
+		return totalS
+	}
+	if h.NumberU64() == 0 {
+		return big.NewInt(0)
+	}
+	return nil
+}
+
+func (h *Header) CalcDeltaS() *big.Int {
+	order := h.CalcOrder()
+	intrinsicS := h.CalcIntrinsicS()
+	switch order {
+	case common.PRIME_CTX:
+		return big.NewInt(0)
+	case common.REGION_CTX:
+		totalDeltaS := big.NewInt(0).Add(h.ParentDeltaS(common.REGION_CTX), h.ParentDeltaS(common.ZONE_CTX))
+		totalDeltaS = big.NewInt(0).Add(totalDeltaS, intrinsicS)
+		return totalDeltaS
+	case common.ZONE_CTX:
+		totalDeltaS := big.NewInt(0).Add(h.ParentDeltaS(common.ZONE_CTX), intrinsicS)
+		return totalDeltaS
+	}
+	return nil
+}
+
+func (h *Header) CalcOrder() int {
+	intrinsicS := h.CalcIntrinsicS()
+	// PRIME case
+	totalDeltaS := big.NewInt(0).Add(h.ParentDeltaS(common.REGION_CTX), h.ParentDeltaS(common.ZONE_CTX))
+	totalDeltaS.Add(totalDeltaS, intrinsicS)
+	if totalDeltaS.Cmp(h.EntropyThreshold(common.PRIME_CTX)) > 0 {
+		return common.PRIME_CTX
+	}
+	// Region case
+	totalDeltaS = big.NewInt(0).Add(h.ParentDeltaS(2), intrinsicS)
+	if totalDeltaS.Cmp(h.EntropyThreshold(common.REGION_CTX)) > 0 {
+		return common.REGION_CTX
+	}
+	// Zone case
+	if intrinsicS.Cmp(h.CalcIntrinsicS(common.BytesToHash(new(big.Int).Div(big2e256, h.Difficulty(common.ZONE_CTX)).Bytes()))) > 0 {
+		return common.ZONE_CTX
+	}
+	return -1
+}
+
+// calcIntrinsicS
+func (h *Header) CalcIntrinsicS(args ...common.Hash) *big.Int {
+	hash := h.Hash()
+	if len(args) > 0 {
+		hash = args[0]
+	}
+	x := new(big.Int).SetBytes(hash.Bytes())
+	d := big.NewInt(0).Div(big2e256, x)
+	c, m := mathutil.BinaryLog(d, C_mantBits)
+	bigBits := big.NewInt(0).Mul(big.NewInt(int64(c)), big.NewInt(0).Exp(big.NewInt(2), big.NewInt(C_mantBits), nil))
+	bigBits = big.NewInt(0).Add(bigBits, m)
+	return bigBits
+}
+
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
 type Body struct {
@@ -987,6 +1063,7 @@ type Blocks []*Block
 type PendingHeader struct {
 	Header  *Header
 	Termini []common.Hash
+	Entropy *big.Int
 }
 
 // BlockManifest is a list of block hashes, which implements DerivableList
