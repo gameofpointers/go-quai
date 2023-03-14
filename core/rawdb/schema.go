@@ -89,7 +89,7 @@ var (
 
 	pendingHeaderPrefix = []byte("ph") // pendingHeaderPrefix + hash -> header
 	phBodyPrefix        = []byte("pc") // phBodyPrefix + hash -> []common.Hash + Td
-	candidateBodyPrefix = []byte("cb") // candidateBodyPrefix + hash -> Body
+	phEntropyPrefix     = []byte("pt") // phEntropyPrefix + hash -> *big.Int
 	terminiPrefix       = []byte("tk") //terminiPrefix + hash -> []common.Hash
 
 	blockBodyPrefix     = []byte("b")  // blockBodyPrefix + num (uint64 big endian) + hash -> block body
@@ -189,6 +189,11 @@ func headerTDKey(number uint64, hash common.Hash) []byte {
 	return append(headerKey(number, hash), headerTDSuffix...)
 }
 
+// phCacheEntropyKey = phEntropyPrefix + hash
+func phCacheEntropyKey(hash common.Hash) []byte {
+	return append(phEntropyPrefix, hash.Bytes()...)
+}
+
 // headerHashKey = headerPrefix + num (uint64 big endian) + headerHashSuffix
 func headerHashKey(number uint64) []byte {
 	return append(append(headerPrefix, encodeBlockNumber(number)...), headerHashSuffix...)
@@ -202,11 +207,6 @@ func headerNumberKey(hash common.Hash) []byte {
 // blockBodyKey = blockBodyPrefix + num (uint64 big endian) + hash
 func blockBodyKey(number uint64, hash common.Hash) []byte {
 	return append(append(blockBodyPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
-}
-
-// candidateBodyKey = candidateBodyPrefix + hash
-func candidateBodyKey(hash common.Hash) []byte {
-	return append(candidateBodyPrefix, hash.Bytes()...)
 }
 
 // blockReceiptsKey = blockReceiptsPrefix + num (uint64 big endian) + hash
