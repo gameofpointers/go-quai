@@ -78,7 +78,7 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, chainConfig *par
 	}
 
 	hc.genesisHeader = hc.GetHeaderByNumber(0)
-	log.Info("Genesis", "Hash:", hc.genesisHeader.Hash())
+	fmt.Println("Genesis", "Hash:", hc.genesisHeader.Hash())
 	if hc.genesisHeader == nil {
 		return nil, ErrNoGenesis
 	}
@@ -226,7 +226,9 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
 	defer hc.headermu.Unlock()
 
 	prevHeader := hc.CurrentHeader()
-
+	if prevHeader.Hash() == head.Hash() {
+		return nil
+	}
 	//Find a common header
 	commonHeader := hc.findCommonAncestor(head)
 	newHeader := head
