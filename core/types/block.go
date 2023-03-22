@@ -38,6 +38,8 @@ var (
 	EmptyUncleHash = RlpHash([]*Header(nil))
 )
 
+const C_mantBits = 64
+
 // A BlockNonce is a 64-bit hash which proves (combined with the
 // mix-hash) that a sufficient amount of computation has been carried
 // out on a block.
@@ -165,6 +167,9 @@ func EmptyHeader() *Header {
 		h.manifestHash[i] = EmptyRootHash
 		h.uncleHash[i] = EmptyUncleHash
 		h.difficulty[i] = big.NewInt(0)
+		h.entropyThreshold[i] = big.NewInt(0)
+		h.parentEntropy[i] = big.NewInt(0)
+		h.parentDeltaS[i] = big.NewInt(0)
 		h.number[i] = big.NewInt(0)
 		h.baseFee[i] = big.NewInt(0)
 	}
