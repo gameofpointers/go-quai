@@ -183,9 +183,9 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block) er
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
 
-	_, number, _ := peer.Head()
-	if (block.NumberU64() - 1) > number {
-		peer.SetHead(block.ParentHash(), block.NumberU64()-1, block.ReceivedAt)
+	_, peerEntropy, _ := peer.Head()
+	if peerEntropy.Cmp(block.Header().ParentEntropy()) < 0 {
+		peer.SetHead(block.Hash(), block.Header().CalcS(), block.ReceivedAt)
 		h.chainSync.handlePeerEvent(peer)
 	}
 	return nil
