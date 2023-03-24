@@ -81,6 +81,9 @@ type Engine interface {
 	// rules of a particular engine. The changes are executed inline.
 	Prepare(chain ChainHeaderReader, header *types.Header, parent *types.Header) error
 
+	// UpdateEntropyThreshold updates the header entropy field
+	UpdateEntropyThreshold(chain ChainHeaderReader, header *types.Header, parent *types.Header) error
+
 	// Finalize runs any post-transaction state modifications (e.g. block rewards)
 	// but does not assemble the block.
 	//

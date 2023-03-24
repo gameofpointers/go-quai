@@ -304,6 +304,11 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		}
 	}
 
+	// Calculate the entropy threshold for the genesis block
+	big2e64 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(64), nil)
+	head.SetEntropyThreshold(big.NewInt(0).Mul(big2e64, params.EntropyThresholdMultiple[common.REGION_CTX]), common.REGION_CTX)
+	head.SetEntropyThreshold(big.NewInt(0).Mul(big2e64, params.EntropyThresholdMultiple[common.PRIME_CTX]), common.PRIME_CTX)
+
 	// If we are a prime node, commit the Prime state. If not, create a new
 	// empty state to be commited.
 	var statedb state.StateDB

@@ -822,7 +822,6 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 	header.SetExtra(w.extra)
 	header.SetBaseFee(misc.CalcBaseFee(w.chainConfig, parent.Header()))
 	header.SetTime(timestamp)
-	header.SetEntropyThreshold(block.Header().EntropyThreshold())
 	header.SetParentEntropy(block.Header().ParentEntropy())
 
 	if w.isRunning() {
@@ -837,6 +836,11 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 	if err := w.engine.Prepare(w.hc, header, block.Header()); err != nil {
 		log.Error("Failed to prepare header for sealing", "err", err)
 		return nil, err
+	}
+
+	// Update the entropy threshold only in prime and region
+	if common.NodeLocation.Context() != common.ZONE_CTX {
+		w.engine.UpdateEntropyThreshold(w.hc, header, block.Header())
 	}
 
 	env, err := w.makeEnv(parent, header, w.coinbase)
