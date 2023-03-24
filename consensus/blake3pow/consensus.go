@@ -254,6 +254,15 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 	if expected.Cmp(header.Difficulty()) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty(), expected)
 	}
+
+	// If the chain is not zone, check the EntropyThreshold calculation
+	if nodeCtx != common.ZONE_CTX {
+		expectedEntropyThreshold := blake3pow.CalcEntropyThreshold(chain, parent)
+		if expectedEntropyThreshold.Cmp(header.EntropyThreshold()) != 0 {
+			return fmt.Errorf("invalid entropy threshold: have %v, want %v", header.EntropyThreshold(), expectedEntropyThreshold)
+		}
+	}
+
 	// Verify that the gas limit is <= 2^63-1
 	cap := uint64(0x7fffffffffffffff)
 	if header.GasLimit() > cap {
@@ -344,6 +353,43 @@ func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, pa
 	return x
 }
 
+func (blake3pow *Blake3pow) CalcEntropyThreshold(chain consensus.ChainHeaderReader, parent *types.Header) *big.Int {
+	// EntropyThreshold ET
+	// For a header n+1, ET_(n+1) = ET_n + k * (targetTime*(s_n - s_(n-1))/(t_n - t_(n-1)) - ET_n)
+
+	nodeCtx := common.NodeLocation.Context()
+	if nodeCtx == common.ZONE_CTX {
+		log.Error("CalcEntropyThreshold cannot be called in a zone chain")
+		return nil
+	}
+
+	x := new(big.Int)
+	t := new(big.Int)
+
+	if parent.Hash() == chain.Config().GenesisHash {
+		return parent.EntropyThreshold()
+	}
+	parentOfParent := chain.GetHeaderByHash(parent.ParentHash())
+
+	bigTime := new(big.Int).SetUint64(parent.Time())
+	bigParentTime := new(big.Int).SetUint64(parentOfParent.Time())
+	targetTime := blake3pow.config.DurationLimit[nodeCtx]
+
+	x = x.Sub(parent.CalcS(), parent.ParentEntropy())
+	t = t.Sub(bigTime, bigParentTime)
+
+	x = x.Div(x, t)
+	x = x.Mul(x, targetTime)
+
+	x = x.Sub(x, parent.EntropyThreshold())
+	// Dividing by k = 0.01
+	x = x.Div(x, big.NewInt(100))
+	x = x.Add(x, parent.EntropyThreshold())
+
+	// TODO: Have a min entropy threshold that adjusts based on the context and network
+	return x
+}
+
 func (blake3pow *Blake3pow) IsDomCoincident(header *types.Header) bool {
 	return header.CalcOrder() < common.NodeLocation.Context()
 }
@@ -389,6 +435,12 @@ func (blake3pow *Blake3pow) verifySeal(chain consensus.ChainHeaderReader, header
 // header to conform to the blake3pow protocol. The changes are done inline.
 func (blake3pow *Blake3pow) Prepare(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Header) error {
 	header.SetDifficulty(blake3pow.CalcDifficulty(chain, parent))
+	return nil
+}
+
+// UpdateEntropyThreshold updates the entropy threshold of the given header
+func (blake3pow *Blake3pow) UpdateEntropyThreshold(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Header) error {
+	header.SetEntropyThreshold(blake3pow.CalcEntropyThreshold(chain, parent))
 	return nil
 }
 
