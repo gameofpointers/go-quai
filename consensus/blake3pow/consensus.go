@@ -384,8 +384,9 @@ func (blake3pow *Blake3pow) CalcEntropyThreshold(chain consensus.ChainHeaderRead
 	x = x.Sub(x, parent.EntropyThreshold())
 	// Dividing by k = 0.01
 	x = x.Div(x, big.NewInt(100))
-
 	x = x.Add(x, parent.EntropyThreshold())
+
+	// TODO: Have a min entropy threshold that adjusts based on the context and network
 	return x
 }
 
