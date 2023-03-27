@@ -804,23 +804,23 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 	defer w.mu.RUnlock()
 
 	// Find the parent block for sealing task
-	parent := block
+	parentHeader := types.CopyHeader(block.Header())
 	// Sanity check the timestamp correctness, recap the timestamp
 	// to parent+1 if the mutation is allowed.
 	timestamp := genParams.timestamp
-	if parent.Time() >= timestamp {
+	if parentHeader.Time() >= timestamp {
 		if genParams.forceTime {
-			return nil, fmt.Errorf("invalid timestamp, parent %d given %d", parent.Time(), timestamp)
+			return nil, fmt.Errorf("invalid timestamp, parent %d given %d", parentHeader.Time(), timestamp)
 		}
-		timestamp = parent.Time() + 1
+		timestamp = parentHeader.Time() + 1
 	}
 	// Construct the sealing block header, set the extra field if it's allowed
-	num := parent.Number()
+	num := parentHeader.Number()
 	header := types.EmptyHeader()
 	header.SetParentHash(block.Header().Hash())
 	header.SetNumber(big.NewInt(int64(num.Uint64()) + 1))
 	header.SetExtra(w.extra)
-	header.SetBaseFee(misc.CalcBaseFee(w.chainConfig, parent.Header()))
+	header.SetBaseFee(misc.CalcBaseFee(w.chainConfig, parentHeader))
 	header.SetTime(timestamp)
 	header.SetParentEntropy(block.Header().ParentEntropy())
 
@@ -843,6 +843,7 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 		w.engine.UpdateEntropyThreshold(w.hc, header, block.Header())
 	}
 
+	parent := block
 	env, err := w.makeEnv(parent, header, w.coinbase)
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
