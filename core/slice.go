@@ -227,6 +227,8 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 
+	log.Info("Entropy Calculations", "header", header.Hash(), "S", s, "DeltaS", header.CalcDeltaS(), "IntrinsicS", header.CalcIntrinsicS())
+
 	// Combine sub's pending ETXs, sub rollup, and our local ETXs into localPendingEtxs
 	// e.g. localPendingEtxs[ctx]:
 	// * for 'ctx' is dom: empty
@@ -612,7 +614,7 @@ func (sl *Slice) writeToPhCacheAndPickPhHead(inSlice bool, reorg bool, s *big.In
 	deepCopyPendingHeaderWithTermini := types.PendingHeader{Header: types.CopyHeader(pendingHeaderWithTermini.Header), Termini: pendingHeaderWithTermini.Termini, Entropy: s}
 	oldPh, exist := sl.phCache[pendingHeaderWithTermini.Termini[terminiIndex]]
 	//Only write iff our context is better than current ie > td
-	log.Debug("Updating PhCache and Pick Head", "S:", s, "bestPhKey.coordS", sl.bestPhKey.entropy)
+	log.Info("Updating PhCache and Pick Head", "S:", s, "bestPhKey.Entropy", sl.bestPhKey.entropy)
 	if inSlice {
 		if reorg {
 			sl.phCache[pendingHeaderWithTermini.Termini[terminiIndex]] = deepCopyPendingHeaderWithTermini
@@ -622,7 +624,7 @@ func (sl *Slice) writeToPhCacheAndPickPhHead(inSlice bool, reorg bool, s *big.In
 					newEntropy[originCtx] = s
 				}
 				sl.bestPhKey = bestPhKeyStruct{key: pendingHeaderWithTermini.Termini[terminiIndex], entropy: newEntropy, blockHash: pendingHeaderWithTermini.Header.ParentHash()}
-				log.Debug("Choosing new pending header from slice", "Ph Number:", pendingHeaderWithTermini.Header.NumberArray())
+				log.Info("Choosing new pending header from slice", "Ph Number:", pendingHeaderWithTermini.Header.NumberArray())
 			}
 		}
 	} else {
@@ -642,7 +644,7 @@ func (sl *Slice) writeToPhCacheAndPickPhHead(inSlice bool, reorg bool, s *big.In
 			header := sl.hc.GetHeaderByHash(pendingHeaderWithTermini.Header.ParentHash())
 			sl.bestPhKey = bestPhKeyStruct{key: pendingHeaderWithTermini.Termini[terminiIndex], entropy: newEntropy, blockHash: pendingHeaderWithTermini.Header.ParentHash()}
 			sl.hc.SetCurrentHeader(header)
-			log.Debug("Choosing new pending header from coord update Ph Number:", pendingHeaderWithTermini.Header.NumberArray())
+			log.Info("Choosing new pending header from coord update", "Ph Number:", pendingHeaderWithTermini.Header.NumberArray())
 			return coordFutureS
 		}
 	}
