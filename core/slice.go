@@ -689,7 +689,6 @@ func (sl *Slice) init(genesis *Genesis) error {
 			pendingHeader.SetBaseFee(misc.CalcBaseFee(sl.config, genesisHeader), index)
 			pendingHeader.SetGasLimit(params.MinGasLimit, index)
 			pendingHeader.SetGasUsed(uint64(0), index)
-			pendingHeader.SetDifficulty(sl.hc.genesisHeader.Difficulty(index), index)
 			if index == common.PRIME_CTX {
 				pendingHeader.SetRoot(common.HexToHash("0x75c5a24ee5d9cca1a7d47b9f65d2ac9cf92c5ad42f1fddea02299aa05ce4efa2"), index)
 				pendingHeader.SetCoinbase(common.HexToAddress("0x00114a47a5d39ea2022dd4d864cb62cfd16879fc"), index)
@@ -709,11 +708,8 @@ func (sl *Slice) init(genesis *Genesis) error {
 				pendingHeader.SetCoinbase(sl.miner.coinbase, index)
 			}
 			pendingHeader.SetManifestHash(manifestHash, index)
-
+			pendingHeader.SetEntropyThreshold(genesisHeader.ParentEntropy(index), index)
 		}
-		big2e64 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(64), nil)
-		pendingHeader.SetEntropyThreshold(big.NewInt(0).Mul(big2e64, big.NewInt(400)), 1)
-		pendingHeader.SetEntropyThreshold(big.NewInt(0).Mul(big2e64, big.NewInt(1000)), 0)
 		pendingHeader.SetExtra([]byte{})
 		pendingHeader.SetLocation(common.NodeLocation)
 		pendingHeader.SetTime(uint64(time.Now().Unix()))

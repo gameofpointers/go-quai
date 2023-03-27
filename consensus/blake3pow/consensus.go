@@ -249,18 +249,11 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 	if nodeCtx < common.HierarchyDepth-1 && header.Difficulty().Cmp(header.Difficulty(nodeCtx+1)) < 0 {
 		return errDifficultyCrossover
 	}
-	// Verify the block's difficulty based on its timestamp and parent's difficulty
-	expected := blake3pow.CalcDifficulty(chain, parent)
-	if expected.Cmp(header.Difficulty()) != 0 {
-		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty(), expected)
-	}
 
-	// If the chain is not zone, check the EntropyThreshold calculation
-	if nodeCtx != common.ZONE_CTX {
-		expectedEntropyThreshold := blake3pow.CalcEntropyThreshold(chain, parent)
-		if expectedEntropyThreshold.Cmp(header.EntropyThreshold()) != 0 {
-			return fmt.Errorf("invalid entropy threshold: have %v, want %v", header.EntropyThreshold(), expectedEntropyThreshold)
-		}
+	// check the EntropyThreshold calculation
+	expectedEntropyThreshold := blake3pow.CalcEntropyThreshold(chain, parent)
+	if expectedEntropyThreshold.Cmp(header.EntropyThreshold()) != 0 {
+		return fmt.Errorf("invalid entropy threshold: have %v, want %v", header.EntropyThreshold(), expectedEntropyThreshold)
 	}
 
 	// Verify that the gas limit is <= 2^63-1
@@ -299,58 +292,6 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		return err
 	}
 	return nil
-}
-
-// CalcDifficulty is the difficulty adjustment algorithm. It returns
-// the difficulty that a new block should have when created at time
-// given the parent block's time and difficulty.
-func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *types.Header) *big.Int {
-	nodeCtx := common.NodeLocation.Context()
-
-	// https://github.com/ethereum/EIPs/issues/100.
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	//        ) + 2^(periodCount - 2)
-
-	time := parent.Time()
-
-	if parent.Hash() == chain.Config().GenesisHash {
-		return parent.Difficulty()
-	}
-
-	parentOfParent := chain.GetHeaderByHash(parent.ParentHash())
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).SetUint64(parentOfParent.Time())
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // duration_limit
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, blake3pow.config.DurationLimit[nodeCtx])
-	if parent.UncleHash() == types.EmptyUncleHash {
-		x.Sub(big1, x)
-	} else {
-		x.Sub(big2, x)
-	}
-	// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-	y.Div(parent.Difficulty(), params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty(), x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty[nodeCtx]) < 0 {
-		x.Set(params.MinimumDifficulty[nodeCtx])
-	}
-
-	return x
 }
 
 func (blake3pow *Blake3pow) CalcEntropyThreshold(chain consensus.ChainHeaderReader, parent *types.Header) *big.Int {
@@ -415,7 +356,7 @@ func (blake3pow *Blake3pow) verifySeal(chain consensus.ChainHeaderReader, header
 		return blake3pow.shared.verifySeal(chain, header, fulldag)
 	}
 	// Ensure that we have a valid difficulty for the block
-	if header.Difficulty(common.ZONE_CTX).Sign() <= 0 {
+	if header.EntropyThreshold(common.ZONE_CTX).Sign() <= 0 {
 		return errInvalidDifficulty
 	}
 	// Check for valid zone share and order matches context
@@ -428,13 +369,6 @@ func (blake3pow *Blake3pow) verifySeal(chain consensus.ChainHeaderReader, header
 		}
 	}
 
-	return nil
-}
-
-// Prepare implements consensus.Engine, initializing the difficulty field of a
-// header to conform to the blake3pow protocol. The changes are done inline.
-func (blake3pow *Blake3pow) Prepare(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Header) error {
-	header.SetDifficulty(blake3pow.CalcDifficulty(chain, parent))
 	return nil
 }
 

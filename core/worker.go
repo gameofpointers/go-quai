@@ -832,16 +832,8 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 		header.SetCoinbase(w.coinbase)
 	}
 
-	// Run the consensus preparation with the default or customized consensus engine.
-	if err := w.engine.Prepare(w.hc, header, block.Header()); err != nil {
-		log.Error("Failed to prepare header for sealing", "err", err)
-		return nil, err
-	}
-
-	// Update the entropy threshold only in prime and region
-	if common.NodeLocation.Context() != common.ZONE_CTX {
-		w.engine.UpdateEntropyThreshold(w.hc, header, block.Header())
-	}
+	// Update the entropy threshold
+	w.engine.UpdateEntropyThreshold(w.hc, header, block.Header())
 
 	env, err := w.makeEnv(parent, header, w.coinbase)
 	if err != nil {

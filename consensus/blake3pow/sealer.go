@@ -114,13 +114,12 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 func (blake3pow *Blake3pow) mine(header *types.Header, id int, seed uint64, abort chan struct{}, found chan *types.Header) {
 	// Extract some data from the header
 	var (
-		target = new(big.Int).Div(big2e256, header.Difficulty(common.ZONE_CTX))
+		target = new(big.Int).Set(header.EntropyThreshold(common.ZONE_CTX))
 	)
 	// Start generating random nonces until we abort or find a good one
 	var (
-		attempts  = int64(0)
-		nonce     = seed
-		powBuffer = new(big.Int)
+		attempts = int64(0)
+		nonce    = seed
 	)
 	logger := blake3pow.config.Log.New("miner", id)
 	logger.Trace("Started blake3pow search for new nonces", "seed", seed)
@@ -143,8 +142,8 @@ search:
 			// Compute the PoW value of this nonce
 			header = types.CopyHeader(header)
 			header.SetNonce(types.EncodeNonce(nonce))
-			hash := header.Hash().Bytes()
-			if powBuffer.SetBytes(hash).Cmp(target) <= 0 {
+			hash := header.Hash()
+			if header.CalcIntrinsicS(hash).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
 
 				// Seal and return a block (if still needed)
