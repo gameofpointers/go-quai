@@ -378,6 +378,9 @@ func (blake3pow *Blake3pow) CalcEntropyThreshold(chain consensus.ChainHeaderRead
 	x = x.Sub(parent.CalcS(), parent.ParentEntropy())
 	t = t.Sub(bigTime, bigParentTime)
 
+	if t.Cmp(big.NewInt(0)) == 0 {
+		fmt.Println("parent and parent of parent have same time: ", parent.NumberArray(), bigTime, parentOfParent.NumberArray(), bigParentTime)
+	}
 	x = x.Div(x, t)
 	x = x.Mul(x, targetTime)
 
