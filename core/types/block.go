@@ -722,16 +722,26 @@ func (h *Header) CalcOrder() int {
 	// PRIME case
 	totalDeltaS := big.NewInt(0).Add(h.ParentDeltaS(common.REGION_CTX), h.ParentDeltaS(common.ZONE_CTX))
 	totalDeltaS.Add(totalDeltaS, intrinsicS)
-	if totalDeltaS.Cmp(h.EntropyThreshold(common.PRIME_CTX)) > 0 {
+
+	// This is the updated the threshold calculation based on the zone difficulty threshold
+	timeFactor := big.NewInt(7)
+	zoneThresholdS := h.CalcIntrinsicS(common.BytesToHash(new(big.Int).Div(big2e256, h.Difficulty(common.ZONE_CTX)).Bytes()))
+	regionEntropyThreshold := big.NewInt(0).Mul(timeFactor, big.NewInt(common.HierarchyDepth))
+	regionEntropyThreshold = big.NewInt(0).Mul(regionEntropyThreshold, zoneThresholdS)
+
+	primeEntropyThreshold := big.NewInt(0).Mul(regionEntropyThreshold, big.NewInt(common.HierarchyDepth))
+	primeEntropyThreshold = big.NewInt(0).Mul(primeEntropyThreshold, timeFactor)
+
+	if totalDeltaS.Cmp(primeEntropyThreshold) > 0 {
 		return common.PRIME_CTX
 	}
 	// Region case
 	totalDeltaS = big.NewInt(0).Add(h.ParentDeltaS(2), intrinsicS)
-	if totalDeltaS.Cmp(h.EntropyThreshold(common.REGION_CTX)) > 0 {
+	if totalDeltaS.Cmp(regionEntropyThreshold) > 0 {
 		return common.REGION_CTX
 	}
 	// Zone case
-	if intrinsicS.Cmp(h.CalcIntrinsicS(common.BytesToHash(new(big.Int).Div(big2e256, h.Difficulty(common.ZONE_CTX)).Bytes()))) > 0 {
+	if intrinsicS.Cmp(zoneThresholdS) > 0 {
 		return common.ZONE_CTX
 	}
 	return -1

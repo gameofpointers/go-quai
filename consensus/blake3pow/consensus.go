@@ -255,12 +255,8 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty(), expected)
 	}
 
-	// If the chain is not zone, check the EntropyThreshold calculation
-	if nodeCtx != common.ZONE_CTX {
-		expectedEntropyThreshold := blake3pow.CalcEntropyThreshold(chain, parent)
-		if expectedEntropyThreshold.Cmp(header.EntropyThreshold()) != 0 {
-			return fmt.Errorf("invalid entropy threshold: have %v, want %v", header.EntropyThreshold(), expectedEntropyThreshold)
-		}
+	if header.CalcOrder() > nodeCtx {
+		return fmt.Errorf("order of the block is greater than the context")
 	}
 
 	// Verify that the gas limit is <= 2^63-1
