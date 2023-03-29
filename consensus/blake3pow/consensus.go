@@ -439,7 +439,7 @@ func (blake3pow *Blake3pow) Prepare(chain consensus.ChainHeaderReader, header *t
 
 // UpdateEntropyThreshold updates the entropy threshold of the given header
 func (blake3pow *Blake3pow) UpdateEntropyThreshold(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Header) error {
-	header.SetEntropyThreshold(blake3pow.CalcEntropyThreshold(chain, parent))
+	header.SetEntropyThreshold(big.NewInt(0))
 	return nil
 }
 
