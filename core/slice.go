@@ -30,6 +30,8 @@ const (
 	pendingHeaderGCTime     = 5
 	TerminusIndex           = 3
 	c_startingPrintLimit    = 10
+	c_regionRelayProc       = 3
+	c_primeRelayProc        = 10
 )
 
 type bestPhKeyStruct struct {
@@ -112,6 +114,10 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, isLocal
 
 	go sl.updatePendingHeadersCache()
 
+	if nodeCtx != common.ZONE_CTX {
+		go sl.procRelayPh()
+	}
+
 	return sl, nil
 }
 
@@ -189,6 +195,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	// Combine subordinates pending header with local pending header
 	pendingHeaderWithTermini := sl.computePendingHeader(types.PendingHeader{Header: localPendingHeader, Termini: newTermini}, domPendingHeader, domOrigin)
+	pendingHeaderWithTermini.Header.SetLocation(header.Location())
 
 	s := header.CalcS()
 
@@ -305,6 +312,27 @@ func (sl *Slice) relayPh(pendingHeaderWithTermini types.PendingHeader, s *big.In
 			if sl.subClients[i] != nil {
 				sl.subClients[i].SubRelayPendingHeader(context.Background(), pendingHeaderWithTermini, s, location, originCtx)
 			}
+		}
+	}
+}
+
+// procRelayPh on a ticker calls relayPh on the best PhKey
+func (sl *Slice) procRelayPh() {
+	nodeCtx := common.NodeLocation.Context()
+	var relayTimer *time.Ticker
+	if nodeCtx == common.REGION_CTX {
+		relayTimer = time.NewTicker(c_regionRelayProc * time.Second)
+	} else {
+		relayTimer = time.NewTicker(c_primeRelayProc * time.Second)
+	}
+	defer relayTimer.Stop()
+	for {
+		select {
+		case <-relayTimer.C:
+			header := sl.hc.GetHeaderByHash(sl.phCache[sl.bestPhKey.key].Header.ParentHash())
+			sl.relayPh(sl.phCache[sl.bestPhKey.key], header.CalcS(), false, sl.phCache[sl.bestPhKey.key].Header.Location(), nodeCtx)
+		case <-sl.quit:
+			return
 		}
 	}
 }
