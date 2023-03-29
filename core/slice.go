@@ -124,6 +124,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, isLocal
 // Append takes a proposed header and constructs a local block and attempts to hierarchically append it to the block graph.
 // If this is called from a dominant context a domTerminus must be provided else a common.Hash{} should be used and domOrigin should be set to true.
 func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domParentS *big.Int, domOrigin bool, reorg bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, error) {
+	start := time.Now()
 	// The compute and write of the phCache is split starting here so we need to get the lock
 	sl.phCachemu.Lock()
 	defer sl.phCachemu.Unlock()
@@ -279,7 +280,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	log.Info("Appended new block", "number", block.Header().Number(), "hash", block.Hash(),
 		"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "etxs", len(block.ExtTransactions()), "gas", block.GasUsed(),
-		"root", block.Root())
+		"root", block.Root(),
+		"order", order,
+		"elapsed", common.PrettyDuration(time.Since(start)))
 
 	return localPendingEtxs, reorg, nil
 }
