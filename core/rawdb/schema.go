@@ -89,7 +89,7 @@ var (
 
 	pendingHeaderPrefix = []byte("ph") // pendingHeaderPrefix + hash -> header
 	phBodyPrefix        = []byte("pc") // phBodyPrefix + hash -> []common.Hash + Td
-	phEntropyPrefix     = []byte("pe") // phEntropyPrefix + hash -> *big.Int
+	phEntropyPrefix     = []byte("pt") // phEntropyPrefix + hash -> *big.Int
 	terminiPrefix       = []byte("tk") //terminiPrefix + hash -> []common.Hash
 
 	blockBodyPrefix     = []byte("b")  // blockBodyPrefix + num (uint64 big endian) + hash -> block body
