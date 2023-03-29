@@ -332,8 +332,10 @@ func (sl *Slice) procRelayPh() {
 	for {
 		select {
 		case <-relayTimer.C:
+			sl.phCachemu.Lock()
 			header := sl.hc.GetHeaderByHash(sl.phCache[sl.bestPhKey.key].Header.ParentHash())
 			sl.relayPh(sl.phCache[sl.bestPhKey.key], header.CalcS(), false, sl.phCache[sl.bestPhKey.key].Header.Location(), nodeCtx)
+			sl.phCachemu.Unlock()
 		case <-sl.quit:
 			return
 		}
