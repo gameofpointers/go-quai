@@ -557,13 +557,9 @@ func (sl *Slice) SubRelayPendingHeader(pendingHeader types.PendingHeader, s *big
 	var err error
 	if nodeCtx == common.REGION_CTX {
 		// Adding a guard on the region that was already updated in the synchronous path.
-		if location.Region() != common.NodeLocation.Region() {
-			newS, err = sl.updatePhCacheFromDom(pendingHeader, common.NodeLocation.Region(), []int{common.PRIME_CTX}, s, originCtx)
-			if err != nil {
-				return
-			}
-		} else {
-			newS = s
+		newS, err = sl.updatePhCacheFromDom(pendingHeader, common.NodeLocation.Region(), []int{common.PRIME_CTX}, s, originCtx)
+		if err != nil {
+			return
 		}
 		for i := range sl.subClients {
 			if sl.subClients[i] != nil {
@@ -574,16 +570,14 @@ func (sl *Slice) SubRelayPendingHeader(pendingHeader types.PendingHeader, s *big
 		// This check prevents a double send to the miner.
 		// If the previous block on which the given pendingHeader was built is the same as the NodeLocation
 		// the pendingHeader update has already been sent to the miner for the given location in relayPh.
-		if !location.Equal(common.NodeLocation) {
-			_, err := sl.updatePhCacheFromDom(pendingHeader, common.NodeLocation.Zone(), []int{common.PRIME_CTX, common.REGION_CTX}, s, originCtx)
-			if err != nil {
-				return
-			}
-			bestPh, exists := sl.phCache[sl.bestPhKey.key]
-			if exists {
-				bestPh.Header.SetLocation(common.NodeLocation)
-				sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
-			}
+		_, err := sl.updatePhCacheFromDom(pendingHeader, common.NodeLocation.Zone(), []int{common.PRIME_CTX, common.REGION_CTX}, s, originCtx)
+		if err != nil {
+			return
+		}
+		bestPh, exists := sl.phCache[sl.bestPhKey.key]
+		if exists {
+			bestPh.Header.SetLocation(common.NodeLocation)
+			sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
 		}
 	}
 }
