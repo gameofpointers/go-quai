@@ -665,7 +665,8 @@ func (h *Header) CalcS() *big.Int {
 	if h.NumberU64() == 0 {
 		return big.NewInt(0)
 	}
-	return nil
+	fmt.Println("CalcS cannot be computed for the hash: ", h.Hash(), h.NumberArray())
+	return big.NewInt(0)
 }
 
 func (h *Header) CalcPhS() *big.Int {
@@ -685,7 +686,8 @@ func (h *Header) CalcPhS() *big.Int {
 	if h.NumberU64() == 0 {
 		return big.NewInt(0)
 	}
-	return nil
+	fmt.Println("CalcPhS cannot be computed for the hash: ", h.NumberArray())
+	return big.NewInt(0)
 }
 
 func (h *Header) CalcDeltaS() *big.Int {
@@ -702,6 +704,7 @@ func (h *Header) CalcDeltaS() *big.Int {
 		totalDeltaS := big.NewInt(0).Add(h.ParentDeltaS(common.ZONE_CTX), intrinsicS)
 		return totalDeltaS
 	}
+	fmt.Println("CalcDeltaS cannot be computed for the hash: ", h.Hash(), h.NumberArray())
 	return nil
 }
 
