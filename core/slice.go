@@ -61,7 +61,7 @@ type Slice struct {
 	phCachemu sync.RWMutex
 
 	bestPhKey types.BestPhKey
-	phCache   map[common.Hash]types.PendingHeader
+	phCache   map[common.Hash]*types.PendingHeader
 
 	validator Validator // Block and state validator interface
 }
@@ -89,7 +89,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, isLocal
 	sl.txPool = NewTxPool(*txConfig, chainConfig, sl.hc)
 	sl.miner = New(sl.hc, sl.txPool, config, db, chainConfig, engine, isLocalBlock)
 
-	sl.phCache = make(map[common.Hash]types.PendingHeader)
+	sl.phCache = make(map[common.Hash]*types.PendingHeader)
 
 	// only set the subClients if the chain is not Zone
 	sl.subClients = make([]*quaiclient.Client, 3)
@@ -191,21 +191,21 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	}
 
 	// Combine subordinates pending header with local pending header
-	pendingHeaderWithTermini := sl.computePendingHeader(types.PendingHeader{Header: localPendingHeader, Termini: newTermini}, domPendingHeader, domOrigin)
-	pendingHeaderWithTermini.Header.SetLocation(header.Location())
+	pendingHeaderWithTermini := sl.computePendingHeader(types.NewPendingHeader(localPendingHeader, newTermini), domPendingHeader, domOrigin)
+	pendingHeaderWithTermini.Header().SetLocation(header.Location())
 
 	s := header.CalcS()
 
 	// Set the parent delta S prior to sending to sub
 	if nodeCtx != common.PRIME_CTX {
 		if domOrigin {
-			pendingHeaderWithTermini.Header.SetParentDeltaS(big.NewInt(0), nodeCtx)
+			pendingHeaderWithTermini.Header().SetParentDeltaS(big.NewInt(0), nodeCtx)
 		} else {
-			pendingHeaderWithTermini.Header.SetParentDeltaS(header.CalcDeltaS(), nodeCtx)
+			pendingHeaderWithTermini.Header().SetParentDeltaS(header.CalcDeltaS(), nodeCtx)
 		}
 	}
 
-	pendingHeaderWithTermini.Header.SetParentEntropy(s)
+	pendingHeaderWithTermini.Header().SetParentEntropy(s)
 
 	// Call my sub to append the block, and collect the rolled up ETXs from that sub
 	localPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
@@ -214,7 +214,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 		// How to get the sub pending etxs if not running the full node?.
 		if sl.subClients[location.SubIndex()] != nil {
-			subPendingEtxs, err = sl.subClients[location.SubIndex()].Append(context.Background(), block.Header(), pendingHeaderWithTermini.Header, domTerminus, true, newInboundEtxs)
+			subPendingEtxs, err = sl.subClients[location.SubIndex()].Append(context.Background(), block.Header(), pendingHeaderWithTermini.Header(), domTerminus, true, newInboundEtxs)
 			if err != nil {
 				return nil, err
 			}
@@ -291,7 +291,7 @@ func (sl *Slice) relayPh(pendingHeaderWithTermini types.PendingHeader, domOrigin
 	if nodeCtx == common.ZONE_CTX {
 		bestPh, exists := sl.phCache[sl.bestPhKey.Key()]
 		if exists {
-			bestPh.Header.SetLocation(common.NodeLocation)
+			bestPh.Header().SetLocation(common.NodeLocation)
 			sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
 			return
 		}

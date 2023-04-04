@@ -1071,9 +1071,47 @@ type Blocks []*Block
 
 // PendingHeader stores the header and termini value associated with the header.
 type PendingHeader struct {
-	Header  *Header
-	Termini []common.Hash
-	Entropy *big.Int
+	header  *Header
+	termini []common.Hash
+	entropy *big.Int
+}
+
+func NewPendingHeader(header *Header, termini []common.Hash, entropy *big.Int) PendingHeader {
+	newPendingHeader := PendingHeader{}
+	newPendingHeader.SetHeader(header)
+	newPendingHeader.SetTermini(termini)
+	newPendingHeader.SetEntropy(entropy)
+	return newPendingHeader
+}
+
+// Header returns the ph header
+func (ph *PendingHeader) Header() *Header {
+	return ph.header
+}
+
+// Termini returns the ph termini
+func (ph *PendingHeader) Termini() []common.Hash {
+	return ph.termini
+}
+
+// Entropy returns the ph entropy
+func (ph *PendingHeader) Entropy() *big.Int {
+	return ph.entropy
+}
+
+// SetHeader sets the ph header
+func (ph *PendingHeader) SetHeader(header *Header) {
+	ph.header = CopyHeader(header)
+}
+
+// SetTermini sets the ph termini
+func (ph *PendingHeader) SetTermini(termini []common.Hash) {
+	ph.termini = termini
+}
+
+// SetEntropy sets the ph entropy
+func (ph *PendingHeader) SetEntropy(entropy *big.Int) {
+	ph.entropy = new(big.Int).Set(entropy)
 }
 
 // BlockManifest is a list of block hashes, which implements DerivableList
