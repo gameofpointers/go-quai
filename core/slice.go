@@ -157,6 +157,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		return nil, err
 	}
 
+	collectEtx := time.Now()
 	// If this was a coincident block, our dom will be passing us a set of newly confirmed ETXs
 	// If this is not a coincident block, we need to build up the list of confirmed ETXs using the subordinate manifest
 	subRollup := types.Transactions{}
@@ -173,6 +174,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 		subRollup = subRollups[nodeCtx+1]
 	}
+	elapsedCollectEtx := common.PrettyDuration(time.Since(collectEtx))
 
 	// Append the new block
 	err = sl.hc.Append(batch, block, newInboundEtxs.FilterToLocation(common.NodeLocation))
@@ -203,6 +205,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	pendingHeaderWithTermini.Header.SetParentEntropy(s)
 
+	subAppend := time.Now()
 	// Call my sub to append the block, and collect the rolled up ETXs from that sub
 	localPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
 	subPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
@@ -222,6 +225,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			sl.AddPendingEtxs(pEtxs)
 		}
 	}
+	log.Info("Time taken for", "collectNewlyConfirmedEtxs", elapsedCollectEtx, "sub append", common.PrettyDuration(time.Since(subAppend)))
 
 	log.Trace("Entropy Calculations", "header", header.Hash(), "S", common.BigBitsToBits(s), "DeltaS", common.BigBitsToBits(header.CalcDeltaS()), "IntrinsicS", common.BigBitsToBits(header.CalcIntrinsicS()))
 	// Combine sub's pending ETXs, sub rollup, and our local ETXs into localPendingEtxs
