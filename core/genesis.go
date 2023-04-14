@@ -424,7 +424,7 @@ func DefaultLocalGenesisBlock() *Genesis {
 		Config:     params.LocalChainConfig,
 		Nonce:      67,
 		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
-		GasLimit:   []uint64{1000000, 1000000, 1000000},
+		GasLimit:   []uint64{40000000, 40000000, 40000000},
 		Difficulty: big.NewInt(300000),
 		Alloc:      decodePrealloc(localAllocData),
 	}
