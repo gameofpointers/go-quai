@@ -96,8 +96,7 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		return h.txFetcher.Enqueue(peer.ID(), *packet, true)
 
 	case *eth.PendingEtxsPacket:
-		pendingEtxs := packet.Unpack()
-		return h.handlePendingEtxs(pendingEtxs)
+		return h.handlePendingEtxs(*&packet.PendingEtxs)
 
 	default:
 		return fmt.Errorf("unexpected eth packet type: %T", packet)
