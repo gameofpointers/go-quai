@@ -148,7 +148,15 @@ func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, err
 	nodeCtx := common.NodeLocation.Context()
 	subRollup := types.Transactions{}
 	if nodeCtx < common.ZONE_CTX {
-		for _, hash := range b.SubManifest() {
+		var manifests []common.Hash
+		if nodeCtx == common.REGION_CTX {
+			manifests = b.SubManifest()
+		} else {
+			if len(b.SubManifest()) != 0 {
+				manifests = b.SubManifest()[len(b.SubManifest())-1:]
+			}
+		}
+		for _, hash := range manifests {
 			var pendingEtxs types.Transactions
 			// Look for pending ETXs first in pending ETX cache, then in database
 			if res, ok := hc.pendingEtxs.Get(hash); ok && res != nil {
@@ -163,6 +171,10 @@ func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, err
 			}
 			subRollup = append(subRollup, pendingEtxs...)
 		}
+		for i, tx := range subRollup {
+			fmt.Println("SubRollup", i, tx.Hash(), tx.Nonce())
+		}
+		fmt.Println("Subrollup", types.DeriveSha(subRollup, trie.NewStackTrie(nil)), b.EtxRollupHash(nodeCtx+1))
 		if subRollupHash := types.DeriveSha(subRollup, trie.NewStackTrie(nil)); subRollupHash != b.EtxRollupHash(nodeCtx+1) {
 			return nil, errors.New("sub rollup does not match sub rollup hash")
 		}

@@ -166,10 +166,22 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			log.Error("Error collecting newly confirmed etxs: ", "err", err)
 			return nil, ErrSubNotSyncedToDom
 		}
-	} else if nodeCtx == common.REGION_CTX {
-		subRollup, err = sl.hc.CollectSubRollup(block)
+		for i, tx := range subRollup {
+			fmt.Println("Sub rollup in !domorigin", i, tx.Hash(), tx.Nonce())
+		}
+	}
+	if nodeCtx == common.REGION_CTX {
+		subRollup, err = sl.hc.CollectEtxSubRollup(block)
 		if err != nil {
 			return nil, err
+		}
+		// blockSubRollup, err := sl.hc.CollectSubRollup(block)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		// subRollup = append(subRollup, blockSubRollup...)
+		for i, tx := range subRollup {
+			fmt.Println("Sub rollup in region", i, tx.Hash(), tx.Nonce())
 		}
 	}
 	time5 := common.PrettyDuration(time.Since(start))
@@ -282,10 +294,10 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 	subRollup := types.Transactions{}
 	var err error
 	if nodeCtx < common.ZONE_CTX {
-		subRollup, err = sl.hc.CollectSubRollup(block)
-		if err != nil {
-			return nil, nil, err
-		}
+		// subRollup, err = sl.hc.CollectSubRollup(block)
+		// if err != nil {
+		// 	return nil, nil, err
+		// }
 	}
 
 	// Filter for ETXs destined to this slice

@@ -78,6 +78,9 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 				// subordinate block manifest, then ETXs produced by this block and the rollup
 				// of ETXs produced by subordinate chain(s) will become referencable.
 				if nodeCtx > common.PRIME_CTX {
+					for i, tx := range newPendingEtxs {
+						fmt.Println("Sending to dom", i, tx.Hash(), tx.Nonce())
+					}
 					if err := c.SendPendingEtxsToDom(types.PendingEtxs{block.Header(), newPendingEtxs}); err != nil {
 						log.Error("failed to send ETXs to domclient", "block: ", block.Hash(), "err", err)
 					}

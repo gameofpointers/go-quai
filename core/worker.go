@@ -1003,7 +1003,7 @@ func (w *worker) FinalizeAssembleAndBroadcast(chain consensus.ChainHeaderReader,
 		etxRollup = types.Transactions{}
 	} else if w.engine.IsDomCoincident(parent.Header()) {
 		if nodeCtx == common.REGION_CTX {
-			etxRollup, err = w.hc.CollectSubRollup(parent)
+			etxRollup, err = w.hc.CollectEtxSubRollup(parent)
 			if err != nil {
 				return nil, err
 			}
@@ -1029,7 +1029,11 @@ func (w *worker) FinalizeAssembleAndBroadcast(chain consensus.ChainHeaderReader,
 			etxRollup = append(etxRollup, parent.ExtTransactions()...)
 		}
 	}
+	for i, tx := range etxRollup {
+		fmt.Println("Assemble", i, tx.Hash(), tx.Nonce())
+	}
 	etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
+	fmt.Println("Assemble", "RollupHash", etxRollupHash)
 	block.Header().SetEtxRollupHash(etxRollupHash)
 
 	w.AddPendingBlockBody(block.Header(), block.Body())

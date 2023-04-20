@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -50,6 +51,10 @@ func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
 		// In prime context, the pending etx object contains the rollup of ETXs
 		// emitted in each zone block since the zone's prior coincidence with the
 		// region.
+		for i, tx := range p.Etxs {
+			fmt.Println("IsValid", i, tx.Hash(), tx.Nonce())
+		}
+		fmt.Println("IsValid", DeriveSha(p.Etxs, hasher), p.Header.EtxRollupHash(nodeCtx+1))
 		return DeriveSha(p.Etxs, hasher) == p.Header.EtxRollupHash(nodeCtx+1)
 	case common.REGION_CTX:
 		// In region context, the pending etx object contains the singleton of ETXs
