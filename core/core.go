@@ -119,8 +119,14 @@ func (c *Core) procAppendQueue() {
 		return hashNumberList[i].Number < hashNumberList[j].Number
 	})
 
+	var hashNumberListThreshold int
+	if len(hashNumberList) > 23 {
+		hashNumberListThreshold = 23
+	} else {
+		hashNumberListThreshold = len(hashNumberList)
+	}
 	// Attempt to service the sorted list
-	for _, hashAndNumber := range hashNumberList {
+	for _, hashAndNumber := range hashNumberList[:hashNumberListThreshold] {
 		block := c.GetBlockOrCandidateByHash(hashAndNumber.Hash)
 		if block != nil {
 			c.serviceFutureBlock(block)
@@ -222,6 +228,7 @@ func (c *Core) WriteBlock(block *types.Block) {
 			return
 		}
 		if order == common.NodeLocation.Context() {
+			fmt.Println("Add to Append Queue", block.Header().NumberArray())
 			c.addToAppendQueue(block)
 		}
 		c.sl.WriteBlock(block)
