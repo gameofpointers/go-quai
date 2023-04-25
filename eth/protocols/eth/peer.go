@@ -94,8 +94,9 @@ type Peer struct {
 	txBroadcast chan []common.Hash // Channel used to queue transaction propagation requests
 	txAnnounce  chan []common.Hash // Channel used to queue transaction announcement requests
 
-	term chan struct{} // Termination channel to stop the broadcasters
-	lock sync.RWMutex  // Mutex protecting the internal fields
+	location []byte        // Represents the location of the peer
+	term     chan struct{} // Termination channel to stop the broadcasters
+	lock     sync.RWMutex  // Mutex protecting the internal fields
 }
 
 // NewPeer create a wrapper for a network connection and negotiated  protocol
@@ -114,6 +115,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		txBroadcast:      make(chan []common.Hash),
 		txAnnounce:       make(chan []common.Hash),
 		txpool:           txpool,
+		location:         common.NodeLocation,
 		term:             make(chan struct{}),
 	}
 	// Start up all the broadcasters
@@ -140,6 +142,11 @@ func (p *Peer) ID() string {
 // Version retrieves the peer's negoatiated `eth` protocol version.
 func (p *Peer) Version() uint {
 	return p.version
+}
+
+// Location retrieves the location of the peer
+func (p *Peer) Location() []byte {
+	return p.location
 }
 
 // Head retrieves the current head hash and head number of the peer.

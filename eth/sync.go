@@ -247,6 +247,11 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 		return nil
 	}
 
+	// Ensure we have peer from each location
+	if !cs.handler.peerFromEachLocationExists() {
+		return nil
+	}
+
 	peer := cs.handler.peers.peerWithHighestEntropy()
 	if peer == nil {
 		return nil
@@ -295,4 +300,18 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		h.BroadcastBlock(head, false)
 	}
 	return nil
+}
+
+// peerFromEachLocationExists return true if
+// 1) In prime if we have prime peers running all the zones
+// 2) In region if we have region peers that are running all the subs
+// 3) In zone if we have peer from that zone
+func (h *handler) peerFromEachLocationExists() bool {
+	nodeCtx := common.NodeLocation.Context()
+	switch nodeCtx {
+	case common.PRIME_CTX:
+	case common.REGION_CTX:
+	case common.ZONE_CTX:
+	}
+	return false
 }
