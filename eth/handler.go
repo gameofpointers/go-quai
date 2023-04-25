@@ -45,6 +45,12 @@ const (
 	// missingBodyChanSize is the size of channel listening to missingBodyEvent.
 	missingBodyChanSize = 10
 
+	// pendingEtxBroadcastChanSize is the size of channel listening to pEtx Event.
+	pendingEtxBroadcastChanSize = 10
+
+	// pendingEtxRollupBroadcastChanSize is the size of channel listening to pEtx rollup Event.
+	pendingEtxRollupBroadcastChanSize = 10
+
 	// missingPendingEtxsChanSize is the size of channel listening to the MissingPendingEtxsEvent
 	missingPendingEtxsChanSize = 10
 
@@ -127,6 +133,11 @@ type handler struct {
 	missingPendingEtxsSub event.Subscription
 	missingParentCh       chan common.Hash
 	missingParentSub      event.Subscription
+
+	pEtxCh        chan types.PendingEtxs
+	pEtxSub       event.Subscription
+	pEtxRollupCh  chan types.PendingEtxsRollup
+	pEtxRollupSub event.Subscription
 
 	whitelist map[uint64]common.Hash
 
@@ -298,7 +309,7 @@ func (h *handler) Start(maxPeers int) {
 		go h.txBroadcastLoop()
 	}
 
-	// broadcast transactions
+	// broadcast pending etxs
 	h.wg.Add(1)
 	h.missingPendingEtxsCh = make(chan common.Hash, missingPendingEtxsChanSize)
 	h.missingPendingEtxsSub = h.core.SubscribeMissingPendingEtxsEvent(h.missingPendingEtxsCh)
@@ -326,6 +337,17 @@ func (h *handler) Start(maxPeers int) {
 	h.missingBodyCh = make(chan *types.Header, missingBodyChanSize)
 	h.missingBodySub = h.core.SubscribeMissingBody(h.missingBodyCh)
 	go h.missingBodyLoop()
+
+	h.wg.Add(1)
+	h.pEtxCh = make(chan types.PendingEtxs, pendingEtxBroadcastChanSize)
+	h.pEtxSub = h.core.SubscribePendingEtxs(h.pEtxCh)
+	go h.broadcastPEtxLoop()
+
+	// broadcast pending etxs rollup
+	h.wg.Add(1)
+	h.pEtxRollupCh = make(chan types.PendingEtxsRollup, pendingEtxRollupBroadcastChanSize)
+	h.pEtxRollupSub = h.core.SubscribePendingEtxsRollup(h.pEtxRollupCh)
+	go h.broadcastPEtxRollupLoop()
 }
 
 func (h *handler) Stop() {
@@ -337,6 +359,7 @@ func (h *handler) Stop() {
 	h.missingBodySub.Unsubscribe()        // quits missingBodyLoop
 	h.missingPendingEtxsSub.Unsubscribe() // quits pendingEtxsBroadcastLoop
 	h.missingParentSub.Unsubscribe()      // quits missingParentLoop
+	h.pEtxSub.Unsubscribe()               // quits pEtxSub
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -517,6 +540,76 @@ func (h *handler) missingParentLoop() {
 			return
 		}
 	}
+}
+
+// pEtxLoop  listens to the pendingEtxs event in Slice and anounces the pEtx to the peer
+func (h *handler) broadcastPEtxLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case pEtx := <-h.pEtxCh:
+			h.BroadcastPendingEtxs(pEtx)
+		case <-h.pEtxSub.Err():
+			return
+		}
+	}
+}
+
+// pEtxRollupLoop  listens to the pendingEtxs event in Slice and anounces the pEtx to the peer
+func (h *handler) broadcastPEtxRollupLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case pEtxRollup := <-h.pEtxRollupCh:
+			h.BroadcastPendingEtxsRollup(pEtxRollup)
+		case <-h.pEtxRollupSub.Err():
+			return
+		}
+	}
+}
+
+// BroadcastPendingEtxs will either propagate a pendingEtxs to a subset of its peers
+func (h *handler) BroadcastPendingEtxs(pEtx types.PendingEtxs) {
+	hash := pEtx.Header.Hash()
+	peers := h.peers.peersWithoutPendingEtxs(hash)
+
+	// Send the block to a subset of our peers
+	var peerThreshold int
+	sqrtNumPeers := int(math.Sqrt(float64(len(peers))))
+	if sqrtNumPeers < minPeerSend {
+		peerThreshold = len(peers)
+	} else {
+		peerThreshold = sqrtNumPeers
+	}
+	transfer := peers[:peerThreshold]
+	// If in region send the pendingEtxs directly, otherwise send the pendingEtxsManifest
+	for _, peer := range transfer {
+		peer.SendPendingEtxs(pEtx)
+	}
+	log.Trace("Propagated pending etxs", "hash", hash, "recipients", len(transfer), "len", len(pEtx.Etxs))
+	return
+}
+
+// BroadcastPendingEtxsRollup will either propagate a pending etx rollup to a subset of its peers
+func (h *handler) BroadcastPendingEtxsRollup(pEtxRollup types.PendingEtxsRollup) {
+	hash := pEtxRollup.Header.Hash()
+	peers := h.peers.peersWithoutPendingEtxs(hash)
+
+	// Send the block to a subset of our peers
+	var peerThreshold int
+	sqrtNumPeers := int(math.Sqrt(float64(len(peers))))
+	if sqrtNumPeers < minPeerSend {
+		peerThreshold = len(peers)
+	} else {
+		peerThreshold = sqrtNumPeers
+	}
+	transfer := peers[:peerThreshold]
+	// If in region send the pendingEtxs directly, otherwise send the pendingEtxsManifest
+	for _, peer := range transfer {
+		peer.SendPendingEtxsRollup(pEtxRollup)
+	}
+	log.Trace("Propagated pending etxs rollup", "hash", hash, "recipients", len(transfer), "len", len(pEtxRollup.Rollup))
+	return
 }
 
 func (h *handler) selectSomePeers() []*ethPeer {

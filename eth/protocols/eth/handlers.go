@@ -252,6 +252,15 @@ func handlePendingEtxs(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, ann)
 }
 
+func handlePendingEtxsRollup(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block pending etxs rollup retrieval message
+	ann := new(PendingEtxsRollupPacket)
+	if err := msg.Decode(&ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	return backend.Handle(peer, ann)
+}
+
 func handleGetOnePendingEtxs66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the block pending etxs retrieval message
 	var query GetOnePendingEtxsPacket66

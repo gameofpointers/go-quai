@@ -292,6 +292,22 @@ func (c *Core) SubscribeMissingBody(ch chan<- *types.Header) event.Subscription 
 	return c.sl.SubscribeMissingBody(ch)
 }
 
+func (c *Core) SubscribePendingEtxs(ch chan<- types.PendingEtxs) event.Subscription {
+	return c.sl.SubscribePendingEtxs(ch)
+}
+
+func (c *Core) AddPendingEtxs(pEtxs types.PendingEtxs) error {
+	return c.sl.AddPendingEtxs(pEtxs)
+}
+
+func (c *Core) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
+	return c.sl.AddPendingEtxsRollup(pEtxsRollup)
+}
+
+func (c *Core) SubscribePendingEtxsRollup(ch chan<- types.PendingEtxsRollup) event.Subscription {
+	return c.sl.SubscribePendingEtxsRollup(ch)
+}
+
 //---------------------//
 // HeaderChain methods //
 //---------------------//
@@ -438,10 +454,6 @@ func (c *Core) GetTerminiByHash(hash common.Hash) []common.Hash {
 
 func (c *Core) SubscribeMissingPendingEtxsEvent(ch chan<- common.Hash) event.Subscription {
 	return c.sl.hc.SubscribeMissingPendingEtxsEvent(ch)
-}
-
-func (c *Core) AddPendingEtxs(pEtxs types.PendingEtxs) error {
-	return c.sl.hc.AddPendingEtxs(pEtxs)
 }
 
 //--------------------//

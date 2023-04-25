@@ -27,6 +27,13 @@ type ExternalTx struct {
 	// the origin chain indeed confirmed emission of that ETX.
 }
 
+// PendingEtxsRollup is Header and manifest Hash of that header that should
+// be forward propagated
+type PendingEtxsRollup struct {
+	Header *Header       `json:"header" gencodec:"required"`
+	Rollup []common.Hash `json:"manifest" gencodec:"required"`
+}
+
 // PendingEtxs are ETXs which have been emitted from the zone which produced
 // the given block. Specifically, it contains the collection of ETXs emitted
 // since our prior coincident with our sub in that slice. In Prime context, our

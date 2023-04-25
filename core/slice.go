@@ -20,10 +20,12 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"github.com/dominant-strategies/go-quai/trie"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
-	maxPendingEtxBlocks               = 256
+	c_maxPendingEtxBlocks             = 256
+	c_maxPendingEtxsRollup            = 256
 	c_pendingHeaderCacheLimit         = 100
 	c_pendingHeaderChacheBufferFactor = 2
 	pendingHeaderGCTime               = 5
@@ -49,11 +51,14 @@ type Slice struct {
 	domUrl     string
 	subClients []*quaiclient.Client
 
-	scope             event.SubscriptionScope
-	missingBodyFeed   event.Feed
-	missingParentFeed event.Feed
+	scope                 event.SubscriptionScope
+	missingBodyFeed       event.Feed
+	pendingEtxsFeed       event.Feed
+	pendingEtxsRollupFeed event.Feed
+	missingParentFeed     event.Feed
 
-	phCachemu sync.RWMutex
+	pendingEtxsRollup *lru.Cache
+	phCachemu         sync.RWMutex
 
 	bestPhKey common.Hash
 	phCache   map[common.Hash]types.PendingHeader
@@ -70,6 +75,9 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, isLocal
 		domUrl:  domClientUrl,
 		quit:    make(chan struct{}),
 	}
+
+	pendingEtxsRollup, _ := lru.New(c_maxPendingEtxsRollup)
+	sl.pendingEtxsRollup = pendingEtxsRollup
 
 	var err error
 	sl.hc, err = NewHeaderChain(db, engine, chainConfig, cacheConfig, vmConfig)
@@ -220,7 +228,10 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			}
 			time9_2 = common.PrettyDuration(time.Since(start))
 			// Add the pending etx given by the sub in the rollup
-			sl.hc.AddPendingEtxs(pEtxs)
+			sl.AddPendingEtxs(pEtxs)
+			// We also need to store the pendingEtxRollup to the dom
+			pEtxRollup := types.PendingEtxsRollup{block.Header(), block.SubManifest()}
+			sl.AddPendingEtxsRollup(pEtxRollup)
 			time9_3 = common.PrettyDuration(time.Since(start))
 		}
 	}
@@ -796,10 +807,54 @@ func (sl *Slice) SubscribeMissingBody(ch chan<- *types.Header) event.Subscriptio
 	return sl.scope.Track(sl.missingBodyFeed.Subscribe(ch))
 }
 
+func (sl *Slice) SubscribePendingEtxs(ch chan<- types.PendingEtxs) event.Subscription {
+	return sl.scope.Track(sl.pendingEtxsFeed.Subscribe(ch))
+}
+
+func (sl *Slice) SubscribePendingEtxsRollup(ch chan<- types.PendingEtxsRollup) event.Subscription {
+	return sl.scope.Track(sl.pendingEtxsRollupFeed.Subscribe(ch))
+}
+
 func (sl *Slice) CurrentInfo(header *types.Header) bool {
 	return sl.miner.worker.CurrentInfo(header)
 }
 
 func (sl *Slice) WriteBlock(block *types.Block) {
 	sl.hc.WriteBlock(block)
+}
+
+func (sl *Slice) AddPendingEtxs(pEtxs types.PendingEtxs) error {
+	nodeCtx := common.NodeLocation.Context()
+	err := sl.hc.AddPendingEtxs(pEtxs)
+	if err.Error() != ErrPendingEtxAlreadyKnown.Error() {
+		// Only in the region case we have to send the pendingEtxs to dom from the AddPendingEtxs
+		if nodeCtx == common.REGION_CTX {
+			// Also the first time when adding the pending etx broadcast it to the peers
+			sl.pendingEtxsFeed.Send(pEtxs)
+			sl.domClient.SendPendingEtxsToDom(context.Background(), pEtxs)
+		}
+	}
+	return nil
+}
+
+func (sl *Slice) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
+	nodeCtx := common.NodeLocation.Context()
+	log.Debug("Received pending ETXs Rollup", "header: ", pEtxsRollup.Header.Hash())
+	// Only write the pending ETXs if we have not seen them before
+	if !sl.pendingEtxsRollup.Contains(pEtxsRollup.Header.Hash()) {
+		// Also write to cache for faster access
+		sl.pendingEtxsRollup.Add(pEtxsRollup.Header.Hash(), pEtxsRollup.Rollup)
+		// Write to pending ETX rollup database
+		rawdb.WritePendingEtxsRollup(sl.sliceDb, pEtxsRollup)
+
+		// Only Prime broadcasts the pendingEtxRollups
+		if nodeCtx == common.PRIME_CTX {
+			// Also the first time when adding the pending etx rollup broadcast it to the peers
+			sl.pendingEtxsRollupFeed.Send(pEtxsRollup)
+			// Only in the region case, send the pending etx rollup to the dom
+		} else if nodeCtx == common.REGION_CTX {
+			sl.domClient.SendPendingEtxsRollupToDom(context.Background(), pEtxsRollup)
+		}
+	}
+	return nil
 }

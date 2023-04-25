@@ -35,6 +35,9 @@ var (
 	// ErrSubNotSyncedToDom is returned when the subordinate cannot find the parent of the block which is being appended by the dom.
 	ErrSubNotSyncedToDom = errors.New("sub not synced to dom")
 
+	// ErrPendingEtxAlreadyKnown is returned received pending etx already in the cache/db
+	ErrPendingEtxAlreadyKnown = errors.New("sub not synced to dom")
+
 	// ErrBodyNotFound is returned when body data for a given header hash cannot be found.
 	ErrBodyNotFound = errors.New("could not find the body data to match the header root hash")
 

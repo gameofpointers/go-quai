@@ -44,7 +44,7 @@ var ProtocolVersions = []uint{ETH66, ETH65}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-var protocolLengths = map[uint]uint64{ETH66: 19, ETH65: 19}
+var protocolLengths = map[uint]uint64{ETH66: 20, ETH65: 19}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
@@ -73,6 +73,7 @@ const (
 
 	PendingEtxsMsg       = 0x11
 	GetOnePendingEtxsMsg = 0x12
+	PendingEtxsRollupMsg = 0x13
 )
 
 var (
@@ -358,6 +359,15 @@ type PendingEtxsPacket66 struct {
 	PendingEtxsPacket
 }
 
+type PendingEtxsRollupPacket struct {
+	PendingEtxsRollup types.PendingEtxsRollup
+}
+
+type PendingEtxsRollupPacket66 struct {
+	RequestId uint64
+	PendingEtxsRollupPacket
+}
+
 func (*StatusPacket) Name() string { return "Status" }
 func (*StatusPacket) Kind() byte   { return StatusMsg }
 
@@ -411,3 +421,6 @@ func (*GetOnePendingEtxsPacket) Kind() byte   { return GetOnePendingEtxsMsg }
 
 func (*PendingEtxsPacket) Name() string { return "PendingEtxs" }
 func (*PendingEtxsPacket) Kind() byte   { return PendingEtxsMsg }
+
+func (*PendingEtxsRollupPacket) Name() string { return "PendingEtxsManifest" }
+func (*PendingEtxsRollupPacket) Kind() byte   { return PendingEtxsRollupMsg }

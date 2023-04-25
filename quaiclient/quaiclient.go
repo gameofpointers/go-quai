@@ -147,3 +147,15 @@ func (ec *Client) SendPendingEtxsToDom(ctx context.Context, pEtxs types.PendingE
 	}
 	return nil
 }
+
+func (ec *Client) SendPendingEtxsRollupToDom(ctx context.Context, pEtxsRollup types.PendingEtxsRollup) error {
+	fields := make(map[string]interface{})
+	fields["header"] = pEtxsRollup.Header.RPCMarshalHeader()
+	fields["rollup"] = pEtxsRollup.Rollup
+	var raw json.RawMessage
+	err := ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsRollupToDom", fields)
+	if err != nil {
+		return err
+	}
+	return nil
+}

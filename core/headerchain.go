@@ -74,7 +74,7 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, chainConfig *par
 		engine:      engine,
 	}
 
-	pendingEtxs, _ := lru.New(maxPendingEtxBlocks)
+	pendingEtxs, _ := lru.New(c_maxPendingEtxBlocks)
 	hc.pendingEtxs = pendingEtxs
 
 	var err error
@@ -177,10 +177,22 @@ func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, err
 // given header. This is done by informing the fetcher of any pending ETXs we do
 // not have, so that they can be fetched from our peers.
 func (hc *HeaderChain) backfillPETXs(header *types.Header, subManifest types.BlockManifest) {
+	nodeCtx := common.NodeLocation.Context()
 	for _, hash := range subManifest {
-		if petxs := rawdb.ReadPendingEtxs(hc.headerDb, hash); petxs == nil {
-			// Send the pendingEtxs to the feed for broadcast
-			hc.missingPendingEtxsFeed.Send(hash)
+		if nodeCtx == common.PRIME_CTX {
+			// In the case of prime, get the pendingEtxsRollup for each region block
+			// and then fetch the pending etx for each of the rollup hashes
+			if pEtxsRollp := rawdb.ReadPendingEtxsRollup(hc.headerDb, hash); pEtxsRollp != nil {
+				for _, rollUpHash := range pEtxsRollp.Rollup {
+					// Send the pendingEtxs to the feed for broadcast
+					hc.missingPendingEtxsFeed.Send(rollUpHash)
+				}
+			}
+		} else if nodeCtx == common.REGION_CTX {
+			if petxs := rawdb.ReadPendingEtxs(hc.headerDb, hash); petxs == nil {
+				// Send the pendingEtxs to the feed for broadcast
+				hc.missingPendingEtxsFeed.Send(hash)
+			}
 		}
 	}
 }
@@ -356,6 +368,8 @@ func (hc *HeaderChain) AddPendingEtxs(pEtxs types.PendingEtxs) error {
 		rawdb.WritePendingEtxs(hc.headerDb, pEtxs)
 		// Also write to cache for faster access
 		hc.pendingEtxs.Add(pEtxs.Header.Hash(), pEtxs.Etxs)
+	} else {
+		return ErrPendingEtxAlreadyKnown
 	}
 	return nil
 }
