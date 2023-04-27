@@ -68,6 +68,7 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 			if first {
 				first = false
 				origin = backend.Core().GetHeaderOrCandidateByHash(query.Origin.Hash)
+				fmt.Println("Block requested", origin)
 				if origin != nil {
 					query.Origin.Number = origin.NumberU64()
 				}

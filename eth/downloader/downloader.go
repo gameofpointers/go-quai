@@ -386,6 +386,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, entropy *
 	if err != nil {
 		return err
 	}
+	fmt.Println("latest", latest.NumberArray())
 
 	// Height of the peer
 	peerHeight := latest.Number().Uint64()
@@ -646,6 +647,9 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 						break
 					}
 				}
+			}
+			for _, header := range headers {
+				fmt.Println("skeleton", header.NumberArray())
 			}
 
 			// If no more headers are inbound, notify the content fetchers and return
