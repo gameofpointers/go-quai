@@ -74,6 +74,9 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 		}
 		if order == nodeCtx {
 			newPendingEtxs, err := c.sl.Append(block.Header(), types.EmptyHeader(), common.Hash{}, false, nil)
+			if err != nil {
+				fmt.Println("err", err)
+			}
 			if err == nil {
 				// If we have a dom, send the dom any pending ETXs which will become
 				// referencable by this block. When this block is referenced in the dom's
