@@ -111,7 +111,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, isLocal
 
 // Append takes a proposed header and constructs a local block and attempts to hierarchically append it to the block graph.
 // If this is called from a dominant context a domTerminus must be provided else a common.Hash{} should be used and domOrigin should be set to true.
-func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, error) {
+func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, error) {
 	start := time.Now()
 	// The compute and write of the phCache is split starting here so we need to get the lock
 	sl.phCachemu.Lock()
@@ -128,24 +128,24 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	location := header.Location()
 	order, err := header.CalcOrder()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Don't append the block which already exists in the database.
 	if sl.hc.HasHeader(header.Hash(), header.NumberU64()) && (sl.hc.GetTerminiByHash(header.Hash()) != nil) {
 		log.Warn("Block has already been appended: ", "Hash: ", header.Hash())
-		return nil, ErrKnownBlock
+		return nil, false, ErrKnownBlock
 	}
 	time1 := common.PrettyDuration(time.Since(start))
 	// This is to prevent a crash when we try to insert blocks before domClient is on.
 	// Ideally this check should not exist here and should be fixed before we start the slice.
 	if sl.domClient == nil && nodeCtx != common.PRIME_CTX {
-		return nil, ErrDomClientNotUp
+		return nil, false, ErrDomClientNotUp
 	}
 	time2 := common.PrettyDuration(time.Since(start))
 	// Construct the block locally
 	block, err := sl.ConstructLocalBlock(header)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	time3 := common.PrettyDuration(time.Since(start))
 	batch := sl.sliceDb.NewBatch()
@@ -153,7 +153,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	// Run Previous Coincident Reference Check (PCRC)
 	domTerminus, newTermini, err := sl.pcrc(batch, block.Header(), domTerminus, domOrigin)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	time4 := common.PrettyDuration(time.Since(start))
@@ -165,7 +165,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		newInboundEtxs, _, err = sl.CollectNewlyConfirmedEtxs(block, block.Location())
 		if err != nil {
 			log.Error("Error collecting newly confirmed etxs: ", "err", err)
-			return nil, ErrSubNotSyncedToDom
+			return nil, false, ErrSubNotSyncedToDom
 		}
 	}
 	time5 := common.PrettyDuration(time.Since(start))
@@ -173,17 +173,18 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	// Append the new block
 	err = sl.hc.Append(batch, block, newInboundEtxs.FilterToLocation(common.NodeLocation))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	time6 := common.PrettyDuration(time.Since(start))
 	// Upate the local pending header
 	pendingHeaderWithTermini, err := sl.generateSlicePendingHeader(block, newTermini, domPendingHeader, domOrigin, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	time7 := common.PrettyDuration(time.Since(start))
 	time8 := common.PrettyDuration(time.Since(start))
 	var subPendingEtxs types.Transactions
+	var subReorg bool
 	var time8_1 common.PrettyDuration
 	var time8_2 common.PrettyDuration
 	var time8_3 common.PrettyDuration
@@ -191,9 +192,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	if nodeCtx != common.ZONE_CTX {
 		// How to get the sub pending etxs if not running the full node?.
 		if sl.subClients[location.SubIndex()] != nil {
-			subPendingEtxs, err = sl.subClients[location.SubIndex()].Append(context.Background(), block.Header(), pendingHeaderWithTermini.Header, domTerminus, true, newInboundEtxs)
+			subPendingEtxs, subReorg, err = sl.subClients[location.SubIndex()].Append(context.Background(), block.Header(), pendingHeaderWithTermini.Header, domTerminus, true, newInboundEtxs)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			time8_1 = common.PrettyDuration(time.Since(start))
 			// Cache the subordinate's pending ETXs
@@ -217,14 +218,14 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	// Append has succeeded write the batch
 	if err := batch.Write(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	appendFinished := time.Since(start)
 	time11 := common.PrettyDuration(appendFinished)
-	reorg := sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, &appendFinished)
+	subReorg = sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, &appendFinished)
 
 	// Relay the new pendingHeader
-	go sl.relayPh(block, &appendFinished, reorg, pendingHeaderWithTermini, domOrigin, block.Location())
+	go sl.relayPh(block, &appendFinished, subReorg, pendingHeaderWithTermini, domOrigin, block.Location())
 	time12 := common.PrettyDuration(time.Since(start))
 	log.Info("times during append:", "t1:", time1, "t2:", time2, "t3:", time3, "t4:", time4, "t5:", time5, "t6:", time6, "t7:", time7, "t8:", time8, "t9:", time9, "t10:", time10, "t11:", time11, "t12:", time12)
 	log.Info("times during sub append:", "t9_1:", time8_1, "t9_2:", time8_2, "t9_3:", time8_3)
@@ -235,9 +236,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		"elapsed", common.PrettyDuration(time.Since(start)))
 
 	if nodeCtx == common.ZONE_CTX {
-		return block.ExtTransactions(), nil
+		return block.ExtTransactions(), subReorg, nil
 	} else {
-		return subPendingEtxs, nil
+		return subPendingEtxs, subReorg, nil
 	}
 }
 
@@ -255,7 +256,28 @@ func (sl *Slice) relayPh(block *types.Block, appendTime *time.Duration, reorg bo
 			sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
 			return
 		}
-	} else if !domOrigin {
+
+		// Only if reorg is true invoke the worker to update the state root
+		if reorg {
+			localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(block, true)
+			if err != nil {
+				return
+			} else {
+				pendingHeaderWithTermini.Header = sl.combinePendingHeader(localPendingHeader, pendingHeaderWithTermini.Header, nodeCtx, true)
+				sl.phCachemu.Lock()
+				sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, appendTime)
+				sl.phCachemu.Unlock()
+			}
+			sl.phCachemu.RLock()
+			bestPh, exists = sl.phCache[sl.bestPhKey]
+			sl.phCachemu.RUnlock()
+			if exists {
+				bestPh.Header.SetLocation(common.NodeLocation)
+				sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
+				return
+			}
+		}
+	} else if !domOrigin && reorg {
 		for i := range sl.subClients {
 			if sl.subClients[i] != nil {
 				sl.subClients[i].SubRelayPendingHeader(context.Background(), pendingHeaderWithTermini, location)
