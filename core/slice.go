@@ -486,6 +486,26 @@ func (sl *Slice) SubRelayPendingHeader(pendingHeader types.PendingHeader, locati
 	}
 }
 
+func (sl *Slice) DomRelayPendingHeader(pendingHeader types.PendingHeader) {
+	nodeCtx := common.NodeLocation.Context()
+	// In region subrelay pending Header, if the order of the terminus is 0, domRelayPendingHeader to Prime
+	if nodeCtx == common.REGION_CTX {
+		termini := sl.hc.GetTerminiByHash(pendingHeader.Termini[c_terminusIndex])
+		terminusHeader := sl.hc.GetHeaderByHash(termini[c_terminusIndex])
+		order, err := terminusHeader.CalcOrder()
+		if err != nil {
+			return
+		}
+		if order == common.PRIME_CTX {
+			sl.domClient.DomRelayPendingHeader(context.Background(), pendingHeader)
+		} else if order == common.REGION_CTX {
+			// TODO: Subrelay
+		}
+	} else if nodeCtx == common.PRIME_CTX {
+		// TODO: Subrelay
+	}
+}
+
 // computePendingHeader takes in an localPendingHeaderWithTermini and updates the pending header on the same terminus if the number is greater
 func (sl *Slice) computePendingHeader(localPendingHeaderWithTermini types.PendingHeader, domPendingHeader *types.Header, domOrigin bool) types.PendingHeader {
 	nodeCtx := common.NodeLocation.Context()

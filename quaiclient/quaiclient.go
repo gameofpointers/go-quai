@@ -119,6 +119,12 @@ func (ec *Client) SubRelayPendingHeader(ctx context.Context, pendingHeader types
 	ec.c.CallContext(ctx, nil, "quai_subRelayPendingHeader", data)
 }
 
+func (ec *Client) DomRelayPendingHeader(ctx context.Context, pendingHeader types.PendingHeader) {
+	data := map[string]interface{}{"Header": pendingHeader.Header.RPCMarshalHeader()}
+	data["Termini"] = pendingHeader.Termini
+	ec.c.CallContext(ctx, nil, "quai_domRelayPendingHeader", data)
+}
+
 func (ec *Client) NewGenesisPendingHeader(ctx context.Context, header *types.Header) {
 	ec.c.CallContext(ctx, nil, "quai_newGenesisPendingHeader", header.RPCMarshalHeader())
 }

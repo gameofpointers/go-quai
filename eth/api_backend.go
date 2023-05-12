@@ -449,6 +449,10 @@ func (b *QuaiAPIBackend) SubRelayPendingHeader(pendingHeader types.PendingHeader
 	b.eth.core.SubRelayPendingHeader(pendingHeader, location)
 }
 
+func (b *QuaiAPIBackend) DomRelayPendingHeader(pendingHeader types.PendingHeader) {
+	b.eth.core.DomRelayPendingHeader(pendingHeader)
+}
+
 func (b *QuaiAPIBackend) NewGenesisPendingHeader(pendingHeader *types.Header) {
 	b.eth.core.NewGenesisPendigHeader(pendingHeader)
 }

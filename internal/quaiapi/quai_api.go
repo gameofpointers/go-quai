@@ -642,6 +642,19 @@ func (s *PublicBlockChainQuaiAPI) SubRelayPendingHeader(ctx context.Context, raw
 	s.b.SubRelayPendingHeader(pendingHeader, subRelay.Location)
 }
 
+type DomRelay struct {
+	PendingHeader *types.Header
+	Termini       []common.Hash
+}
+
+func (s *PublicBlockChainQuaiAPI) DomRelayPendingHeader(ctx context.Context, raw json.RawMessage) {
+	var domRelay DomRelay
+	if err := json.Unmarshal(raw, &domRelay); err != nil {
+		return
+	}
+	s.b.DomRelayPendingHeader(types.PendingHeader{Header: domRelay.PendingHeader, Termini: domRelay.Termini})
+}
+
 func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, raw json.RawMessage) {
 	var pendingHeader *types.Header
 	if err := json.Unmarshal(raw, &pendingHeader); err != nil {

@@ -265,6 +265,10 @@ func (c *Core) SubRelayPendingHeader(slPendingHeader types.PendingHeader, locati
 	c.sl.SubRelayPendingHeader(slPendingHeader, location)
 }
 
+func (c *Core) DomRelayPendingHeader(pendingHeader types.PendingHeader) {
+	c.sl.DomRelayPendingHeader(pendingHeader)
+}
+
 func (c *Core) NewGenesisPendigHeader(pendingHeader *types.Header) {
 	c.sl.NewGenesisPendingHeader(pendingHeader)
 }
