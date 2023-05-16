@@ -177,7 +177,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	}
 	time6 := common.PrettyDuration(time.Since(start))
 	// Upate the local pending header
-	pendingHeaderWithTermini, err := sl.generateSlicePendingHeader(block, newTermini, domPendingHeader, domOrigin, false)
+	pendingHeaderWithTermini, err := sl.generateSlicePendingHeader(block, newTermini, domPendingHeader, domOrigin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -221,10 +221,10 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	}
 	appendFinished := time.Since(start)
 	time11 := common.PrettyDuration(appendFinished)
-	reorg := sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, &appendFinished)
+	sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, &appendFinished)
 
 	// Relay the new pendingHeader
-	go sl.relayPh(block, &appendFinished, reorg, pendingHeaderWithTermini, domOrigin, block.Location())
+	go sl.relayPh(pendingHeaderWithTermini, domOrigin, block.Location())
 	time12 := common.PrettyDuration(time.Since(start))
 	log.Info("times during append:", "t1:", time1, "t2:", time2, "t3:", time3, "t4:", time4, "t5:", time5, "t6:", time6, "t7:", time7, "t8:", time8, "t9:", time9, "t10:", time10, "t11:", time11, "t12:", time12)
 	log.Info("times during sub append:", "t9_1:", time8_1, "t9_2:", time8_2, "t9_3:", time8_3)
@@ -242,7 +242,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 }
 
 // relayPh sends pendingHeaderWithTermini to subordinates
-func (sl *Slice) relayPh(block *types.Block, appendTime *time.Duration, reorg bool, pendingHeaderWithTermini types.PendingHeader, domOrigin bool, location common.Location) {
+func (sl *Slice) relayPh(pendingHeaderWithTermini types.PendingHeader, domOrigin bool, location common.Location) {
 	nodeCtx := common.NodeLocation.Context()
 
 	if nodeCtx == common.ZONE_CTX {
@@ -254,23 +254,7 @@ func (sl *Slice) relayPh(block *types.Block, appendTime *time.Duration, reorg bo
 		if exists {
 			bestPh.Header.SetLocation(common.NodeLocation)
 			sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
-		}
-
-		// Only if reorg is true invoke the worker to update the state root
-		if reorg {
-			localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(block, true)
-			if err != nil {
-				return
-			} else {
-				pendingHeaderWithTermini.Header = sl.combinePendingHeader(localPendingHeader, pendingHeaderWithTermini.Header, nodeCtx, true)
-				sl.writeToPhCacheAndPickPhHead(pendingHeaderWithTermini, appendTime)
-			}
-			bestPh, exists = sl.phCache[sl.bestPhKey]
-			if exists {
-				bestPh.Header.SetLocation(common.NodeLocation)
-				sl.miner.worker.pendingHeaderFeed.Send(bestPh.Header)
-				return
-			}
+			return
 		}
 	} else if !domOrigin {
 		for i := range sl.subClients {
@@ -521,12 +505,12 @@ func (sl *Slice) updatePhCacheFromDom(pendingHeader types.PendingHeader, termini
 }
 
 // writePhCache dom writes a given pendingHeaderWithTermini to the cache with the terminus used as the key.
-func (sl *Slice) writeToPhCacheAndPickPhHead(pendingHeaderWithTermini types.PendingHeader, appendTime *time.Duration) bool {
+func (sl *Slice) writeToPhCacheAndPickPhHead(pendingHeaderWithTermini types.PendingHeader, appendTime *time.Duration) {
 	nodeCtx := common.NodeLocation.Context()
 	bestPh, exist := sl.phCache[sl.bestPhKey]
 	if !exist {
 		log.Error("BestPh Key does not exist for", "key", sl.bestPhKey)
-		return false
+		return
 	}
 	oldBestPhEntropy := new(big.Int).Set(bestPh.Entropy)
 
@@ -555,13 +539,11 @@ func (sl *Slice) writeToPhCacheAndPickPhHead(pendingHeaderWithTermini types.Pend
 			sl.hc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 		log.Debug("Choosing new pending header", "Ph Number:", pendingHeaderWithTermini.Header.NumberArray())
-		return true
 	} else {
-		if nodeCtx == common.ZONE_CTX && newPhEntropy.Cmp(oldBestPhEntropy) != 0 {
+		if nodeCtx == common.ZONE_CTX {
 			sl.hc.chainSideFeed.Send(ChainSideEvent{Block: block})
 		}
 	}
-	return false
 }
 
 // init checks if the headerchain is empty and if it's empty appends the Knot
