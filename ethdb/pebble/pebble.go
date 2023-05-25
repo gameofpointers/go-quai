@@ -305,7 +305,8 @@ func (d *Database) NewBatch() ethdb.Batch {
 // TODO can't do this with pebble.  Batches are allocated in a pool so maybe this doesn't matter?
 func (d *Database) NewBatchWithSize(_ int) ethdb.Batch {
 	return &batch{
-		b: d.db.NewBatch(),
+		b:  d.db.NewBatch(),
+		db: d,
 	}
 }
 
