@@ -868,7 +868,6 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *typ
 	}
 	manifestHash := types.DeriveSha(manifest, trie.NewStackTrie(nil))
 	block.Header().SetManifestHash(manifestHash)
-
 	if nodeCtx == common.ZONE_CTX {
 		// Compute and set etx rollup hash
 		etxRollup := types.Transactions{}
