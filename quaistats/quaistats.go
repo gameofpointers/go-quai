@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	"io/ioutil"
 	"math/big"
 	"net/http"
@@ -32,6 +31,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/shirou/gopsutil/cpu"
@@ -83,6 +84,7 @@ type backend interface {
 	Stats() (pending int, queued int)
 	Downloader() *downloader.Downloader
 	ChainConfig() *params.ChainConfig
+	ProcessingState() bool
 }
 
 // fullNodeBackend encompasses the functionality necessary for a full node
@@ -402,7 +404,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 						noErrs = false
 						log.Warn("Block stats report failed", "err", err)
 					}
-					if nodeCtx == common.ZONE_CTX {
+					if nodeCtx == common.ZONE_CTX && s.backend.ProcessingState() {
 						if err = s.reportPending(conns["pendStats"]); err != nil {
 							noErrs = false
 							log.Warn("Post-block transaction stats report failed", "err", err)
@@ -709,7 +711,7 @@ func (s *Service) report(dataType string, conn *connWrapper) error {
 		}
 	case "transactions":
 		nodeCtx := common.NodeLocation.Context()
-		if nodeCtx == common.ZONE_CTX {
+		if nodeCtx == common.ZONE_CTX && s.backend.ProcessingState() {
 			if err := s.reportPending(conn); err != nil {
 				return err
 			}
@@ -1127,7 +1129,7 @@ func (s *Service) reportStats(conn *connWrapper) error {
 		sync := fullBackend.Downloader().Progress()
 		syncing = fullBackend.CurrentHeader().Number().Uint64() >= sync.HighestBlock
 
-		if nodeCtx == common.ZONE_CTX {
+		if nodeCtx == common.ZONE_CTX && s.backend.ProcessingState() {
 			price, _ := fullBackend.SuggestGasTipCap(context.Background())
 			gasprice = int(price.Uint64())
 			if basefee := fullBackend.CurrentHeader().BaseFee(); basefee != nil {
