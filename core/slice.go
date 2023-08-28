@@ -260,6 +260,10 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			// Store the inbound etxs for dom blocks that did not get picked and use
 			// it in the future if dom switch happens
 			rawdb.WriteInboundEtxs(sl.sliceDb, block.Hash(), newInboundEtxs.FilterToLocation(common.NodeLocation))
+			log.Info("Writing Inbound Etxs to the database", "Hash", block.Hash(), "Len of inbound etx", len(newInboundEtxs.FilterToLocation(common.NodeLocation)))
+			for _, etx := range newInboundEtxs.FilterToLocation(common.NodeLocation) {
+				log.Info("Inbound etx hash", "Hash", etx.Hash())
+			}
 		}
 
 		if subReorg {
