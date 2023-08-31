@@ -374,6 +374,7 @@ func (sl *Slice) relayPh(block *types.Block, pendingHeaderWithTermini types.Pend
 // If a zone changes its best ph key on a dom block, it sends a signal to the
 // dom and we can relay that information to the coords, to build on the right dom header
 func (sl *Slice) UpdateDom(oldTerminus common.Hash, newTerminus common.Hash, newEntropy *big.Int, location common.Location) {
+	nodeCtx := common.NodeLocation.Context()
 	sl.phCacheMu.Lock()
 	defer sl.phCacheMu.Unlock()
 	log.Info("Updating Dom...", "oldTerminUs:", oldTerminus, "newTerminus:", newTerminus, "location:", location)
@@ -386,7 +387,7 @@ func (sl *Slice) UpdateDom(oldTerminus common.Hash, newTerminus common.Hash, new
 	bestPh, exist := sl.readPhCache(sl.bestPhKey)
 	if exist {
 		log.Info("UpdateDom:", "oldTerminus:", oldTerminus, "newTerminus:", newTerminus, "oldDomTerminus:", oldDomTermini.DomTerminus(), "newDomTerminus:", newDomTermini.DomTerminus(), "bestPhKey:", sl.bestPhKey, "bestPh Hash:", bestPh.Header().Hash(), "bestPh Number:", bestPh.Header().NumberArray())
-		if newTerminus != bestPh.Header().ParentHash() && bestPh.Termini().DomTerminus() == newDomTermini.DomTerminus() && oldDomTermini.DomTerminus() == newDomTermini.DomTerminus() {
+		if nodeCtx == common.REGION_CTX && oldDomTermini.DomTerminus() == newDomTermini.DomTerminus() {
 			// Can update
 			block := sl.hc.GetBlockByHash(newTerminus)
 			sl.bestPhKey = newTerminus
@@ -403,8 +404,7 @@ func (sl *Slice) UpdateDom(oldTerminus common.Hash, newTerminus common.Hash, new
 				}
 			}
 			return
-		}
-		if oldDomTermini.DomTerminus() != newDomTermini.DomTerminus() {
+		} else {
 			// need to update dom
 			log.Info("Append need to updateDom", "oldDomTermini:", oldDomTermini, "newDomTermini:", newDomTermini, "location:", common.NodeLocation)
 			if sl.domClient != nil {
