@@ -742,7 +742,9 @@ func (sl *Slice) updatePhCacheFromDom(pendingHeader types.PendingHeader, termini
 		}
 
 		nodeCtx := common.NodeLocation.Context()
-		if nodeCtx == common.ZONE_CTX && sl.bestPhKey != localPendingHeader.Termini().DomTerminus() && !sl.poem(newEntropy, bestPh.Header().ParentEntropy()) {
+		if nodeCtx == common.ZONE_CTX &&
+			((sl.bestPhKey != localPendingHeader.Termini().DomTerminus() && !sl.poem(newEntropy, bestPh.Header().ParentEntropy())) ||
+				(subReorg && !sl.poem(newEntropy, bestPh.Header().ParentEntropy()) && sl.bestPhKey == localPendingHeader.Termini().DomTerminus())) {
 			log.Info("subrelay rejected", "local dom terminus", localPendingHeader.Termini().DomTerminus(), "Number", localPendingHeader.Header().NumberArray(), "best ph key", sl.bestPhKey, "number", bestPh.Header().NumberArray(), "newentropy", newEntropy)
 			sl.phCacheMu.Lock()
 			sl.updatePhCache(types.NewPendingHeader(combinedPendingHeader, localPendingHeader.Termini()), false, nil, subReorg)
