@@ -30,12 +30,21 @@ var (
 	Big32    = big.NewInt(32)
 	Big256   = big.NewInt(256)
 	Big257   = big.NewInt(257)
+	Big2e64  = new(big.Int).Exp(big.NewInt(2), big.NewInt(64), big.NewInt(0))
 	Big2e256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 )
 
 func BigBitsToBits(original *big.Int) *big.Int {
 	e2e64 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(64), nil)
 	return big.NewInt(0).Div(original, e2e64)
+}
+
+func BigBitsToHash(original *big.Int) Hash {
+	c := new(big.Int).Div(original, Big2e64)
+	Big2eC := new(big.Int).Exp(big.NewInt(2), c, big.NewInt(0))
+	m := new(big.Int).Sub(original, Big2eC)
+	m = new(big.Int).Mul(m, Big2eC)
+	return BytesToHash(new(big.Int).Sub(Big2e256, m).Bytes())
 }
 
 func BitsToBigBits(original *big.Int) *big.Int {
