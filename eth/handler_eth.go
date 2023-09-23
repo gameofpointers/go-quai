@@ -187,7 +187,9 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block) er
 		return nil
 	}
 	// Schedule the block for import
-	h.blockFetcher.Enqueue(peer.ID(), block)
+	if err := h.blockFetcher.Enqueue(peer.ID(), block); err != nil {
+		return err
+	}
 
 	if block != nil && !h.broadcastCache.Contains(block.Hash()) {
 		log.Info("Received Block Broadcast", "Hash", block.Hash(), "Number", block.Header().NumberArray())
