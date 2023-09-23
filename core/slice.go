@@ -84,7 +84,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	}
 
 	var err error
-	sl.hc, err = NewHeaderChain(db, engine, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning)
+	sl.hc, err = NewHeaderChain(db, engine, sl.GetPendingEtxsRollupFromSub, sl.GetPendingEtxsFromSub, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning)
 	if err != nil {
 		return nil, err
 	}
@@ -688,6 +688,49 @@ func (sl *Slice) GetSubManifest(slice common.Location, blockHash common.Hash) (t
 // SendPendingEtxsToDom shares a set of pending ETXs with your dom, so he can reference them when a coincident block is found
 func (sl *Slice) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
 	return sl.domClient.SendPendingEtxsToDom(context.Background(), pEtxs)
+}
+
+// GetPendingEtxsRollupFromSub gets the pending etxs rollup from the appropriate prime
+func (sl *Slice) GetPendingEtxsRollupFromSub(hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
+	// Only allowed to be called in Region
+	nodeCtx := common.NodeLocation.Context()
+	if nodeCtx == common.PRIME_CTX {
+		if sl.subClients[location.SubIndex()] != nil {
+			pEtxRollup, err := sl.subClients[location.SubIndex()].GetPendingEtxsRollupFromSub(context.Background(), hash, location)
+			if err != nil {
+				return types.PendingEtxsRollup{}, err
+			} else {
+				sl.AddPendingEtxsRollup(pEtxRollup)
+			}
+		}
+	} else if nodeCtx == common.REGION_CTX {
+		block := sl.hc.GetBlockOrCandidateByHash(hash)
+		if block != nil {
+			return types.PendingEtxsRollup{Header: block.Header(), Manifest: block.SubManifest()}, nil
+		}
+	}
+	return types.PendingEtxsRollup{}, ErrPendingEtxNotFound
+}
+
+// GetPendingEtxsFromSub gets the pending etxs from the appropriate prime
+func (sl *Slice) GetPendingEtxsFromSub(hash common.Hash, location common.Location) (types.PendingEtxs, error) {
+	// Only allowed to be called in Region
+	nodeCtx := common.NodeLocation.Context()
+	if nodeCtx != common.ZONE_CTX {
+		if sl.subClients[location.SubIndex()] != nil {
+			pEtx, err := sl.subClients[location.SubIndex()].GetPendingEtxsFromSub(context.Background(), hash, location)
+			if err != nil {
+				return types.PendingEtxs{}, err
+			} else {
+				sl.AddPendingEtxs(pEtx)
+			}
+		}
+	}
+	block := sl.hc.GetBlockOrCandidateByHash(hash)
+	if block != nil {
+		return types.PendingEtxs{Header: block.Header(), Etxs: block.ExtTransactions()}, nil
+	}
+	return types.PendingEtxs{}, ErrPendingEtxNotFound
 }
 
 // SubRelayPendingHeader takes a pending header from the sender (ie dominant), updates the phCache with a composited header and relays result to subordinates

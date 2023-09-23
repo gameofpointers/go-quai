@@ -187,7 +187,6 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, en
 		log.Warn("Bad Hashes still exist on chain, cannot handle block broadcast yet")
 		return nil
 	}
-
 	h.blockFetcher.ImportBlocks(peer.ID(), block, relay)
 
 	if block != nil && !h.broadcastCache.Contains(block.Hash()) {
