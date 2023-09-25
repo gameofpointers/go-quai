@@ -88,9 +88,10 @@ type appendReturns struct {
 	SubReorg bool               `json:"subReorg"`
 }
 
-func (ec *Client) Append(ctx context.Context, header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, error) {
+func (ec *Client) Append(ctx context.Context, header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, error) {
 	fields := map[string]interface{}{
 		"header":           header.RPCMarshalHeader(),
+		"manifest":         manifest,
 		"domPendingHeader": domPendingHeader.RPCMarshalHeader(),
 		"domTerminus":      domTerminus,
 		"domOrigin":        domOrigin,
@@ -110,6 +111,13 @@ func (ec *Client) Append(ctx context.Context, header *types.Header, domPendingHe
 	}
 
 	return aReturns.Etxs, aReturns.SubReorg, nil
+}
+
+func (ec *Client) DownloadBlocksInManifest(ctx context.Context, manifest types.BlockManifest) {
+	fields := map[string]interface{}{
+		"manifest": manifest,
+	}
+	ec.c.CallContext(ctx, nil, "quai_downloadBlocksInManifest", fields)
 }
 
 func (ec *Client) SubRelayPendingHeader(ctx context.Context, pendingHeader types.PendingHeader, newEntropy *big.Int, location common.Location, subReorg bool, order int) {

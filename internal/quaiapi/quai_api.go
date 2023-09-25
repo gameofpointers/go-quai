@@ -617,11 +617,12 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 }
 
 type tdBlock struct {
-	Header           *types.Header      `json:"header"`
-	DomPendingHeader *types.Header      `json:"domPendingHeader"`
-	DomTerminus      common.Hash        `json:"domTerminus"`
-	DomOrigin        bool               `json:"domOrigin"`
-	NewInboundEtxs   types.Transactions `json:"newInboundEtxs"`
+	Header           *types.Header       `json:"header"`
+	Manifest         types.BlockManifest `json:"manifest"`
+	DomPendingHeader *types.Header       `json:"domPendingHeader"`
+	DomTerminus      common.Hash         `json:"domTerminus"`
+	DomOrigin        bool                `json:"domOrigin"`
+	NewInboundEtxs   types.Transactions  `json:"newInboundEtxs"`
 }
 
 func (s *PublicBlockChainQuaiAPI) Append(ctx context.Context, raw json.RawMessage) (map[string]interface{}, error) {
@@ -632,7 +633,7 @@ func (s *PublicBlockChainQuaiAPI) Append(ctx context.Context, raw json.RawMessag
 		return nil, err
 	}
 
-	pendingEtxs, subReorg, err := s.b.Append(body.Header, body.DomPendingHeader, body.DomTerminus, body.DomOrigin, body.NewInboundEtxs)
+	pendingEtxs, subReorg, err := s.b.Append(body.Header, body.Manifest, body.DomPendingHeader, body.DomTerminus, body.DomOrigin, body.NewInboundEtxs)
 	if err != nil {
 		return nil, err
 	}
@@ -644,6 +645,18 @@ func (s *PublicBlockChainQuaiAPI) Append(ctx context.Context, raw json.RawMessag
 
 	return fields, nil
 
+}
+
+type DownloadBlocksInManifestArgs struct {
+	Manifest types.BlockManifest `json:"manifest"`
+}
+
+func (s *PublicBlockChainQuaiAPI) DownloadBlocksInManifest(ctx context.Context, raw json.RawMessage) {
+	var manifest DownloadBlocksInManifestArgs
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return
+	}
+	s.b.DownloadBlocksInManifest(manifest.Manifest)
 }
 
 type SubRelay struct {

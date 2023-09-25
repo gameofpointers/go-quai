@@ -54,7 +54,7 @@ const (
 	// minPeerRequest is the threshold for requesting the body. If
 	// sqrt of len(peers) is less than minPeerRequest we make the body request
 	// to as much as minPeerSend peers otherwise send it to sqrt of len(peers).
-	minPeerRequest = 3
+	minPeerRequest = 1
 
 	// minPeerSendTx is the minimum number of peers that will receive a new transaction.
 	minPeerSendTx = 2
