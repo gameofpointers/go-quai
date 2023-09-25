@@ -19,6 +19,7 @@ package eth
 import (
 	"errors"
 	"math"
+	"math/big"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -468,10 +469,36 @@ func (h *handler) missingParentLoop() {
 	for {
 		select {
 		case hash := <-h.missingParentCh:
+			headerRequested := 0
 			// Check if any of the peers have the body
 			for _, peer := range h.selectSomePeers() {
 				log.Trace("Fetching the missing parent from", "peer", peer.ID(), "hash", hash)
-				peer.RequestBlockByHash(hash)
+				_, height, _, _ := peer.Head()
+				if height != nil {
+					if height.Cmp(big.NewInt(int64(h.core.CurrentHeader().NumberU64()))) > 0 {
+						peer.RequestBlockByHash(hash)
+						headerRequested++
+					}
+				}
+			}
+
+			// If none of the random peers were higher than current Height, loop through all peers
+			// Add a threshold to break
+			if headerRequested == 0 {
+				allPeers := h.peers.allPeers()
+				for _, peer := range allPeers {
+					log.Trace("Fetching the missing parent from", "peer", peer.ID(), "hash", hash)
+					_, height, _, _ := peer.Head()
+					if height != nil {
+						if height.Cmp(big.NewInt(int64(h.core.CurrentHeader().NumberU64()))) > 0 {
+							peer.RequestBlockByHash(hash)
+							headerRequested++
+						}
+					}
+					if headerRequested == minPeerRequest {
+						break
+					}
+				}
 			}
 		case <-h.missingParentSub.Err():
 			return
