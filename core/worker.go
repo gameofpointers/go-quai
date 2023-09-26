@@ -453,7 +453,11 @@ func (w *worker) asyncStateLoop() {
 func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.Header, error) {
 	nodeCtx := common.NodeLocation.Context()
 
+	start := time.Now()
+
 	w.interruptAsyncPhGen()
+
+	timew1 := common.PrettyDuration(time.Since(start))
 
 	var (
 		interrupt *int32
@@ -466,7 +470,7 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 	interrupt = new(int32)
 	atomic.StoreInt32(&w.newTxs, 0)
 
-	start := time.Now()
+	timew2 := common.PrettyDuration(time.Since(start))
 	// Set the coinbase if the worker is running or it's required
 	var coinbase common.Address
 	if w.coinbase.Equal(common.ZeroAddr) {
@@ -475,6 +479,7 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 	}
 	coinbase = w.coinbase // Use the preset address as the fee recipient
 
+	timew3 := common.PrettyDuration(time.Since(start))
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
@@ -483,6 +488,7 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 		return nil, err
 	}
 
+	timew4 := common.PrettyDuration(time.Since(start))
 	if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 		// Fill pending transactions from the txpool
 		w.adjustGasLimit(nil, work, block)
@@ -494,6 +500,7 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 		}
 	}
 
+	timew5 := common.PrettyDuration(time.Since(start))
 	// Swap out the old work with the new one, terminating any leftover
 	// prefetcher processes in the mean time and starting a new one.
 	if w.current != nil {
@@ -501,14 +508,19 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 	}
 	w.current = work
 
+	timew6 := common.PrettyDuration(time.Since(start))
 	// Create a local environment copy, avoid the data race with snapshot state.
 	block, err = w.FinalizeAssemble(w.hc, work.header, block, work.state, work.txs, work.unclelist(), work.etxs, work.subManifest, work.receipts)
 	if err != nil {
 		return nil, err
 	}
+	timew7 := common.PrettyDuration(time.Since(start))
+	// Create a local environment copy, avoid the data race with snapshot state.
 	work.header = block.Header()
 	w.printPendingHeaderInfo(work, block, start)
 
+	timew8 := common.PrettyDuration(time.Since(start))
+	fmt.Println("Time taken in GeneratePendingHeader", timew1, timew2, timew3, timew4, timew5, timew6, timew7, timew8)
 	return work.header, nil
 }
 
@@ -907,32 +919,45 @@ func (w *worker) ComputeManifestHash(header *types.Header) common.Hash {
 }
 
 func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Block, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error) {
+	start := time.Now()
 	nodeCtx := common.NodeLocation.Context()
 	block, err := w.engine.FinalizeAndAssemble(chain, header, state, txs, uncles, etxs, subManifest, receipts)
 	if err != nil {
 		return nil, err
 	}
 
+	timew1 := common.PrettyDuration(time.Since(start))
+
 	manifestHash := w.ComputeManifestHash(parent.Header())
 	block.Header().SetManifestHash(manifestHash)
 
+	timew2 := common.PrettyDuration(time.Since(start))
+
+	var timew2_1, timew2_2 common.PrettyDuration
 	if nodeCtx == common.ZONE_CTX {
 		// Compute and set etx rollup hash
 		etxRollup := types.Transactions{}
 		if w.engine.IsDomCoincident(w.hc, parent.Header()) {
 			etxRollup = parent.ExtTransactions()
+			timew2_1 = common.PrettyDuration(time.Since(start))
 		} else {
 			etxRollup, err = w.hc.CollectEtxRollup(parent)
 			if err != nil {
 				return nil, err
 			}
+			timew2_2 = common.PrettyDuration(time.Since(start))
 			etxRollup = append(etxRollup, parent.ExtTransactions()...)
 		}
 		etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
 		block.Header().SetEtxRollupHash(etxRollupHash)
 	}
 
+	timew3 := common.PrettyDuration(time.Since(start))
 	w.AddPendingBlockBody(block.Header(), block.Body())
+
+	timew4 := common.PrettyDuration(time.Since(start))
+
+	fmt.Println("Time taken in finalize and assemble", timew1, timew2, "sub time2", timew2_1, timew2_2, timew3, timew4)
 
 	return block, nil
 }
