@@ -19,7 +19,6 @@ package eth
 import (
 	"errors"
 	"math"
-	"math/big"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -44,8 +43,8 @@ const (
 	// The number is referenced from the size of tx pool.
 	txChanSize = 4096
 
-	// missingParentChanSize is the size of channel listening to the MissingParentEvent
-	missingParentChanSize = 10
+	// missingBlockChanSize is the size of channel listening to the MissingBlockEvent
+	missingBlockChanSize = 60
 
 	// minPeerSend is the threshold for sending the block updates. If
 	// sqrt of len(peers) is less than 5 we make the block announcement
@@ -118,12 +117,12 @@ type handler struct {
 	txFetcher    *fetcher.TxFetcher
 	peers        *peerSet
 
-	eventMux         *event.TypeMux
-	txsCh            chan core.NewTxsEvent
-	txsSub           event.Subscription
-	minedBlockSub    *event.TypeMuxSubscription
-	missingParentCh  chan common.Hash
-	missingParentSub event.Subscription
+	eventMux        *event.TypeMux
+	txsCh           chan core.NewTxsEvent
+	txsSub          event.Subscription
+	minedBlockSub   *event.TypeMuxSubscription
+	missingBlockCh  chan types.BlockRequest
+	missingBlockSub event.Subscription
 
 	whitelist map[uint64]common.Hash
 
@@ -312,9 +311,9 @@ func (h *handler) Start(maxPeers int) {
 	}
 
 	h.wg.Add(1)
-	h.missingParentCh = make(chan common.Hash, missingParentChanSize)
-	h.missingParentSub = h.core.SubscribeMissingParentEvent(h.missingParentCh)
-	go h.missingParentLoop()
+	h.missingBlockCh = make(chan types.BlockRequest, missingBlockChanSize)
+	h.missingBlockSub = h.core.SubscribeMissingBlockEvent(h.missingBlockCh)
+	go h.missingBlockLoop()
 
 	// broadcast mined blocks
 	h.wg.Add(1)
@@ -335,8 +334,8 @@ func (h *handler) Stop() {
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
 		h.txsSub.Unsubscribe() // quits txBroadcastLoop
 	}
-	h.minedBlockSub.Unsubscribe()    // quits blockBroadcastLoop
-	h.missingParentSub.Unsubscribe() // quits missingParentLoop
+	h.minedBlockSub.Unsubscribe()   // quits blockBroadcastLoop
+	h.missingBlockSub.Unsubscribe() // quits missingBlockLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -463,61 +462,33 @@ func (h *handler) txBroadcastLoop() {
 	}
 }
 
-// missingParentLoop announces new pendingEtxs to connected peers.
-func (h *handler) missingParentLoop() {
+// missingBlockLoop announces new pendingEtxs to connected peers.
+func (h *handler) missingBlockLoop() {
 	defer h.wg.Done()
 	for {
 		select {
-		case hash := <-h.missingParentCh:
+		case blockRequest := <-h.missingBlockCh:
 			headerRequested := 0
 			// Check if any of the peers have the body
-			for _, peer := range h.selectSomePeers() {
-				log.Trace("Fetching the missing parent from", "peer", peer.ID(), "hash", hash)
-				_, height, _, _ := peer.Head()
-				if height != nil {
-					if height.Cmp(big.NewInt(int64(h.core.CurrentHeader().NumberU64()))) > 0 {
-						peer.RequestBlockByHash(hash)
+			allPeers := h.peers.allPeers()
+			// shuffle the filteredPeers
+			rand.Shuffle(len(allPeers), func(i, j int) { allPeers[i], allPeers[j] = allPeers[j], allPeers[i] })
+
+			for _, peer := range allPeers {
+				log.Trace("Fetching the missing parent from", "peer", peer.ID(), "hash", blockRequest.Hash)
+				_, _, peerEntropy, _ := peer.Head()
+				if peerEntropy != nil {
+					if peerEntropy.Cmp(blockRequest.Entropy) > 0 {
+						peer.RequestBlockByHash(blockRequest.Hash)
 						headerRequested++
 					}
 				}
-			}
-
-			// If none of the random peers were higher than current Height, loop through all peers
-			// Add a threshold to break
-			if headerRequested == 0 {
-				allPeers := h.peers.allPeers()
-				for _, peer := range allPeers {
-					log.Trace("Fetching the missing parent from", "peer", peer.ID(), "hash", hash)
-					_, height, _, _ := peer.Head()
-					if height != nil {
-						if height.Cmp(big.NewInt(int64(h.core.CurrentHeader().NumberU64()))) > 0 {
-							peer.RequestBlockByHash(hash)
-							headerRequested++
-						}
-					}
-					if headerRequested == minPeerRequest {
-						break
-					}
+				if headerRequested == minPeerRequest {
+					break
 				}
 			}
-		case <-h.missingParentSub.Err():
+		case <-h.missingBlockSub.Err():
 			return
 		}
 	}
-}
-
-func (h *handler) selectSomePeers() []*eth.Peer {
-	// Get the min(sqrt(len(peers)), minPeerRequest)
-	count := int(math.Sqrt(float64(len(h.peers.allPeers()))))
-	if count < minPeerRequest {
-		count = minPeerRequest
-	}
-	if count > len(h.peers.allPeers()) {
-		count = len(h.peers.allPeers())
-	}
-	allPeers := h.peers.allPeers()
-
-	// shuffle the filteredPeers
-	rand.Shuffle(len(allPeers), func(i, j int) { allPeers[i], allPeers[j] = allPeers[j], allPeers[i] })
-	return allPeers[:count]
 }

@@ -649,6 +649,7 @@ func (s *PublicBlockChainQuaiAPI) Append(ctx context.Context, raw json.RawMessag
 
 type DownloadBlocksInManifestArgs struct {
 	Manifest types.BlockManifest `json:"manifest"`
+	Entropy  *big.Int            `json:"entropy"`
 }
 
 func (s *PublicBlockChainQuaiAPI) DownloadBlocksInManifest(ctx context.Context, raw json.RawMessage) {
@@ -656,7 +657,7 @@ func (s *PublicBlockChainQuaiAPI) DownloadBlocksInManifest(ctx context.Context, 
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return
 	}
-	s.b.DownloadBlocksInManifest(manifest.Manifest)
+	s.b.DownloadBlocksInManifest(manifest.Manifest, manifest.Entropy)
 }
 
 type SubRelay struct {
@@ -696,8 +697,9 @@ func (s *PublicBlockChainQuaiAPI) UpdateDom(ctx context.Context, raw json.RawMes
 }
 
 type RequestDomToAppendOrFetchArgs struct {
-	Hash  common.Hash
-	Order int
+	Hash    common.Hash
+	Entropy *big.Int
+	Order   int
 }
 
 func (s *PublicBlockChainQuaiAPI) RequestDomToAppendOrFetch(ctx context.Context, raw json.RawMessage) {
@@ -705,7 +707,7 @@ func (s *PublicBlockChainQuaiAPI) RequestDomToAppendOrFetch(ctx context.Context,
 	if err := json.Unmarshal(raw, &requestDom); err != nil {
 		return
 	}
-	s.b.RequestDomToAppendOrFetch(requestDom.Hash, requestDom.Order)
+	s.b.RequestDomToAppendOrFetch(requestDom.Hash, requestDom.Entropy, requestDom.Order)
 }
 func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, raw json.RawMessage) {
 	var pendingHeader *types.Header

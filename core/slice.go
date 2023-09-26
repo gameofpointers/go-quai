@@ -58,7 +58,7 @@ type Slice struct {
 	scope                 event.SubscriptionScope
 	pendingEtxsFeed       event.Feed
 	pendingEtxsRollupFeed event.Feed
-	missingParentFeed     event.Feed
+	missingBlockFeed      event.Feed
 
 	asyncPhCh  chan *types.Header
 	asyncPhSub event.Subscription
@@ -1108,8 +1108,8 @@ func (sl *Slice) GetPendingBlockBody(header *types.Header) *types.Body {
 	return sl.miner.worker.GetPendingBlockBody(header)
 }
 
-func (sl *Slice) SubscribeMissingParentEvent(ch chan<- common.Hash) event.Subscription {
-	return sl.scope.Track(sl.missingParentFeed.Subscribe(ch))
+func (sl *Slice) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Subscription {
+	return sl.scope.Track(sl.missingBlockFeed.Subscribe(ch))
 }
 
 // MakeDomClient creates the quaiclient for the given domurl

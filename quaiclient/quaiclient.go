@@ -113,9 +113,10 @@ func (ec *Client) Append(ctx context.Context, header *types.Header, manifest typ
 	return aReturns.Etxs, aReturns.SubReorg, nil
 }
 
-func (ec *Client) DownloadBlocksInManifest(ctx context.Context, manifest types.BlockManifest) {
+func (ec *Client) DownloadBlocksInManifest(ctx context.Context, manifest types.BlockManifest, entropy *big.Int) {
 	fields := map[string]interface{}{
 		"manifest": manifest,
+		"entropy":  entropy,
 	}
 	ec.c.CallContext(ctx, nil, "quai_downloadBlocksInManifest", fields)
 }
@@ -140,8 +141,9 @@ func (ec *Client) UpdateDom(ctx context.Context, oldTerminus common.Hash, pendin
 	ec.c.CallContext(ctx, nil, "quai_updateDom", data)
 }
 
-func (ec *Client) RequestDomToAppendOrFetch(ctx context.Context, hash common.Hash, order int) {
+func (ec *Client) RequestDomToAppendOrFetch(ctx context.Context, hash common.Hash, entropy *big.Int, order int) {
 	data := map[string]interface{}{"Hash": hash}
+	data["Entropy"] = entropy
 	data["Order"] = order
 
 	ec.c.CallContext(ctx, nil, "quai_requestDomToAppendOrFetch", data)

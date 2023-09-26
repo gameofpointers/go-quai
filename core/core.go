@@ -142,7 +142,7 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 				if err.Error() == ErrSubNotSyncedToDom.Error() ||
 					err.Error() == ErrPendingEtxNotFound.Error() {
 					if nodeCtx != common.ZONE_CTX && c.sl.subClients[block.Location().SubIndex()] != nil {
-						c.sl.subClients[block.Location().SubIndex()].DownloadBlocksInManifest(context.Background(), block.SubManifest())
+						c.sl.subClients[block.Location().SubIndex()].DownloadBlocksInManifest(context.Background(), block.SubManifest(), block.ParentEntropy())
 					}
 				}
 				return idx, ErrPendingBlock
@@ -235,7 +235,7 @@ func (c *Core) serviceBlocks(hashNumberList []types.HashAndNumber) {
 					log.Info("Requesting the dom to get the block if it doesnt have and try to append", "Hash", parentHeader.Hash(), "Order", parentHeaderOrder)
 					if c.sl.domClient != nil {
 						// send a signal to the required dom to fetch the block if it doesnt have it, or its not in its appendqueue
-						go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), parentHeader.Hash(), parentHeaderOrder)
+						go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), parentHeader.Hash(), parentHeader.ParentEntropy(), parentHeaderOrder)
 					}
 				}
 				// Using a empty block to append here because append only takes in a
@@ -243,7 +243,7 @@ func (c *Core) serviceBlocks(hashNumberList []types.HashAndNumber) {
 				// ram, we are using the header
 				c.InsertChain([]*types.Block{block})
 			} else {
-				c.sl.missingParentFeed.Send(block.ParentHash())
+				c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: block.ParentHash(), Entropy: block.ParentEntropy()})
 			}
 		} else {
 			log.Warn("Entry in the FH cache without being in the db: ", "Hash: ", hashAndNumber.Hash)
@@ -251,7 +251,7 @@ func (c *Core) serviceBlocks(hashNumberList []types.HashAndNumber) {
 	}
 }
 
-func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, order int) {
+func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int) {
 	// TODO: optimize to check if the block is in the appendqueue or already
 	// appended to reduce the network bandwidth utilization
 	nodeCtx := common.NodeLocation.Context()
@@ -262,7 +262,7 @@ func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, order int) {
 			log.Warn("Block sub asked doesnt exist in append queue, so request the peers for it", "Hash", hash, "Order", order)
 			block := c.GetBlockOrCandidateByHash(hash)
 			if block == nil {
-				c.sl.missingParentFeed.Send(hash) // Using the missing parent feed to ask for the block
+				c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: hash, Entropy: entropy}) // Using the missing parent feed to ask for the block
 			} else {
 				// Check if the hash is in the blockchain, otherwise add it to the append queue
 				if c.GetHeaderByHash(block.Hash()) == nil {
@@ -273,7 +273,7 @@ func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, order int) {
 	} else if nodeCtx == common.REGION_CTX {
 		if order < nodeCtx { // Prime block
 			if c.sl.domClient != nil {
-				go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), hash, order)
+				go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), hash, entropy, order)
 			}
 		}
 		_, exists := c.appendQueue.Get(hash)
@@ -281,7 +281,7 @@ func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, order int) {
 			log.Warn("Block sub asked doesnt exist in append queue, so request the peers for it", "Hash", hash, "Order", order)
 			block := c.GetBlockByHash(hash)
 			if block == nil {
-				c.sl.missingParentFeed.Send(hash) // Using the missing parent feed to ask for the block
+				c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: hash, Entropy: entropy}) // Using the missing parent feed to ask for the block
 			} else {
 				// Check if the hash is in the blockchain, otherwise add it to the append queue
 				if c.GetHeaderByHash(block.Hash()) == nil {
@@ -376,8 +376,8 @@ func (c *Core) BadHashExistsInChain() bool {
 	return false
 }
 
-func (c *Core) SubscribeMissingParentEvent(ch chan<- common.Hash) event.Subscription {
-	return c.sl.SubscribeMissingParentEvent(ch)
+func (c *Core) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Subscription {
+	return c.sl.SubscribeMissingBlockEvent(ch)
 }
 
 // InsertChainWithoutSealVerification works exactly the same
@@ -444,7 +444,7 @@ func (c *Core) WriteBlock(block *types.Block) {
 			// If a dom block comes in and we havent appended it yet
 		} else if order < nodeCtx && c.GetHeaderByHash(block.Hash()) == nil {
 			if c.sl.domClient != nil {
-				go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), block.Hash(), order)
+				go c.sl.domClient.RequestDomToAppendOrFetch(context.Background(), block.Hash(), block.ParentEntropy(), order)
 			}
 		}
 	}
@@ -460,7 +460,7 @@ func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPen
 			// Fetch the blocks for each hash in the manifest
 			block := c.GetBlockOrCandidateByHash(header.Hash())
 			if block == nil {
-				c.sl.missingParentFeed.Send(header.Hash())
+				c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: header.Hash(), Entropy: header.ParentEntropy()})
 			} else {
 				// Check if the hash is in the blockchain, otherwise add it to the append queue
 				if c.GetHeaderByHash(block.Hash()) == nil {
@@ -470,7 +470,7 @@ func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPen
 			for _, m := range manifest {
 				block := c.GetBlockOrCandidateByHash(m)
 				if block == nil {
-					c.sl.missingParentFeed.Send(m)
+					c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: m, Entropy: header.ParentEntropy()})
 				} else {
 					// Check if the hash is in the blockchain, otherwise add it to the append queue
 					if c.GetHeaderByHash(block.Hash()) == nil {
@@ -480,7 +480,7 @@ func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPen
 			}
 			block = c.GetBlockOrCandidateByHash(header.ParentHash())
 			if block == nil {
-				c.sl.missingParentFeed.Send(header.ParentHash())
+				c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: header.ParentHash(), Entropy: header.ParentEntropy()})
 			} else {
 				// Check if the hash is in the blockchain, otherwise add it to the append queue
 				if c.GetHeaderByHash(block.Hash()) == nil {
@@ -492,12 +492,12 @@ func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPen
 	return newPendingEtxs, subReorg, err
 }
 
-func (c *Core) DownloadBlocksInManifest(manifest types.BlockManifest) {
+func (c *Core) DownloadBlocksInManifest(manifest types.BlockManifest, entropy *big.Int) {
 	// Fetch the blocks for each hash in the manifest
 	for _, m := range manifest {
 		block := c.GetBlockOrCandidateByHash(m)
 		if block == nil {
-			c.sl.missingParentFeed.Send(m)
+			c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: m, Entropy: entropy})
 		} else {
 			// Check if the hash is in the blockchain, otherwise add it to the append queue
 			if c.GetHeaderByHash(block.Hash()) == nil {
