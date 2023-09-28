@@ -43,10 +43,8 @@ var (
 	MaxSkeletonSize   = 1024 // Number of header fetches to need for a skeleton assembly
 	MaxStateFetch     = 384  // Amount of node state values to allow fetching per request
 
-	PrimeSkeletonDist = 8
-	PrimeFetchDepth   = 1000
-	RegionFetchDepth  = 7000
-	ZoneFetchDepth    = 21000
+	SkeletonDist = 8
+	FetchDepth   = 1000
 
 	maxQueuedHeaders  = 32 * 1024 // [eth/62] Maximum number of headers to queue for import (DOS protection)
 	maxHeadersProcess = 2048      // Number of header download results to import at once into the chain
@@ -491,7 +489,7 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, err error
 	// Request the advertised remote head block and wait for the response
 	latest, _, _, _ := p.peer.Head()
 	fetch := 1
-	go p.peer.RequestHeadersByHash(latest, fetch, uint64(1), false, true)
+	go p.peer.RequestHeadersByHash(latest, fetch, uint64(1), true)
 
 	ttl := d.peers.rates.TargetTimeout()
 	timeout := time.After(ttl)
@@ -551,9 +549,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 
 	// peer height
 	peerHeight := from
-	nodeCtx := common.NodeLocation.Context()
-
-	localHeight := d.headNumber
+	localHeight := d.core.CurrentHeader().NumberU64()
 
 	// getFetchPoint returns the next fetch point given the number of headers processed
 	// after the previous point.
@@ -580,14 +576,10 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 			// Reset the skeleton headers each time we try to fetch the skeleton.
 			skeletonHeaders = make([]*types.Header, 0)
 			p.log.Trace("Fetching skeleton headers", "count", MaxHeaderFetch, "from", from)
-			if nodeCtx == common.PRIME_CTX {
-				go p.peer.RequestHeadersByNumber(from, MaxSkeletonSize, uint64(PrimeSkeletonDist), to, false, true)
-			} else {
-				go p.peer.RequestHeadersByNumber(from, MaxSkeletonSize, uint64(1), to, true, true)
-			}
+			go p.peer.RequestHeadersByNumber(from, MaxSkeletonSize, uint64(SkeletonDist), to, true)
 		} else {
 			p.log.Trace("Fetching full headers", "count", MaxHeaderFetch, "from", from)
-			go p.peer.RequestHeadersByNumber(from, MaxHeaderFetch, uint64(1), to, false, true)
+			go p.peer.RequestHeadersByNumber(from, MaxHeaderFetch, uint64(1), to, true)
 		}
 	}
 
@@ -596,26 +588,11 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 	// to fetch till certain depth. For now we will be syncing till more than 50 prime
 	// blocks back.
 	updateFetchPoint()
-	if nodeCtx == common.PRIME_CTX {
-		if localHeight > uint64(PrimeFetchDepth) {
-			getHeaders(from, localHeight-uint64(PrimeFetchDepth))
-		} else {
-			getHeaders(from, 0)
-		}
-	} else if nodeCtx == common.REGION_CTX {
-		if localHeight > uint64(RegionFetchDepth) {
-			getHeaders(from, localHeight-uint64(RegionFetchDepth))
-		} else {
-			getHeaders(from, 0)
-		}
+	if localHeight > uint64(FetchDepth) {
+		getHeaders(from, localHeight-uint64(FetchDepth))
 	} else {
-		if localHeight > uint64(ZoneFetchDepth) {
-			getHeaders(from, localHeight-uint64(ZoneFetchDepth))
-		} else {
-			getHeaders(from, 0)
-		}
+		getHeaders(from, 0)
 	}
-
 	first := true
 
 	for {
@@ -682,7 +659,6 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 					return fmt.Errorf("%w: %v", errInvalidChain, err)
 				}
 				headers = filled[proced:]
-				localHeight = skeletonHeaders[0].NumberU64()
 
 				progressed = proced > 0
 				updateFetchPoint()
