@@ -1247,7 +1247,7 @@ func (sl *Slice) Stop() {
 	for hash := range sl.badHashesCache {
 		badHashes = append(badHashes, hash)
 	}
-	rawdb.WriteBadHashesList(sl.sliceDb, badHashes)
+	// rawdb.WriteBadHashesList(sl.sliceDb, badHashes)
 	sl.miner.worker.StorePendingBlockBody()
 
 	sl.scope.Close()
@@ -1418,15 +1418,16 @@ func (sl *Slice) cleanCacheAndDatabaseTillBlock(hash common.Hash) {
 		badHashes = append(badHashes, header.Hash())
 		parent := sl.hc.GetHeader(header.ParentHash(), header.NumberU64()-1)
 		header = parent
-		if header.Hash() == hash || header.Hash() == sl.config.GenesisHash {
+		if header == nil || header.Hash() == hash || header.Hash() == sl.config.GenesisHash {
 			break
 		}
 	}
 
-	sl.AddToBadHashesList(badHashes)
+	// sl.AddToBadHashesList(badHashes)
 	// Set the current header
 	currentHeader = sl.hc.GetHeaderByHash(hash)
 	sl.hc.currentHeader.Store(currentHeader)
+	rawdb.WriteHeadBlockHash(sl.sliceDb, hash)
 
 	// Recover the snaps
 	if nodeCtx == common.ZONE_CTX && sl.ProcessingState() {
@@ -1486,6 +1487,7 @@ func (sl *Slice) HashExistsInBadHashesList(hash common.Hash) bool {
 
 // IsBlockHashABadHash checks if the given hash exists in BadHashes List
 func (sl *Slice) IsBlockHashABadHash(hash common.Hash) bool {
+	return false
 	nodeCtx := common.NodeLocation.Context()
 	switch nodeCtx {
 	case common.PRIME_CTX:
