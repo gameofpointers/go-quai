@@ -273,11 +273,28 @@ func quai(ctx *cli.Context) error {
 	log.ConfigureLogger(ctx)
 
 	prepare(ctx)
-	stack, backend := makeFullNode(ctx)
-	defer stack.Close()
 
-	startNode(ctx, stack, backend)
-	stack.Wait()
+	// create many backends
+	primeStack, primeBackend := makeFullNode(ctx)
+	defer primeStack.Close()
+
+	startNode(ctx, primeStack, primeBackend)
+	primeStack.Wait()
+
+	// create many backends
+	regionStack, regionBackend := makeFullNode(ctx)
+	defer regionStack.Close()
+
+	startNode(ctx, regionStack, regionBackend)
+	regionStack.Wait()
+
+	// create many backends
+	zoneStack, zoneBackend := makeFullNode(ctx)
+	defer zoneStack.Close()
+
+	startNode(ctx, zoneStack, zoneBackend)
+	zoneStack.Wait()
+
 	return nil
 }
 
