@@ -315,8 +315,6 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			return nil, false, false, err
 		}
 
-		time9 = common.PrettyDuration(time.Since(start))
-
 	}
 
 	// If block hash at the beginning of the append is not the same as before
@@ -326,6 +324,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	if block.Hash() != blockHash {
 		return nil, false, false, ErrBlockHashChanged
 	}
+	time9 = common.PrettyDuration(time.Since(start))
 
 	sl.updatePhCache(pendingHeaderWithTermini, true, nil, subReorg, common.NodeLocation)
 
