@@ -156,10 +156,11 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, quaiConfig) {
 func makeFullNode(ctx *cli.Context) (*node.Node, quaiapi.Backend) {
 	stack, cfg := makeConfigNode(ctx)
 	backend, _ := utils.RegisterEthService(stack, &cfg.Eth)
+	trusted := ctx.Bool(utils.TrustedNodeFlag.Name)
 
 	// Add the Quai Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
-		utils.RegisterQuaiStatsService(stack, backend, cfg.Ethstats.URL)
+		utils.RegisterQuaiStatsService(stack, backend, cfg.Ethstats.URL, trusted)
 	}
 	return stack, backend
 }
