@@ -105,6 +105,7 @@ var (
 		utils.OrchardFlag,
 		utils.PasswordFileFlag,
 		utils.QuaiStatsURLFlag,
+		utils.TrustedNodeFlag,
 		utils.RegionFlag,
 		utils.ShowColorsFlag,
 		utils.SlicesRunningFlag,
