@@ -102,9 +102,10 @@ type Service struct {
 	backend backend
 	engine  consensus.Engine // Consensus engine to retrieve variadic block fields
 
-	node string // Name of the node to display on the monitoring page
-	pass string // Password to authorize access to the monitoring page
-	host string // Remote address of the monitoring service
+	node    string // Name of the node to display on the monitoring page
+	pass    string // Password to authorize access to the monitoring page
+	host    string // Remote address of the monitoring service
+	trusted bool   // Whether the node is trusted or not
 
 	pongCh  chan struct{} // Pong notifications are fed into this channel
 	histCh  chan []uint64 // History request block numbers are fed into this channel
@@ -190,7 +191,7 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(node *node.Node, backend backend, engine consensus.Engine, url string) error {
+func New(node *node.Node, backend backend, engine consensus.Engine, url string, trustednode bool) error {
 	parts, err := parseEthstatsURL(url)
 	if err != nil {
 		return err
@@ -209,6 +210,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string) 
 		pongCh:         make(chan struct{}),
 		histCh:         make(chan []uint64, 1),
 		chainID:        backend.ChainConfig().ChainID,
+		trusted:        trustednode,
 		tpsLookupCache: tpsLookupCache,
 		gasLookupCache: gasLookupCache,
 		instanceDir:    node.InstanceDir(),
@@ -244,7 +246,6 @@ func (s *Service) Stop() error {
 // loop keeps trying to connect to the netstats server, reporting chain events
 // until termination.
 func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan core.ChainSideEvent) {
-	nodeCtx := common.NodeLocation.Context()
 	// Start a goroutine that exhausts the subscriptions to avoid events piling up
 	var (
 		quitCh = make(chan struct{})
@@ -276,12 +277,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 
 	// Resolve the URL, defaulting to TLS, but falling back to none too
 	paths := map[string]string{
-		"block":        fmt.Sprintf("%s/block", s.host),
-		"peerStats":    fmt.Sprintf("%s/peerStats", s.host),
-		"transactions": fmt.Sprintf("%s/transactions", s.host),
-		"nodeStats":    fmt.Sprintf("%s/nodeStats", s.host),
-		"pendStats":    fmt.Sprintf("%s/pendStats", s.host),
-		"login":        fmt.Sprintf("%s/auth/login", s.host),
+		"internalBlockStats": fmt.Sprintf("%s/internalBlockStats", s.host),
+		"blockAppendTime":    fmt.Sprintf("%s/blockAppendTime", s.host),
+		"blockLocation":      fmt.Sprintf("%s/blockLocation", s.host),
+		"nodeStats":          fmt.Sprintf("%s/nodeStats", s.host),
+		"login":              fmt.Sprintf("%s/auth/login", s.host),
 	}
 
 	urlMap := make(map[string][]string)
@@ -383,28 +383,26 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 						noErrs = false
 						log.Warn("nodeStats full stats report failed", "err", err)
 					}
-					if err = s.report("peerStats", conns["peerStats"]); err != nil {
-						noErrs = false
-						log.Warn("peerStats full stats report failed", "err", err)
-					}
-					if err = s.report("transactions", conns["transactions"]); err != nil {
-						noErrs = false
-						log.Warn("transactions full stats report failed", "err", err)
-					}
-				case list := <-s.histCh:
-					if err = s.reportHistory(conns["block"], list); err != nil {
-						noErrs = false
-						log.Warn("Requested history report failed", "err", err)
-					}
 				case head := <-headCh:
-					if err = s.reportBlock(conns["block"], head); err != nil {
-						noErrs = false
-						log.Warn("Block stats report failed", "err", err)
-					}
-					if nodeCtx == common.ZONE_CTX && s.backend.ProcessingState() {
-						if err = s.reportPending(conns["pendStats"]); err != nil {
+					// Report blockLocation every block if node is trusted
+					if s.trusted {
+						if err = s.reportBlockLocation(conns["blockLocation"], head); err != nil {
 							noErrs = false
-							log.Warn("Post-block transaction stats report failed", "err", err)
+							log.Warn("Block location report failed", "err", err)
+						}
+					}
+
+					// Every node reports appendtime each block
+					if err = s.reportBlockAppendTime(conns["blockAppendTime"], head); err != nil {
+						noErrs = false
+						log.Warn("Block append time report failed", "err", err)
+					}
+
+					// Report internal blockstats every 20 block stats if trusted node
+					if head.NumberU64()%20 == 0 && s.trusted {
+						if err = s.reportInternalBlockStats(conns["internalBlockStats"], head); err != nil {
+							noErrs = false
+							log.Warn("Block internal stats report failed", "err", err)
 						}
 					}
 				case sideEvent := <-sideCh:
@@ -475,39 +473,6 @@ func (s *Service) readLoop(conn *connWrapper) {
 				// Ping routine dead, abort
 				log.Warn("Stats server pinger seems to have died")
 				return
-			}
-		}
-		// If the message is a history request, forward to the event processor
-		if len(msg["emit"]) == 2 && command == "history" {
-			// Make sure the request is valid and doesn't crash us
-			request, ok := msg["emit"][1].(map[string]interface{})
-			if !ok {
-				log.Warn("Invalid stats history request", "msg", msg["emit"][1])
-				select {
-				case s.histCh <- nil: // Treat it as an no indexes request
-				default:
-				}
-				continue
-			}
-			list, ok := request["list"].([]interface{})
-			if !ok {
-				log.Warn("Invalid stats history block list", "list", request["list"])
-				return
-			}
-			// Convert the block number list to an integer list
-			numbers := make([]uint64, len(list))
-			for i, num := range list {
-				n, ok := num.(float64)
-				if !ok {
-					log.Warn("Invalid stats history block number", "number", num)
-					return
-				}
-				numbers[i] = uint64(n)
-			}
-			select {
-			case s.histCh <- numbers:
-				continue
-			default:
 			}
 		}
 		// Report anything else and continue
@@ -699,19 +664,8 @@ func (s *Service) report(dataType string, conn *connWrapper) error {
 
 	switch dataType {
 	case "nodeStats":
-		if err := s.reportStats(conn); err != nil {
+		if err := s.reportNodeStats(conn); err != nil {
 			return err
-		}
-	case "peerStats":
-		if err := s.reportPeers(conn); err != nil {
-			return err
-		}
-	case "transactions":
-		nodeCtx := common.NodeLocation.Context()
-		if nodeCtx == common.ZONE_CTX && s.backend.ProcessingState() {
-			if err := s.reportPending(conn); err != nil {
-				return err
-			}
 		}
 	default:
 		return nil
@@ -766,46 +720,6 @@ func (s *Service) reportLatency(conn *connWrapper) error {
 	return conn.WriteJSON(report)
 }
 
-// blockStats is the information to report about individual blocks.
-type blockStats struct {
-	Number         *big.Int       `json:"number"`
-	Hash           common.Hash    `json:"hash"`
-	ParentHash     common.Hash    `json:"parentHash"`
-	Timestamp      *big.Int       `json:"timestamp"`
-	Miner          common.Address `json:"miner"`
-	GasUsed        uint64         `json:"gasUsed"`
-	GasLimit       uint64         `json:"gasLimit"`
-	Diff           string         `json:"difficulty"`
-	Entropy        string         `json:"entropy"`
-	NoTransactions int            `json:"noTransactions"`
-	TxHash         common.Hash    `json:"transactionsRoot"`
-	EtxHash        common.Hash    `json:"extTransactionsRoot"`
-	EtxRollupHash  common.Hash    `json:"extRollupRoot"`
-	ManifestHash   common.Hash    `json:"manifestHash"`
-	Root           common.Hash    `json:"stateRoot"`
-	Uncles         uncleStats     `json:"uncles"`
-	Chain          string         `json:"chain"`
-	ChainID        uint64         `json:"chainId"`
-	Tps            int64          `json:"tps"`
-	AppendTime     time.Duration  `json:"appendTime"`
-	AvgGasPerSec   int64          `json:"avgGasPerSec"`
-}
-
-type blockTpsCacheDto struct {
-	Tps  int64 `json:"tps"`
-	Time int64 `json:"time"`
-}
-
-type blockAvgGasPerSecCacheDto struct {
-	AvgGasPerSec int64 `json:"avgGasPerSec"`
-	Time         int64 `json:"time"`
-}
-
-// txStats is the information to report about individual transactions.
-type txStats struct {
-	Hash common.Hash `json:"hash"`
-}
-
 // uncleStats is a custom wrapper around an uncle array to force serializing
 // empty arrays instead of returning null for them.
 type uncleStats []*types.Header
@@ -815,90 +729,6 @@ func (s uncleStats) MarshalJSON() ([]byte, error) {
 		return json.Marshal(uncles)
 	}
 	return []byte("[]"), nil
-}
-
-func (s *Service) computeAvgGasPerSec(block *types.Block) int64 {
-	var parentTime, parentGasPerSec int64
-	if parentCached, ok := s.gasLookupCache.Get(block.ParentHash()); ok {
-		parentTime = parentCached.(blockAvgGasPerSecCacheDto).Time
-		parentGasPerSec = parentCached.(blockAvgGasPerSecCacheDto).AvgGasPerSec
-	} else {
-		log.Warn(fmt.Sprintf("computeGas: block %d's parent not found in cache: %s", block.Number(), block.ParentHash().String()))
-		fullBackend, ok := s.backend.(fullNodeBackend)
-		if ok {
-			parent, err := fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(block.NumberU64()-1))
-			if err != nil {
-				log.Error("error getting parent block %s: %s", block.ParentHash().String(), err.Error())
-				return c_statsErrorValue
-			}
-			parentTime = int64(parent.Time())
-			parentGasPerSec = c_statsErrorValue
-		} else {
-			log.Error("computeGas: not running fullnode, cannot get parent block")
-			return c_statsErrorValue
-		}
-	}
-	instantGas := int64(block.GasUsed())
-	if dt := int64(block.Time()) - parentTime; dt != 0 { // this is a hack to avoid dividing by 0
-		instantGas /= dt
-	}
-
-	var blockGasPerSec int64
-	if parentGasPerSec == c_statsErrorValue {
-		blockGasPerSec = instantGas
-	} else {
-		blockGasPerSec = ((c_alpha-1)*parentGasPerSec + instantGas) / c_alpha
-	}
-
-	s.gasLookupCache.Add(block.Hash(), blockAvgGasPerSecCacheDto{
-		AvgGasPerSec: blockGasPerSec,
-		Time:         int64(block.Time()),
-	})
-
-	return blockGasPerSec
-}
-
-func (s *Service) computeTps(block *types.Block) int64 {
-	var parentTime, parentTps int64
-
-	if parentCached, ok := s.tpsLookupCache.Get(block.ParentHash()); ok {
-		parentTime = parentCached.(blockTpsCacheDto).Time
-		parentTps = parentCached.(blockTpsCacheDto).Tps
-	} else {
-		log.Warn(fmt.Sprintf("block %d's parent not found in cache: %s", block.Number(), block.ParentHash().String()))
-		fullBackend, ok := s.backend.(fullNodeBackend)
-		if ok {
-			parent, err := fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(block.NumberU64()-1))
-			if err != nil {
-				log.Error("error getting parent block %s: %s", block.ParentHash().String(), err.Error())
-				return c_statsErrorValue
-			}
-			parentTime = int64(parent.Time())
-			parentTps = c_statsErrorValue
-		} else {
-			log.Error("not running fullnode, cannot get parent block")
-			return c_statsErrorValue
-		}
-	}
-
-	instantTps := int64(len(block.Transactions()))
-	if dt := int64(block.Time()) - parentTime; dt != 0 { // this is a hack to avoid dividing by 0
-		instantTps /= dt
-	}
-
-	var blockTps int64
-	if parentTps == c_statsErrorValue {
-		blockTps = instantTps
-	} else {
-		blockTps = ((c_alpha-1)*parentTps + instantTps) / c_alpha
-	}
-
-	s.tpsLookupCache.Add(block.Hash(), blockTpsCacheDto{
-		Tps:  blockTps,
-		Time: int64(block.Time()),
-	})
-
-	return blockTps
 }
 
 // reportSideBlock retrieves the current chain side event and reports it to the stats server.
@@ -920,285 +750,269 @@ func (s *Service) reportSideBlock(conn *connWrapper, block *types.Block) error {
 }
 
 // reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlock(conn *connWrapper, block *types.Block) error {
+func (s *Service) reportInternalBlockStats(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
-	details := s.assembleBlockStats(block)
+	details := s.assembleInternalBlockStats(block)
 
 	// Assemble the block report and send it to the server
-	log.Trace("Sending new block to quaistats", "number", details.Number, "hash", details.Hash)
+	log.Trace("Sending internal block stats to quaistats", "timestamp", details.Timestamp)
 
 	if conn == nil || conn.conn == nil {
-		log.Warn("block connection is nil")
-		return errors.New("block connection is nil")
+		log.Warn("internal block stats connection is nil")
+		return errors.New("internal block stats connection is nil")
 	}
 
 	stats := map[string]interface{}{
-		"id":    s.node,
-		"block": details,
+		"id":                 s.node,
+		"internalBlockStats": details,
 	}
 	report := map[string][]interface{}{
-		"emit": {"block", stats},
+		"emit": {"internalBlockStats", stats},
 	}
 	return conn.WriteJSON(report)
 }
 
-// assembleBlockStats retrieves any required metadata to report a single block
-// and assembles the block stats. If block is nil, the current head is processed.
-func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
-	// Gather the block infos from the local blockchain
-	var (
-		header  *types.Header
-		entropy *big.Int
-		txs     []txStats
-		uncles  []*types.Header
-	)
-	header = block.Header()
-	entropy = s.backend.TotalLogS(block.Header())
+// reportBlock retrieves the current chain head and reports it to the stats server.
+func (s *Service) reportBlockAppendTime(conn *connWrapper, block *types.Block) error {
+	// Gather the block details from the header or block chain
+	details := s.assembleBlockAppendTimeStats(block)
 
-	txs = make([]txStats, len(block.Transactions()))
-	for i, tx := range block.Transactions() {
-		txs[i].Hash = tx.Hash()
+	// Assemble the block report and send it to the server
+	log.Trace("Sending internal block stats to quaistats", "number", details.BlockNumber)
+
+	if conn == nil || conn.conn == nil {
+		log.Warn("block append time connection is nil")
+		return errors.New("block append time connection is nil")
 	}
-	uncles = block.Uncles()
+
+	stats := map[string]interface{}{
+		"id":              s.node,
+		"blockAppendTime": details,
+	}
+	report := map[string][]interface{}{
+		"emit": {"blockAppendTime", stats},
+	}
+	return conn.WriteJSON(report)
+}
+
+// reportBlock retrieves the current chain head and reports it to the stats server.
+func (s *Service) reportBlockLocation(conn *connWrapper, block *types.Block) error {
+	// Gather the block details from the header or block chain
+	details := s.assembleBlockLocationStats(block)
+
+	// Assemble the block report and send it to the server
+	log.Trace("Sending internal block stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
+
+	if conn == nil || conn.conn == nil {
+		log.Warn("block location connection is nil")
+		return errors.New("block location connection is nil")
+	}
+
+	stats := map[string]interface{}{
+		"id":            s.node,
+		"blockLocation": details,
+	}
+	report := map[string][]interface{}{
+		"emit": {"blockLocation", stats},
+	}
+	return conn.WriteJSON(report)
+}
+
+// Trusted Only
+type internalBlockStats struct {
+	Timestamp             *big.Int `json:"timestamp"`
+	TotalNoTransactions1h uint64   `json:"totalNoTransactions1h"`
+	TotalNoTransactions1m uint64   `json:"totalNoTransactions1m"`
+	Chain                 string   `json:"chain"`
+	Difficulty            string   `json:"difficulty"`
+}
+
+// Trusted Only
+type blockLocation struct {
+	Timestamp    *big.Int `json:"timestamp"`
+	ZoneHeight   uint64   `json:"zoneHeight"`
+	RegionHeight uint64   `json:"regionHeight"`
+	PrimeHeight  uint64   `json:"primeHeight"`
+	Chain        string   `json:"chain"`
+	Entropy      string   `json:"entropy"`
+}
+
+// Everyone sends every block
+type blockAppendTime struct {
+	AppendTime  time.Duration `json:"appendTime"`
+	BlockNumber *big.Int      `json:"number"`
+	Chain       string        `json:"chain"`
+}
+
+type nodeStats struct {
+	Name                string   `json:"name"`
+	Timestamp           *big.Int `json:"timestamp"`
+	RAMUsagePercent     int64    `json:"ramUsagePercent"`
+	RAMFreePercent      int64    `json:"ramFreePercent"`
+	RAMAvailablePercent int64    `json:"ramAvailablePercent"`
+	CPUUsagePercent     int64    `json:"cpuPercent"`
+	DiskUsagePercent    int64    `json:"diskUsagePercent"`
+	DiskUsageValue      int64    `json:"diskUsageValue"`
+}
+
+type totalTransactions struct {
+	TotalNoTransactions1h uint64
+	TotalNoTransactions1m uint64
+}
+
+func (s *Service) calculateTotalNoTransactions20Blocks(block *types.Block) *totalTransactions {
+	var totalTransactions1h uint64
+	var totalTransactions1m uint64
+
+	blockCount := 0
+	currentBlock := block
+	for i := 0; i < 20; i++ { // iterate through the last 20 blocks
+		if currentBlock == nil {
+			log.Error("Encountered a nil block, stopping iteration")
+			break
+		}
+
+		// Add the number of transactions in the current block to the total
+		totalTransactions1h += uint64(len(currentBlock.Transactions()))
+		if i < 5 {
+			totalTransactions1m += uint64(len(currentBlock.Transactions()))
+		}
+
+		// Get the parent block for the next iteration
+		fullBackend, ok := s.backend.(fullNodeBackend)
+		if !ok {
+			log.Error("Not running fullnode, cannot get parent block")
+			break
+		}
+
+		var err error
+		currentBlock, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentBlock.NumberU64()-1))
+		if err != nil {
+			log.Error(fmt.Sprintf("Error getting block %d: %s", int(block.NumberU64())-i, err.Error()))
+			break
+		}
+		blockCount += 1
+	}
+
+	if blockCount < 1 {
+		log.Error("No blocks found in the last 20 blocks")
+		return &totalTransactions{
+			TotalNoTransactions1h: 0,
+			TotalNoTransactions1m: 0,
+		}
+	}
+
+	return &totalTransactions{
+		TotalNoTransactions1h: totalTransactions1h * (300 / uint64(blockCount)),
+		TotalNoTransactions1m: totalTransactions1m * (5 / min(blockCount, 5)),
+	}
+}
+
+func min(a, b int) uint64 {
+	if a < b {
+		return uint64(a)
+	}
+	return uint64(b)
+}
+
+func (s *Service) assembleBlockLocationStats(block *types.Block) *blockLocation {
+	header := block.Header()
+	location := header.NumberArray()
+	primeHeight := location[0]
+	regionHeight := location[1]
+	zoneHeight := location[2]
 
 	// Assemble and return the block stats
-	author, _ := s.engine.Author(header)
+	return &blockLocation{
+		Timestamp:    new(big.Int).SetUint64(header.Time()),
+		ZoneHeight:   zoneHeight.Uint64(),
+		RegionHeight: regionHeight.Uint64(),
+		PrimeHeight:  primeHeight.Uint64(),
+		Chain:        common.NodeLocation.Name(),
+		Entropy:      s.backend.TotalLogS(block.Header()).String(),
+	}
+}
 
-	tps := s.computeTps(block)
-	avgGasPerSec := s.computeAvgGasPerSec(block)
-
+func (s *Service) assembleBlockAppendTimeStats(block *types.Block) *blockAppendTime {
+	header := block.Header()
 	appendTime := block.GetAppendTime()
 
-	return &blockStats{
-		Number:         header.Number(),
-		Hash:           header.Hash(),
-		ParentHash:     header.ParentHash(),
-		Timestamp:      new(big.Int).SetUint64(header.Time()),
-		Miner:          author,
-		GasUsed:        header.GasUsed(),
-		GasLimit:       header.GasLimit(),
-		Diff:           header.Difficulty().String(),
-		Entropy:        entropy.String(),
-		NoTransactions: len(block.Transactions()),
-		TxHash:         header.TxHash(),
-		EtxHash:        header.EtxHash(),
-		EtxRollupHash:  header.EtxRollupHash(),
-		ManifestHash:   header.ManifestHash(),
-		Root:           header.Root(),
-		Uncles:         uncles,
-		Chain:          common.NodeLocation.Name(),
-		ChainID:        s.chainID.Uint64(),
-		Tps:            tps,
-		AppendTime:     appendTime,
-		AvgGasPerSec:   avgGasPerSec,
+	log.Info("Raw Block Append Time", "appendTime", appendTime.Microseconds())
+
+	// Assemble and return the block stats
+	return &blockAppendTime{
+		AppendTime:  appendTime,
+		BlockNumber: header.Number(),
+		Chain:       common.NodeLocation.Name(),
 	}
 }
 
-// reportHistory retrieves the most recent batch of blocks and reports it to the
-// stats server.
-func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
-	if conn == nil || conn.conn == nil {
-		log.Warn("history connection is nil")
-		return errors.New("history connection is nil")
-	}
+func (s *Service) assembleInternalBlockStats(block *types.Block) *internalBlockStats {
+	header := block.Header()
+	totalTransactions := s.calculateTotalNoTransactions20Blocks(block)
 
-	// Figure out the indexes that need reporting
-	indexes := make([]uint64, 0, historyUpdateRange)
-	if len(list) > 0 {
-		// Specific indexes requested, send them back in particular
-		indexes = append(indexes, list...)
-	} else {
-		// No indexes requested, send back the top ones
-		head := s.backend.CurrentHeader().Number().Int64()
-		start := head - historyUpdateRange + 1
-		if start < 0 {
-			start = 0
-		}
-		for i := uint64(start); i <= uint64(head); i++ {
-			indexes = append(indexes, i)
-		}
+	// Assemble and return the block stats
+	return &internalBlockStats{
+		Timestamp:             new(big.Int).SetUint64(header.Time()),
+		TotalNoTransactions1h: totalTransactions.TotalNoTransactions1h,
+		TotalNoTransactions1m: totalTransactions.TotalNoTransactions1m,
+		Chain:                 common.NodeLocation.Name(),
+		Difficulty:            header.Difficulty().String(),
 	}
-	// Gather the batch of blocks to report
-	history := make([]*blockStats, len(indexes))
-	for i, number := range indexes {
-		fullBackend, ok := s.backend.(fullNodeBackend)
-		// Retrieve the next block if it's known to us
-		var block *types.Block
-		if ok {
-			block, _ = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(number)) // TODO ignore error here ?
-		} else {
-			if header, _ := s.backend.HeaderByNumber(context.Background(), rpc.BlockNumber(number)); header != nil {
-				block = types.NewBlockWithHeader(header)
-			}
-		}
-		// If we do have the block, add to the history and continue
-		if block != nil {
-			history[len(history)-1-i] = s.assembleBlockStats(block)
-			continue
-		}
-		// Ran out of blocks, cut the report short and send
-		history = history[len(history)-i:]
-		break
-	}
-	// Assemble the history report and send it to the server
-	if len(history) > 0 {
-		log.Trace("Sending historical blocks to quaistats", "first", history[0].Number, "last", history[len(history)-1].Number)
-	} else {
-		log.Trace("No history to send to stats server")
-	}
-	stats := map[string]interface{}{
-		"id":      s.node,
-		"history": history,
-	}
-	report := map[string][]interface{}{
-		"emit": {"history", stats},
-	}
-	return conn.WriteJSON(report)
 }
 
-// pendStats is the information to report about pending transactions.
-type pendStats struct {
-	Pending int `json:"pending"`
-}
-
-// reportPending retrieves the current number of pending transactions and reports
-// it to the stats server.
-func (s *Service) reportPending(conn *connWrapper) error {
-	// Retrieve the pending count from the local blockchain
-	pending, _ := s.backend.Stats()
-	// Assemble the transaction stats and send it to the server
-	log.Trace("Sending pending transactions to quaistats", "count", strconv.Itoa(pending))
-	if conn == nil || conn.conn == nil {
-		log.Warn("pending connection is nil")
-		return errors.New("pending connection is nil")
-	}
-
-	stats := map[string]interface{}{
-		"id": s.node,
-		"pending": &pendStats{
-			Pending: pending,
-		},
-	}
-	report := map[string][]interface{}{
-		"emit": {"pending", stats},
-	}
-	return conn.WriteJSON(report)
-}
-
-// nodeStats is the information to report about the local node.
-type nodeStats struct {
-	Name             string  `json:"name"`
-	Active           bool    `json:"active"`
-	Syncing          bool    `json:"syncing"`
-	Mining           bool    `json:"mining"`
-	Hashrate         int     `json:"hashrate"`
-	Peers            int     `json:"peers"`
-	Uptime           int     `json:"uptime"`
-	Chain            string  `json:"chain"`
-	ChainID          uint64  `json:"chainId"`
-	LatestHeight     uint64  `json:"height"`
-	LatestHash       string  `json:"hash"`
-	CPUPercentUsage  float32 `json:"cpuPercentUsage"`
-	CPUUsage         float32 `json:"cpuUsage"`
-	RAMPercentUsage  float32 `json:"ramPercentUsage"`
-	RAMUsage         int64   `json:"ramUsage"` // in bytes
-	SwapPercentUsage float32 `json:"swapPercentUsage"`
-	SwapUsage        int64   `json:"swapUsage"`
-	DiskUsage        int64   `json:"diskUsage"` // in bytes
-}
-
-// reportStats retrieves various stats about the node at the networking and
+// reportNodeStats retrieves various stats about the node at the networking and
 // mining layer and reports it to the stats server.
-func (s *Service) reportStats(conn *connWrapper) error {
-	// Gather the syncing and mining infos from the local miner instance
-	var (
-		mining   bool
-		hashrate int
-		syncing  bool
-	)
-	// check if backend is a full node
-	fullBackend, ok := s.backend.(fullNodeBackend)
-	header := s.backend.CurrentHeader()
-	if ok {
-		sync := fullBackend.Downloader().Progress()
-		syncing = fullBackend.CurrentHeader().Number().Uint64() >= sync.HighestBlock
-	} else {
-		sync := s.backend.Downloader().Progress()
-		syncing = header.Number().Uint64() >= sync.HighestBlock
-	}
-
-	var cpuPercentUsed float32
-	if cpuStat, err := cpu.Percent(0, false); err == nil {
-		cpuPercentUsed = float32(cpuStat[0])
-	} else {
-		log.Warn("Error getting CPU percent usage:", err)
-		cpuPercentUsed = float32(c_statsErrorValue)
-	}
-
-	var cpuUsed float32
-	if cpuStat, err := cpu.Times(false); err == nil {
-		cpuUsed = float32(cpuStat[0].Total())
-
-	} else {
-		log.Warn("Error getting CPU times:", err)
-		cpuUsed = float32(c_statsErrorValue)
-	}
-
-	var ramUsed int64
-	var ramPercentUsed float32
+func (s *Service) reportNodeStats(conn *connWrapper) error {
 	// Get RAM usage
+	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
 	if vmStat, err := mem.VirtualMemory(); err == nil {
-		ramUsed = int64(vmStat.Used)
-		ramPercentUsed = float32(vmStat.UsedPercent)
+		ramUsagePercent = float64(vmStat.UsedPercent)
+		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total) * 100
+		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total) * 100
 	} else {
 		log.Warn("Error getting RAM usage:", err)
-		ramUsed = c_statsErrorValue
-		ramPercentUsed = float32(c_statsErrorValue)
+		// Handle error, possibly with default values or by returning an error
 	}
 
-	var swapUsed int64
-	var swapPercentUsed float32
-	// Get swap usage
-	if swapStat, err := mem.SwapMemory(); err == nil {
-		swapUsed = int64(swapStat.Used)
-		swapPercentUsed = float32(swapStat.UsedPercent)
+	// Get CPU usage
+	var cpuUsagePercent float64
+	if cpuStat, err := cpu.Percent(0, false); err == nil {
+		cpuUsagePercent = float64(cpuStat[0])
 	} else {
-		log.Warn("Error getting swap usage:", err)
-		swapUsed = c_statsErrorValue
-		swapPercentUsed = float32(c_statsErrorValue)
+		log.Warn("Error getting CPU percent usage:", err)
+		// Handle error
 	}
 
-	// Get disk usage
+	// Get disk usage (as a percentage)
 	diskUsage, err := dirSize(s.instanceDir)
 	if err != nil {
 		log.Warn("Error calculating directory sizes:", err)
 		diskUsage = c_statsErrorValue
 	}
 
-	// Assemble the node stats and send it to the server
+	diskSize, err := diskTotalSize()
+	if err != nil {
+		log.Warn("Error calculating disk size:", err)
+		diskUsage = c_statsErrorValue
+	}
+
+	diskUsagePercent := float64(diskUsage) / float64(diskSize) * 100
+
+	// Assemble the new node stats
 	log.Trace("Sending node details to quaistats")
 
 	stats := map[string]interface{}{
 		"id": s.node,
 		"stats": &nodeStats{
-			Name:             s.node,
-			Active:           true,
-			Mining:           mining,
-			Hashrate:         hashrate,
-			Peers:            s.server.PeerCount(),
-			Syncing:          syncing,
-			Uptime:           100,
-			Chain:            common.NodeLocation.Name(),
-			ChainID:          s.chainID.Uint64(),
-			LatestHeight:     header.Number().Uint64(),
-			LatestHash:       header.Hash().String(),
-			CPUPercentUsage:  cpuPercentUsed,
-			CPUUsage:         cpuUsed,
-			RAMPercentUsage:  ramPercentUsed,
-			RAMUsage:         ramUsed, // in bytes
-			SwapPercentUsage: swapPercentUsed,
-			SwapUsage:        swapUsed,
-			DiskUsage:        diskUsage, // in bytes
+			Name:                s.node,
+			Timestamp:           big.NewInt(time.Now().Unix()), // Current timestamp
+			RAMUsagePercent:     int64(ramUsagePercent),
+			RAMFreePercent:      int64(ramFreePercent),
+			RAMAvailablePercent: int64(ramAvailablePercent),
+			CPUUsagePercent:     int64(cpuUsagePercent),
+			DiskUsageValue:      int64(diskUsage),
+			DiskUsagePercent:    int64(diskUsagePercent),
 		},
 	}
 
@@ -1208,90 +1022,67 @@ func (s *Service) reportStats(conn *connWrapper) error {
 	return conn.WriteJSON(report)
 }
 
-// peerStats is the information to report about peers.
-type peerStats struct {
-	Chain    string      `json:"chain"`
-	ChainID  uint64      `json:"chainId"`
-	Count    int         `json:"count"`
-	PeerData []*peerData `json:"peerData"`
-}
-
-// peerStat is the information to report about peers.
-type peerData struct {
-	Chain             string        `json:"chain"`
-	Enode             string        `json:"enode"`        // Unique node identifier (enode URL)
-	SoftwareName      string        `json:"softwareName"` // Node software version
-	LocalAddress      string        `json:"localAddress"`
-	RemoteAddress     string        `json:"remoteAddress"`
-	RTT               string        `json:"rtt"`
-	LatestHeight      uint64        `json:"latestHeight"`
-	LatestEntropy     string        `json:"latestEntropy"`
-	LatestHash        string        `json:"latestHash"`
-	RecvLastBlockTime time.Time     `json:"recvLastBlockTime"`
-	ConnectedTime     time.Duration `json:"uptime"`
-	PeerUptime        string        `json:"peerUptime"` // TODO: add peer uptime
-}
-
-// reportPeers retrieves various stats about the peers for a node.
-func (s *Service) reportPeers(conn *connWrapper) error {
-	// Assemble the node stats and send it to the server
-	log.Trace("Sending peer details to quaistats")
-
-	peerInfo := s.backend.Downloader().PeerSet()
-
-	allPeerData := make([]*peerData, 0)
-
-	srvPeers := s.server.Peers()
-
-	for _, peer := range srvPeers {
-		peerStat := &peerData{
-			Enode:         peer.ID().String(),
-			SoftwareName:  peer.Fullname(),
-			LocalAddress:  peer.LocalAddr().String(),
-			RemoteAddress: peer.RemoteAddr().String(),
-			Chain:         common.NodeLocation.Name(),
-			ConnectedTime: peer.ConnectedTime(),
-		}
-
-		downloaderPeer := peerInfo.Peer(peer.ID().String())
-		if downloaderPeer != nil {
-			hash, number, entropy, receivedAt := downloaderPeer.Peer().Head()
-			if number == nil {
-				number = big.NewInt(0)
-			}
-			peerStat.RTT = downloaderPeer.Tracker().Roundtrip().String()
-			peerStat.LatestHeight = number.Uint64()
-			peerStat.LatestEntropy = entropy.String()
-			peerStat.LatestHash = hash.String()
-			if receivedAt != *new(time.Time) {
-				peerStat.RecvLastBlockTime = receivedAt.UTC()
-			}
-		}
-		allPeerData = append(allPeerData, peerStat)
-	}
-
-	peers := map[string]interface{}{
-		"id": s.node,
-		"peers": &peerStats{
-			Chain:    common.NodeLocation.Name(),
-			ChainID:  s.chainID.Uint64(),
-			Count:    len(srvPeers),
-			PeerData: allPeerData,
-		},
-	}
-	report := map[string][]interface{}{
-		"emit": {"peers", peers},
-	}
-	return conn.WriteJSON(report)
-}
-
 // dirSize returns the size of a directory in bytes.
 func dirSize(path string) (int64, error) {
-	cmd := exec.Command("du", "-bs", path)
-	if output, err := cmd.Output(); err != nil {
-		return -1, err
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("du", "-sk", path)
+	} else if runtime.GOOS == "linux" {
+		cmd = exec.Command("du", "-bs", path)
 	} else {
-		size, _ := strconv.ParseInt(strings.Split(string(output), "\t")[0], 10, 64)
-		return size, nil
+		return -1, errors.New("unsupported OS")
 	}
+	// Execute command
+	output, err := cmd.Output()
+	if err != nil {
+		return -1, err
+	}
+
+	// Split the output and parse the size.
+	sizeStr := strings.Split(string(output), "\t")[0]
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return -1, err
+	}
+
+	// If on macOS, convert size from kilobytes to bytes.
+	if runtime.GOOS == "darwin" {
+		size *= 1024
+	}
+
+	return size, nil
+}
+
+// diskTotalSize returns the total size of the disk in bytes.
+func diskTotalSize() (int64, error) {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("df", "-k", "/")
+	} else if runtime.GOOS == "linux" {
+		cmd = exec.Command("df", "--block-size=1K", "/")
+	} else {
+		return 0, errors.New("unsupported OS")
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(string(output), "\n")
+	if len(lines) < 2 {
+		return 0, errors.New("unexpected output from df command")
+	}
+
+	fields := strings.Fields(lines[1])
+	if len(fields) < 2 {
+		return 0, errors.New("unexpected output from df command")
+	}
+
+	totalSize, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	return totalSize * 1024, nil // convert from kilobytes to bytes
 }
