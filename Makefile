@@ -65,6 +65,9 @@ endif
 ifeq ($(QUAI_STATS),true)
 	BASE_CMD += --quaistats ${STATS_NAME}:${STATS_PASS}@${STATS_HOST}
 endif
+ifeq ($(TRUSTED_NODE),true)
+	BASE_CMD += --trustednode
+endif
 
 ifeq ($(SHOW_COLORS),true)
 	BASE_CMD += --showcolors
