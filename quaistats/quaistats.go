@@ -801,9 +801,14 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 				}
 
 				var err error
-				currentBlock, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentBlock.NumberU64()-1))
+				var currentNumber = currentBlock.NumberU64()
+				currentBlock, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentNumber-1))
 				if err != nil {
-					log.Error(fmt.Sprintf("Error getting block number %d: %s", int(currentBlock.NumberU64())-1, err.Error()))
+					log.Error(fmt.Sprintf("Error getting block number %d: %s", currentNumber-1, err.Error()))
+					break
+				}
+				if currentBlock == nil {
+					log.Error(fmt.Sprintf("No block found at number %d", currentNumber-1))
 					break
 				}
 			}
