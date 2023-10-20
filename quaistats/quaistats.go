@@ -641,6 +641,11 @@ func (s *Service) reportInternalBlockStats(conn *connWrapper, block *types.Block
 	// Gather the block details from the header or block chain
 	details := s.assembleInternalBlockStats(block)
 
+	if details == nil {
+		log.Warn("internal block stats details are nil")
+		return errors.New("internal block stats details are nil")
+	}
+
 	// Assemble the block report and send it to the server
 	log.Trace("Sending internal block stats to quaistats", "timestamp", details.Timestamp)
 
@@ -664,8 +669,13 @@ func (s *Service) reportBlockAppendTime(conn *connWrapper, block *types.Block) e
 	// Gather the block details from the header or block chain
 	details := s.assembleBlockAppendTimeStats(block)
 
+	if details == nil {
+		log.Warn("block append time details are nil")
+		return errors.New("block append time details are nil")
+	}
+
 	// Assemble the block report and send it to the server
-	log.Trace("Sending internal block stats to quaistats", "number", details.BlockNumber)
+	log.Trace("Sending block append time stats to quaistats", "number", details.BlockNumber)
 
 	if conn == nil || conn.conn == nil {
 		log.Warn("block append time connection is nil")
@@ -687,8 +697,13 @@ func (s *Service) reportBlockLocation(conn *connWrapper, block *types.Block) err
 	// Gather the block details from the header or block chain
 	details := s.assembleBlockLocationStats(block)
 
+	if details == nil {
+		log.Warn("block location details are nil")
+		return errors.New("block location details are nil")
+	}
+
 	// Assemble the block report and send it to the server
-	log.Trace("Sending internal block stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
+	log.Trace("Sending block location stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
 
 	if conn == nil || conn.conn == nil {
 		log.Warn("block location connection is nil")
@@ -771,7 +786,19 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 	batchesNeeded := c_blocksPerHour / c_txBatchSize // calculate how many batches of c_txBatchSize are needed
 
 	for i := 0; i < batchesNeeded; i++ {
-		startBlockNum := currentBlock.NumberU64() - uint64(i*c_txBatchSize)
+		if currentBlock == nil {
+			log.Error("Encountered a nil block, stopping iteration")
+			break
+		}
+		currentBlockNum := currentBlock.NumberU64()
+		subtractionAmount := uint64(i * c_txBatchSize)
+
+		if currentBlockNum < subtractionAmount {
+			log.Error(fmt.Sprintf("Potential underflow detected: current block number (%d) is less than subtraction amount (%d)", currentBlockNum, subtractionAmount))
+			break
+		}
+
+		startBlockNum := currentBlockNum - subtractionAmount
 
 		// Try to get the data from the LRU cache
 		cachedTxCount, ok := s.txLookupCache.Get(startBlockNum)
@@ -780,15 +807,10 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 			txCount := uint64(0)
 
 			for j := 0; j < c_txBatchSize; j++ {
-				if currentBlock == nil {
-					log.Error("Encountered a nil block, stopping iteration")
-					break
-				}
-
 				// Add the number of transactions in the current block to the total
 				txCount += uint64(len(currentBlock.Transactions()))
 
-				// If within the last 5 blocks, add to the 1-minute total
+				// If within the last c_blocksPerMinute blocks, add to the 1-minute total
 				if i == 0 && j < c_blocksPerMinute {
 					totalTransactions1m += uint64(len(currentBlock.Transactions()))
 				}
@@ -797,7 +819,10 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 				fullBackend, ok := s.backend.(fullNodeBackend)
 				if !ok {
 					log.Error("Not running fullnode, cannot get parent block")
-					break
+					return &totalTransactions{
+						TotalNoTransactions1h: totalTransactions1h,
+						TotalNoTransactions1m: totalTransactions1m,
+					}
 				}
 
 				var err error
@@ -840,6 +865,10 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 }
 
 func (s *Service) assembleBlockLocationStats(block *types.Block) *blockLocation {
+	if block == nil {
+		log.Error("Block is nil")
+		return nil
+	}
 	header := block.Header()
 	location := header.NumberArray()
 	primeHeight := location[0]
@@ -858,6 +887,10 @@ func (s *Service) assembleBlockLocationStats(block *types.Block) *blockLocation 
 }
 
 func (s *Service) assembleBlockAppendTimeStats(block *types.Block) *blockAppendTime {
+	if block == nil {
+		log.Error("Block is nil")
+		return nil
+	}
 	header := block.Header()
 	appendTime := block.GetAppendTime()
 
@@ -872,6 +905,10 @@ func (s *Service) assembleBlockAppendTimeStats(block *types.Block) *blockAppendT
 }
 
 func (s *Service) assembleInternalBlockStats(block *types.Block) *internalBlockStats {
+	if block == nil {
+		log.Error("Block is nil")
+		return nil
+	}
 	header := block.Header()
 	totalTransactions := s.calculateTotalNoTransactions(block)
 
@@ -924,11 +961,17 @@ func (s *Service) reportNodeStats(conn *connWrapper) error {
 
 	diskUsagePercent := float64(diskUsage) / float64(diskSize) * 100
 
+	currentHeader := s.backend.CurrentHeader()
+
+	if currentHeader == nil {
+		log.Warn("Current header is nil")
+		return errors.New("current header is nil")
+	}
 	// Get current block number
-	currentBlockHeight := s.backend.CurrentHeader().NumberArray()
+	currentBlockHeight := currentHeader.NumberArray()
 
 	// Get location
-	location := s.backend.CurrentHeader().Location()
+	location := currentHeader.Location()
 
 	// Assemble the new node stats
 	log.Trace("Sending node details to quaistats")
