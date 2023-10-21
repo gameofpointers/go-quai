@@ -202,9 +202,11 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, en
 	if relay && !atFray {
 		if !beyondSyncPoint {
 			if !requestBlock {
-				log.Info("Peer broadcasting block not in requestQueue or beyond sync target, dropping peer")
 				// drop peer
-				h.downloader.DropPeer(peer)
+				if common.NodeLocation.Context() != common.PRIME_CTX {
+					log.Info("Peer broadcasting block not in requestQueue or beyond sync target, dropping peer")
+					h.downloader.DropPeer(peer)
+				}
 				return nil
 			} else {
 				relay = false

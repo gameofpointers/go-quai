@@ -735,7 +735,9 @@ func (f *BlockFetcher) ImportBlocks(peer string, block *types.Block, relay bool)
 
 	// If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS
 	if relay && f.currentS().Cmp(new(big.Int).Add(broadCastEntropy, MaxAllowableEntropyDist)) > 0 {
-		f.dropPeer(peer)
+		if nodeCtx != common.PRIME_CTX {
+			f.dropPeer(peer)
+		}
 		return
 	}
 
