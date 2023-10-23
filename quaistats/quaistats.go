@@ -280,6 +280,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 
 	urlMap := make(map[string][]string)
 	var nodeStatsWarningCounter int
+	nodeStatsMod := 0
 
 	for key, path := range paths {
 		// url.Parse and url.IsAbs is unsuitable (https://github.com/golang/go/issues/19779)
@@ -354,7 +355,6 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 					errTimer.Reset(0)
 					continue
 				}
-
 			}
 
 			// Keep sending status updates until the connection breaks
@@ -374,7 +374,8 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 					return
 
 				case <-fullReport.C:
-					if err = s.report("nodeStats", conns["nodeStats"]); err != nil {
+					nodeStatsMod ^= 1
+					if err = s.reportNodeStats(conns["nodeStats"], nodeStatsMod); err != nil {
 						noErrs = false
 						nodeStatsWarningCounter += 1
 						if nodeStatsWarningCounter == c_nodeStatsWarningThreshold {
@@ -404,20 +405,15 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 							log.Warn("Block internal stats report failed", "err", err)
 						}
 					}
-				case sideEvent := <-sideCh:
-					if err = s.reportSideBlock(conns["block"], sideEvent); err != nil {
-						noErrs = false
-						log.Warn("Block stats report failed", "err", err)
-					}
 				}
-			}
-			fullReport.Stop()
-			// Close the current connection and establish a new one
-			for _, conn := range conns {
-				conn.Close()
-			}
+				fullReport.Stop()
+				// Close the current connection and establish a new one
+				for _, conn := range conns {
+					conn.Close()
+				}
 
-			errTimer.Reset(0)
+				errTimer.Reset(0)
+			}
 		}
 	}
 }
@@ -615,7 +611,7 @@ func (s *Service) report(dataType string, conn *connWrapper) error {
 
 	switch dataType {
 	case "nodeStats":
-		if err := s.reportNodeStats(conn); err != nil {
+		if err := s.reportNodeStats(conn, 0); err != nil {
 			return err
 		}
 	default:
@@ -765,6 +761,7 @@ type nodeStats struct {
 	CurrentBlockNumber  []*big.Int `json:"currentBlockNumber"`
 	RegionLocation      int        `json:"regionLocation"`
 	ZoneLocation        int        `json:"zoneLocation"`
+	NodeStatsMod        int        `json:"nodeStatsMod"`
 }
 
 type totalTransactions struct {
@@ -930,7 +927,11 @@ func (s *Service) assembleInternalBlockStats(block *types.Block) *internalBlockS
 
 // reportNodeStats retrieves various stats about the node at the networking and
 // mining layer and reports it to the stats server.
-func (s *Service) reportNodeStats(conn *connWrapper) error {
+func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
+	if conn == nil || conn.conn == nil {
+		log.Warn("node stats connection is nil")
+		return errors.New("node stats connection is nil")
+	}
 	// Get RAM usage
 	var ramUsagePercent, ramFreePercent, ramAvailablePercent, ramUsage float64
 	if vmStat, err := mem.VirtualMemory(); err == nil {
@@ -997,6 +998,7 @@ func (s *Service) reportNodeStats(conn *connWrapper) error {
 			CurrentBlockNumber:  currentBlockHeight,
 			RegionLocation:      location.Region(),
 			ZoneLocation:        location.Zone(),
+			NodeStatsMod:        mod,
 		},
 	}
 
@@ -1008,6 +1010,14 @@ func (s *Service) reportNodeStats(conn *connWrapper) error {
 
 // dirSize returns the size of a directory in bytes.
 func dirSize(path string) (int64, error) {
+	containsRegion := strings.Contains(path, "region")
+	containsPrime := strings.Contains(path, "prime")
+
+	if containsRegion || containsPrime {
+		log.Debug("Skipping dirSize for region or prime. Filtered out on backend")
+		return -1, nil
+	}
+
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		cmd = exec.Command("du", "-sk", path)
