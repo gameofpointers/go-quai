@@ -50,6 +50,9 @@ endif
 ifeq ($(ENABLE_NAT),true)
 	BASE_CMD += --nat extip:$(EXT_IP)
 endif
+ifeq ($(ENABLE_PPROF),true)
+	BASE_CMD += --pprof
+endif
 ifeq ($(ENABLE_UNLOCK),true)
 	BASE_CMD += --allow-insecure-unlock
 endif
