@@ -63,12 +63,13 @@ const (
 	// reportInterval is the time interval between two reports.
 	reportInterval = 15
 
-	c_alpha              = 8
-	c_txBatchSize        = 20
-	c_blocksPerMinute    = 5
-	c_blocksPerHour      = c_blocksPerMinute * 60
-	c_txLookupCacheLimit = c_blocksPerHour / c_txBatchSize
-	c_statsErrorValue    = int64(-1)
+	c_alpha                     = 8
+	c_txBatchSize               = 20
+	c_blocksPerMinute           = 5
+	c_blocksPerHour             = c_blocksPerMinute * 60
+	c_txLookupCacheLimit        = c_blocksPerHour / c_txBatchSize
+	c_statsErrorValue           = int64(-1)
+	c_nodeStatsWarningThreshold = 50
 )
 
 // backend encompasses the bare-minimum functionality needed for quaistats reporting
@@ -278,6 +279,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 	}
 
 	urlMap := make(map[string][]string)
+	var nodeStatsWarningCounter int
 
 	for key, path := range paths {
 		// url.Parse and url.IsAbs is unsuitable (https://github.com/golang/go/issues/19779)
@@ -374,7 +376,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 				case <-fullReport.C:
 					if err = s.report("nodeStats", conns["nodeStats"]); err != nil {
 						noErrs = false
-						log.Warn("nodeStats full stats report failed", "err", err)
+						nodeStatsWarningCounter += 1
+						if nodeStatsWarningCounter == c_nodeStatsWarningThreshold {
+							log.Warn("nodeStats full stats report failed", "err", err)
+							nodeStatsWarningCounter = 0
+						}
 					}
 				case head := <-headCh:
 					// Report blockLocation every block if node is trusted
