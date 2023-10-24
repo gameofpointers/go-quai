@@ -244,6 +244,13 @@ func (s *Service) Stop() error {
 // loop keeps trying to connect to the netstats server, reporting chain events
 // until termination.
 func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan core.ChainSideEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Stats process crashed with error:", r)
+			go s.loop(chainHeadCh, chainSideCh)
+		}
+	}()
+
 	// Start a goroutine that exhausts the subscriptions to avoid events piling up
 	var (
 		quitCh = make(chan struct{})
