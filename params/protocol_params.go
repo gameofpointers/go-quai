@@ -143,7 +143,7 @@ const (
 var (
 	GasCeil                    uint64 = 20000000
 	ColosseumGasCeil           uint64 = 70000000
-	GardenGasCeil              uint64 = 160000000
+	GardenGasCeil              uint64 = 160000000 * 4
 	OrchardGasCeil             uint64 = 50000000
 	LighthouseGasCeil          uint64 = 160000000
 	LocalGasCeil               uint64 = 20000000
