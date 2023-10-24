@@ -20,11 +20,14 @@ package quaistats
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"net"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -35,8 +38,8 @@ import (
 	"github.com/dgrijalva/jwt-go"
 
 	lru "github.com/hashicorp/golang-lru"
-	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/process"
 
 	"os/exec"
 
@@ -273,7 +276,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 	paths := map[string]string{
 		"internalBlockStats": fmt.Sprintf("%s/internalBlockStats", s.host),
 		"blockAppendTime":    fmt.Sprintf("%s/blockAppendTime", s.host),
-		"blockLocation":      fmt.Sprintf("%s/blockLocation", s.host),
+		"blockHeight":        fmt.Sprintf("%s/blockHeight", s.host),
 		"nodeStats":          fmt.Sprintf("%s/nodeStats", s.host),
 		"login":              fmt.Sprintf("%s/auth/login", s.host),
 	}
@@ -306,7 +309,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 			return
 		case <-errTimer.C:
 			// If we don't have a JWT or it's expired, get a new one
-
+			log.Info("Trying to login to quaistats")
 			isJwtExpiredResult, jwtIsExpiredErr := s.isJwtExpired(authJwt)
 			if authJwt == "" || isJwtExpiredResult || jwtIsExpiredErr != nil {
 				var err error
@@ -384,9 +387,9 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 						}
 					}
 				case head := <-headCh:
-					// Report blockLocation every block if node is trusted
+					// Report blockHeight every block if node is trusted
 					if s.trusted {
-						if err = s.reportBlockLocation(conns["blockLocation"], head); err != nil {
+						if err = s.reportBlockHeight(conns["blockHeight"], head); err != nil {
 							noErrs = false
 							log.Warn("Block location report failed", "err", err)
 						}
@@ -620,24 +623,6 @@ func (s *Service) report(dataType string, conn *connWrapper) error {
 	return nil
 }
 
-// reportSideBlock retrieves the current chain side event and reports it to the stats server.
-func (s *Service) reportSideBlock(conn *connWrapper, block *types.Block) error {
-	log.Trace("Sending new side block to quaistats", "number", block.Number(), "hash", block.Hash())
-	if conn == nil || conn.conn == nil {
-		log.Warn("block connection is nil")
-		return errors.New("block connection is nil")
-	}
-
-	stats := map[string]interface{}{
-		"id":        s.node,
-		"sideBlock": block,
-	}
-	report := map[string][]interface{}{
-		"emit": {"sideBlock", stats},
-	}
-	return conn.WriteJSON(report)
-}
-
 // reportBlock retrieves the current chain head and reports it to the stats server.
 func (s *Service) reportInternalBlockStats(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
@@ -695,29 +680,29 @@ func (s *Service) reportBlockAppendTime(conn *connWrapper, block *types.Block) e
 }
 
 // reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlockLocation(conn *connWrapper, block *types.Block) error {
+func (s *Service) reportBlockHeight(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
-	details := s.assembleBlockLocationStats(block)
+	details := s.assembleBlockHeightStats(block)
 
 	if details == nil {
-		log.Warn("block location details are nil")
-		return errors.New("block location details are nil")
+		log.Warn("block height details are nil")
+		return errors.New("block height details are nil")
 	}
 
 	// Assemble the block report and send it to the server
-	log.Trace("Sending block location stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
+	log.Trace("Sending block height stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
 
 	if conn == nil || conn.conn == nil {
-		log.Warn("block location connection is nil")
-		return errors.New("block location connection is nil")
+		log.Warn("block height connection is nil")
+		return errors.New("block height connection is nil")
 	}
 
 	stats := map[string]interface{}{
-		"id":            s.node,
-		"blockLocation": details,
+		"id":          s.node,
+		"blockHeight": details,
 	}
 	report := map[string][]interface{}{
-		"emit": {"blockLocation", stats},
+		"emit": {"lockHeight", stats},
 	}
 	return conn.WriteJSON(report)
 }
@@ -732,7 +717,7 @@ type internalBlockStats struct {
 }
 
 // Trusted Only
-type blockLocation struct {
+type blockHeight struct {
 	Timestamp    *big.Int `json:"timestamp"`
 	ZoneHeight   uint64   `json:"zoneHeight"`
 	RegionHeight uint64   `json:"regionHeight"`
@@ -752,16 +737,17 @@ type nodeStats struct {
 	Name                string     `json:"name"`
 	Timestamp           *big.Int   `json:"timestamp"`
 	RAMUsage            int64      `json:"ramUsage"`
-	RAMUsagePercent     int64      `json:"ramUsagePercent"`
-	RAMFreePercent      int64      `json:"ramFreePercent"`
-	RAMAvailablePercent int64      `json:"ramAvailablePercent"`
-	CPUUsagePercent     int64      `json:"cpuPercent"`
+	RAMUsagePercent     float32    `json:"ramUsagePercent"`
+	RAMFreePercent      float32    `json:"ramFreePercent"`
+	RAMAvailablePercent float32    `json:"ramAvailablePercent"`
+	CPUUsagePercent     float32    `json:"cpuPercent"`
 	DiskUsagePercent    int64      `json:"diskUsagePercent"`
 	DiskUsageValue      int64      `json:"diskUsageValue"`
 	CurrentBlockNumber  []*big.Int `json:"currentBlockNumber"`
 	RegionLocation      int        `json:"regionLocation"`
 	ZoneLocation        int        `json:"zoneLocation"`
 	NodeStatsMod        int        `json:"nodeStatsMod"`
+	HashedMAC           string     `json:"hashedMAC"`
 }
 
 type totalTransactions struct {
@@ -867,7 +853,7 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 	}
 }
 
-func (s *Service) assembleBlockLocationStats(block *types.Block) *blockLocation {
+func (s *Service) assembleBlockHeightStats(block *types.Block) *blockHeight {
 	if block == nil {
 		log.Error("Block is nil")
 		return nil
@@ -879,13 +865,13 @@ func (s *Service) assembleBlockLocationStats(block *types.Block) *blockLocation 
 	zoneHeight := location[2]
 
 	// Assemble and return the block stats
-	return &blockLocation{
+	return &blockHeight{
 		Timestamp:    new(big.Int).SetUint64(header.Time()),
 		ZoneHeight:   zoneHeight.Uint64(),
 		RegionHeight: regionHeight.Uint64(),
 		PrimeHeight:  primeHeight.Uint64(),
 		Chain:        common.NodeLocation.Name(),
-		Entropy:      s.backend.TotalLogS(block.Header()).String(),
+		Entropy:      common.BigBitsToBits(s.backend.TotalLogS(block.Header())).String(),
 	}
 }
 
@@ -932,41 +918,49 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 		log.Warn("node stats connection is nil")
 		return errors.New("node stats connection is nil")
 	}
-	// Get RAM usage
-	var ramUsagePercent, ramFreePercent, ramAvailablePercent, ramUsage float64
+
+	// Usage in your main function
+	ramUsage, err := getQuaiRAMUsage()
+	if err != nil {
+		log.Warn("Error getting Quai RAM usage:", "error", err)
+		return err
+	}
+	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
 	if vmStat, err := mem.VirtualMemory(); err == nil {
-		ramUsagePercent = float64(vmStat.UsedPercent)
+		ramUsagePercent = float64(ramUsage) / float64(vmStat.Total) * 100
 		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total) * 100
 		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total) * 100
-		ramUsage = float64(vmStat.Used)
 	} else {
-		log.Warn("Error getting RAM usage:", err)
-		// Handle error, possibly with default values or by returning an error
+		log.Warn("Error getting RAM stats:", "error", err)
+		return err
 	}
 
 	// Get CPU usage
-	var cpuUsagePercent float64
-	if cpuStat, err := cpu.Percent(0, false); err == nil {
-		cpuUsagePercent = float64(cpuStat[0])
-	} else {
-		log.Warn("Error getting CPU percent usage:", err)
-		// Handle error
+	cpuUsage, err := getQuaiCPUUsage()
+	if err != nil {
+		log.Warn("Error getting CPU percent usage:", "error", err)
+		return err
 	}
 
 	// Get disk usage (as a percentage)
 	diskUsage, err := dirSize(s.instanceDir)
 	if err != nil {
-		log.Warn("Error calculating directory sizes:", err)
+		log.Warn("Error calculating directory sizes:", "error", err)
 		diskUsage = c_statsErrorValue
 	}
 
 	diskSize, err := diskTotalSize()
 	if err != nil {
-		log.Warn("Error calculating disk size:", err)
+		log.Warn("Error calculating disk size:", "error", err)
 		diskUsage = c_statsErrorValue
 	}
 
-	diskUsagePercent := float64(diskUsage) / float64(diskSize) * 100
+	diskUsagePercent := float64(c_statsErrorValue)
+	if diskSize > 0 {
+		diskUsagePercent = float64(diskUsage) / float64(diskSize) * 100
+	} else {
+		log.Warn("Error calculating disk usage percent: disk size is 0")
+	}
 
 	currentHeader := s.backend.CurrentHeader()
 
@@ -980,6 +974,28 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 	// Get location
 	location := currentHeader.Location()
 
+	// Get the first non-loopback MAC address
+	var macAddress string
+	interfaces, err := net.Interfaces()
+	if err == nil {
+		for _, interf := range interfaces {
+			if interf.HardwareAddr != nil && len(interf.HardwareAddr.String()) > 0 && (interf.Flags&net.FlagLoopback) == 0 {
+				macAddress = interf.HardwareAddr.String()
+				break
+			}
+		}
+	} else {
+		log.Warn("Error getting MAC address:", err)
+		return err
+	}
+
+	// Hash the MAC address
+	var hashedMAC string
+	if macAddress != "" {
+		hash := sha256.Sum256([]byte(macAddress))
+		hashedMAC = hex.EncodeToString(hash[:])
+	}
+
 	// Assemble the new node stats
 	log.Trace("Sending node details to quaistats")
 
@@ -989,16 +1005,17 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 			Name:                s.node,
 			Timestamp:           big.NewInt(time.Now().Unix()), // Current timestamp
 			RAMUsage:            int64(ramUsage),
-			RAMUsagePercent:     int64(ramUsagePercent),
-			RAMFreePercent:      int64(ramFreePercent),
-			RAMAvailablePercent: int64(ramAvailablePercent),
-			CPUUsagePercent:     int64(cpuUsagePercent),
+			RAMUsagePercent:     float32(ramUsagePercent),
+			RAMFreePercent:      float32(ramFreePercent),
+			RAMAvailablePercent: float32(ramAvailablePercent),
+			CPUUsagePercent:     float32(cpuUsage),
 			DiskUsageValue:      int64(diskUsage),
 			DiskUsagePercent:    int64(diskUsagePercent),
 			CurrentBlockNumber:  currentBlockHeight,
 			RegionLocation:      location.Region(),
 			ZoneLocation:        location.Zone(),
 			NodeStatsMod:        mod,
+			HashedMAC:           hashedMAC,
 		},
 	}
 
@@ -1006,6 +1023,76 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 		"emit": {"stats", stats},
 	}
 	return conn.WriteJSON(report)
+}
+
+func getQuaiCPUUsage() (float64, error) {
+	// 'ps' command options might vary depending on your OS
+	cmd := exec.Command("ps", "aux")
+	numCores := runtime.NumCPU()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(string(output), "\n")
+	var totalCpuUsage float64
+	var cpuUsage float64
+	for _, line := range lines {
+		if strings.Contains(line, "go-quai") {
+			fields := strings.Fields(line)
+			if len(fields) > 2 {
+				// Assuming %CPU is the third column, command is the eleventh
+				cpuUsage, err = strconv.ParseFloat(fields[2], 64)
+				if err != nil {
+					return 0, err
+				}
+				totalCpuUsage += cpuUsage
+			}
+		}
+	}
+
+	if totalCpuUsage == 0 {
+		return 0, errors.New("quai process not found")
+	}
+
+	return totalCpuUsage / float64(numCores), nil
+}
+
+func getQuaiRAMUsage() (uint64, error) {
+	// Get a list of all running processes
+	processes, err := process.Processes()
+	if err != nil {
+		return 0, err
+	}
+
+	var totalRam uint64
+
+	// Debug: log number of processes
+	log.Info("Number of processes", "number", len(processes))
+
+	for _, p := range processes {
+		cmdline, err := p.Cmdline()
+		if err != nil {
+			// Debug: log error
+			log.Warn("Error getting process cmdline", "error", err)
+			continue
+		}
+
+		if strings.Contains(cmdline, "go-quai") {
+			memInfo, err := p.MemoryInfo()
+			if err != nil {
+				return 0, err
+			}
+			totalRam += memInfo.RSS
+		}
+	}
+
+	if totalRam == 0 {
+		return 0, errors.New("go-quai process not found")
+	}
+
+	return totalRam, nil
 }
 
 // dirSize returns the size of a directory in bytes.
