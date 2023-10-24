@@ -38,6 +38,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/process"
 
@@ -741,7 +742,8 @@ type nodeStats struct {
 	RAMFreePercent      float32    `json:"ramFreePercent"`
 	RAMAvailablePercent float32    `json:"ramAvailablePercent"`
 	CPUUsagePercent     float32    `json:"cpuPercent"`
-	DiskUsagePercent    int64      `json:"diskUsagePercent"`
+	CPUFree             float32    `json:"cpuFree"`
+	DiskUsagePercent    float32    `json:"diskUsagePercent"`
 	DiskUsageValue      int64      `json:"diskUsageValue"`
 	CurrentBlockNumber  []*big.Int `json:"currentBlockNumber"`
 	RegionLocation      int        `json:"regionLocation"`
@@ -919,31 +921,19 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 		return errors.New("node stats connection is nil")
 	}
 
-	// Usage in your main function
-	ramUsage, err := getQuaiRAMUsage()
-	if err != nil {
-		log.Warn("Error getting Quai RAM usage:", "error", err)
-		return err
-	}
-	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
-	if vmStat, err := mem.VirtualMemory(); err == nil {
-		ramUsagePercent = float64(ramUsage) / float64(vmStat.Total) * 100
-		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total) * 100
-		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total) * 100
-	} else {
-		log.Warn("Error getting RAM stats:", "error", err)
-		return err
+	isRegion := strings.Contains(s.instanceDir, "region")
+	isPrime := strings.Contains(s.instanceDir, "prime")
+
+	if isRegion || isPrime {
+		log.Debug("Skipping node stats for region or prime. Filtered out on backend")
+		return nil
 	}
 
-	// Get CPU usage
-	cpuUsage, err := getQuaiCPUUsage()
-	if err != nil {
-		log.Warn("Error getting CPU percent usage:", "error", err)
-		return err
-	}
+	log.Info("Quai Stats Instance Dir", "path", s.instanceDir+"/../..")
 
+	// Don't send if dirSize < 1
 	// Get disk usage (as a percentage)
-	diskUsage, err := dirSize(s.instanceDir)
+	diskUsage, err := dirSize(s.instanceDir + "/../..")
 	if err != nil {
 		log.Warn("Error calculating directory sizes:", "error", err)
 		diskUsage = c_statsErrorValue
@@ -957,9 +947,42 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 
 	diskUsagePercent := float64(c_statsErrorValue)
 	if diskSize > 0 {
-		diskUsagePercent = float64(diskUsage) / float64(diskSize) * 100
+		diskUsagePercent = float64(diskUsage) / float64(diskSize)
 	} else {
 		log.Warn("Error calculating disk usage percent: disk size is 0")
+	}
+
+	// Usage in your main function
+	ramUsage, err := getQuaiRAMUsage()
+	if err != nil {
+		log.Warn("Error getting Quai RAM usage:", "error", err)
+		return err
+	}
+	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
+	if vmStat, err := mem.VirtualMemory(); err == nil {
+		ramUsagePercent = float64(ramUsage) / float64(vmStat.Total)
+		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total)
+		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total)
+	} else {
+		log.Warn("Error getting RAM stats:", "error", err)
+		return err
+	}
+
+	// Get CPU usage
+	cpuUsageQuai, err := getQuaiCPUUsage()
+	if err != nil {
+		log.Warn("Error getting Quai CPU percent usage:", "error", err)
+		return err
+	} else {
+		cpuUsageQuai /= float64(100)
+	}
+
+	var cpuFree float32
+	if cpuUsageTotal, err := cpu.Percent(0, false); err == nil {
+		cpuFree = 1 - float32(cpuUsageTotal[0]/float64(100))
+	} else {
+		log.Warn("Error getting CPU free:", "error", err)
+		return err
 	}
 
 	currentHeader := s.backend.CurrentHeader()
@@ -1008,9 +1031,10 @@ func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
 			RAMUsagePercent:     float32(ramUsagePercent),
 			RAMFreePercent:      float32(ramFreePercent),
 			RAMAvailablePercent: float32(ramAvailablePercent),
-			CPUUsagePercent:     float32(cpuUsage),
+			CPUUsagePercent:     float32(cpuUsageQuai),
+			CPUFree:             float32(cpuFree),
 			DiskUsageValue:      int64(diskUsage),
-			DiskUsagePercent:    int64(diskUsagePercent),
+			DiskUsagePercent:    float32(diskUsagePercent),
 			CurrentBlockNumber:  currentBlockHeight,
 			RegionLocation:      location.Region(),
 			ZoneLocation:        location.Zone(),
@@ -1097,14 +1121,6 @@ func getQuaiRAMUsage() (uint64, error) {
 
 // dirSize returns the size of a directory in bytes.
 func dirSize(path string) (int64, error) {
-	containsRegion := strings.Contains(path, "region")
-	containsPrime := strings.Contains(path, "prime")
-
-	if containsRegion || containsPrime {
-		log.Debug("Skipping dirSize for region or prime. Filtered out on backend")
-		return -1, nil
-	}
-
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		cmd = exec.Command("du", "-sk", path)
