@@ -141,6 +141,8 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
 	start := time.Now()
 
+	headerHash := header.Hash()
+
 	if header.Hash() == sl.config.GenesisHash {
 		return nil, false, false, nil
 	}
@@ -186,6 +188,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	}
 	log.Debug("PCRC done", "hash", header.Hash(), "number", header.NumberArray(), "termini", newTermini)
 
+	if header.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after the pcrc")
+	}
 	time2 := common.PrettyDuration(time.Since(start))
 	// Append the new block
 	err = sl.hc.AppendHeader(header)
@@ -193,6 +198,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		return nil, false, false, err
 	}
 
+	if header.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after the append header")
+	}
 	time3 := common.PrettyDuration(time.Since(start))
 	// Construct the block locally
 	block, err := sl.ConstructLocalBlock(header)
@@ -210,6 +218,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after the top generate slice pending")
+	}
 	// If this was a coincident block, our dom will be passing us a set of newly
 	// confirmed ETXs If this is not a coincident block, we need to build up the
 	// list of confirmed ETXs using the subordinate manifest In either case, if
@@ -234,6 +245,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 	time5 := common.PrettyDuration(time.Since(start))
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after the collect newly confirmed etx")
+	}
 
 	time6 := common.PrettyDuration(time.Since(start))
 	var subPendingEtxs types.Transactions
@@ -266,6 +280,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after sub append")
+	}
 	time7 := common.PrettyDuration(time.Since(start))
 
 	sl.phCacheMu.Lock()
@@ -289,6 +306,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		if err != nil {
 			return nil, false, false, err
 		}
+		if block.Hash() != headerHash {
+			return nil, false, false, errors.New("header hash changed after first generate slice pending header")
+		}
 
 		subReorg = sl.miningStrategy(bestPh, tempPendingHeader)
 
@@ -307,12 +327,19 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 				return nil, false, false, err
 			}
 		}
+
+		if block.Hash() != headerHash {
+			return nil, false, false, errors.New("header hash changed after set current state")
+		}
 		// Upate the local pending header
 		pendingHeaderWithTermini, err = sl.generateSlicePendingHeader(block, newTermini, domPendingHeader, domOrigin, subReorg, false)
 		if err != nil {
 			return nil, false, false, err
 		}
 
+		if block.Hash() != headerHash {
+			return nil, false, false, errors.New("header hash changed after second gen slice pending header")
+		}
 		time9 = common.PrettyDuration(time.Since(start))
 
 	}
@@ -333,10 +360,16 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		return nil, false, false, err
 	}
 
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after batch write")
+	}
 	if setHead {
 		sl.hc.SetCurrentHeader(block.Header())
 	}
 
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after set current header")
+	}
 	if subReorg {
 		sl.hc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 	}
@@ -344,6 +377,9 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	// Relay the new pendingHeader
 	sl.relayPh(block, pendingHeaderWithTermini, domOrigin, block.Location(), subReorg)
 
+	if block.Hash() != headerHash {
+		return nil, false, false, errors.New("header hash changed after relay ph")
+	}
 	time10 := common.PrettyDuration(time.Since(start))
 	log.Info("Times during append:", "t0_1", time0_1, "t0_2", time0_2, "t1:", time1, "t2:", time2, "t3:", time3, "t4:", time4, "t5:", time5, "t6:", time6, "t7:", time7, "t8:", time8, "t9:", time9, "t10:", time10)
 	log.Debug("Times during sub append:", "t6_1:", time6_1, "t6_2:", time6_2, "t6_3:", time6_3)
