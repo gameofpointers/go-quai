@@ -282,11 +282,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 
 	// Resolve the URL, defaulting to TLS, but falling back to none too
 	paths := map[string]string{
-		"internalBlockStats": fmt.Sprintf("%s/internalBlockStats", s.host),
-		"blockAppendTime":    fmt.Sprintf("%s/blockAppendTime", s.host),
-		"blockHeight":        fmt.Sprintf("%s/blockHeight", s.host),
-		"nodeStats":          fmt.Sprintf("%s/nodeStats", s.host),
-		"login":              fmt.Sprintf("%s/auth/login", s.host),
+		"blockTransactionStats": fmt.Sprintf("%s/blockTransactionStats", s.host),
+		"blockAppendTime":       fmt.Sprintf("%s/blockAppendTime", s.host),
+		"blockDetailStats":      fmt.Sprintf("%s/blockDetailStats", s.host),
+		"nodeStats":             fmt.Sprintf("%s/nodeStats", s.host),
+		"login":                 fmt.Sprintf("%s/auth/login", s.host),
 	}
 
 	urlMap := make(map[string][]string)
@@ -395,11 +395,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 						}
 					}
 				case head := <-headCh:
-					// Report blockHeight every block if node is trusted
+					// Report block details stats every block if node is trusted
 					if s.trusted {
-						if err = s.reportBlockHeight(conns["blockHeight"], head); err != nil {
+						if err = s.reportBlockDetailStats(conns["blockDetailStats"], head); err != nil {
 							noErrs = false
-							log.Warn("Block location report failed", "err", err)
+							log.Warn("Block detail stats report failed", "err", err)
 						}
 					}
 
@@ -409,11 +409,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 						log.Warn("Block append time report failed", "err", err)
 					}
 
-					// Report internal blockstats every 20 block stats if trusted node
+					// Report transaction blockstats every 20 block stats if trusted node
 					if head.NumberU64()%c_txBatchSize == 0 && s.trusted {
-						if err = s.reportInternalBlockStats(conns["internalBlockStats"], head); err != nil {
+						if err = s.reportBlockTransactionStats(conns["blockTransactionStats"], head); err != nil {
 							noErrs = false
-							log.Warn("Block internal stats report failed", "err", err)
+							log.Warn("Block transaction stats report failed", "err", err)
 						}
 					}
 				}
@@ -639,29 +639,29 @@ func (s *Service) report(dataType string, conn *connWrapper) error {
 }
 
 // reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportInternalBlockStats(conn *connWrapper, block *types.Block) error {
+func (s *Service) reportBlockTransactionStats(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
-	details := s.assembleInternalBlockStats(block)
+	details := s.assembleBlockTransactionStats(block)
 
 	if details == nil {
-		log.Warn("internal block stats details are nil")
-		return errors.New("internal block stats details are nil")
+		log.Warn("block transaction stats details are nil")
+		return errors.New("block transaction stats details are nil")
 	}
 
 	// Assemble the block report and send it to the server
-	log.Trace("Sending internal block stats to quaistats", "timestamp", details.Timestamp)
+	log.Trace("Sending block transaction stats to quaistats", "timestamp", details.Timestamp)
 
 	if conn == nil || conn.conn == nil {
-		log.Warn("internal block stats connection is nil")
-		return errors.New("internal block stats connection is nil")
+		log.Warn("block transaction stats connection is nil")
+		return errors.New("block transaction stats connection is nil")
 	}
 
 	stats := map[string]interface{}{
-		"id":                 s.node,
-		"internalBlockStats": details,
+		"id":                    s.node,
+		"blockTransactionStats": details,
 	}
 	report := map[string][]interface{}{
-		"emit": {"internalBlockStats", stats},
+		"emit": {"blockTransactionStats", stats},
 	}
 	return conn.WriteJSON(report)
 }
@@ -695,50 +695,50 @@ func (s *Service) reportBlockAppendTime(conn *connWrapper, block *types.Block) e
 }
 
 // reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlockHeight(conn *connWrapper, block *types.Block) error {
+func (s *Service) reportBlockDetailStats(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
-	details := s.assembleBlockHeightStats(block)
+	details := s.assembleBlockDetailStats(block)
 
 	if details == nil {
-		log.Warn("block height details are nil")
-		return errors.New("block height details are nil")
+		log.Warn("block detail stats are nil")
+		return errors.New("block detail stats are nil")
 	}
 
 	// Assemble the block report and send it to the server
-	log.Trace("Sending block height stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
+	log.Trace("Sending block detail stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
 
 	if conn == nil || conn.conn == nil {
-		log.Warn("block height connection is nil")
-		return errors.New("block height connection is nil")
+		log.Warn("block detail stats connection is nil")
+		return errors.New("block detail stats connection is nil")
 	}
 
 	stats := map[string]interface{}{
-		"id":          s.node,
-		"blockHeight": details,
+		"id":               s.node,
+		"blockDetailStats": details,
 	}
 	report := map[string][]interface{}{
-		"emit": {"lockHeight", stats},
+		"emit": {"blockDetailStats", stats},
 	}
 	return conn.WriteJSON(report)
 }
 
 // Trusted Only
-type internalBlockStats struct {
+type blockTransactionStats struct {
 	Timestamp             *big.Int `json:"timestamp"`
 	TotalNoTransactions1h uint64   `json:"totalNoTransactions1h"`
 	TotalNoTransactions1m uint64   `json:"totalNoTransactions1m"`
 	Chain                 string   `json:"chain"`
-	Difficulty            string   `json:"difficulty"`
 }
 
 // Trusted Only
-type blockHeight struct {
+type blockDetailStats struct {
 	Timestamp    *big.Int `json:"timestamp"`
 	ZoneHeight   uint64   `json:"zoneHeight"`
 	RegionHeight uint64   `json:"regionHeight"`
 	PrimeHeight  uint64   `json:"primeHeight"`
 	Chain        string   `json:"chain"`
 	Entropy      string   `json:"entropy"`
+	Difficulty   string   `json:"difficulty"`
 }
 
 // Everyone sends every block
@@ -869,7 +869,7 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 	}
 }
 
-func (s *Service) assembleBlockHeightStats(block *types.Block) *blockHeight {
+func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats {
 	if block == nil {
 		log.Error("Block is nil")
 		return nil
@@ -881,7 +881,7 @@ func (s *Service) assembleBlockHeightStats(block *types.Block) *blockHeight {
 	zoneHeight := location[2]
 
 	// Assemble and return the block stats
-	return &blockHeight{
+	return &blockDetailStats{
 		Timestamp:    new(big.Int).SetUint64(header.Time()),
 		ZoneHeight:   zoneHeight.Uint64(),
 		RegionHeight: regionHeight.Uint64(),
@@ -909,7 +909,7 @@ func (s *Service) assembleBlockAppendTimeStats(block *types.Block) *blockAppendT
 	}
 }
 
-func (s *Service) assembleInternalBlockStats(block *types.Block) *internalBlockStats {
+func (s *Service) assembleBlockTransactionStats(block *types.Block) *blockTransactionStats {
 	if block == nil {
 		log.Error("Block is nil")
 		return nil
@@ -918,12 +918,11 @@ func (s *Service) assembleInternalBlockStats(block *types.Block) *internalBlockS
 	totalTransactions := s.calculateTotalNoTransactions(block)
 
 	// Assemble and return the block stats
-	return &internalBlockStats{
+	return &blockTransactionStats{
 		Timestamp:             new(big.Int).SetUint64(header.Time()),
 		TotalNoTransactions1h: totalTransactions.TotalNoTransactions1h,
 		TotalNoTransactions1m: totalTransactions.TotalNoTransactions1m,
 		Chain:                 common.NodeLocation.Name(),
-		Difficulty:            header.Difficulty().String(),
 	}
 }
 
