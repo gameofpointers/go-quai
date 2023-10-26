@@ -539,6 +539,13 @@ func (s *Service) login2(url string) (string, error) {
 		network = fmt.Sprintf("%d", info.(*ethproto.NodeInfo).Network)
 	}
 
+	var secretUser string
+	if s.trusted {
+		secretUser = "admin"
+	} else {
+		secretUser = s.node
+	}
+
 	auth := &authMsg{
 		ID: s.node,
 		Info: nodeInfo{
@@ -556,7 +563,7 @@ func (s *Service) login2(url string) (string, error) {
 			ChainID:  s.chainID.Uint64(),
 		},
 		Secret: loginSecret{
-			Name:     "admin",
+			Name:     secretUser,
 			Password: s.pass,
 		},
 	}
