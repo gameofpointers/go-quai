@@ -879,6 +879,7 @@ func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats
 	primeHeight := location[0]
 	regionHeight := location[1]
 	zoneHeight := location[2]
+	difficulty := header.Difficulty().String()
 
 	// Assemble and return the block stats
 	return &blockDetailStats{
@@ -888,6 +889,7 @@ func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats
 		PrimeHeight:  primeHeight.Uint64(),
 		Chain:        common.NodeLocation.Name(),
 		Entropy:      common.BigBitsToBits(s.backend.TotalLogS(block.Header())).String(),
+		Difficulty:   difficulty,
 	}
 }
 
