@@ -1357,11 +1357,11 @@ func (sl *Slice) CheckForBadHashAndRecover() {
 func (sl *Slice) SetHeadBackToRecoveryState(pendingHeader *types.Header, hash common.Hash) types.PendingHeader {
 	nodeCtx := common.NodeLocation.Context()
 	if nodeCtx == common.PRIME_CTX {
-		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(hash)
+		localPendingHeaderWithTermini, hash := sl.ComputeRecoveryPendingHeader(hash)
 		sl.phCache.Add(hash, localPendingHeaderWithTermini)
 		sl.GenerateRecoveryPendingHeader(localPendingHeaderWithTermini.Header(), localPendingHeaderWithTermini.Termini())
 	} else {
-		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(hash)
+		localPendingHeaderWithTermini, hash := sl.ComputeRecoveryPendingHeader(hash)
 		localPendingHeaderWithTermini.SetHeader(sl.combinePendingHeader(localPendingHeaderWithTermini.Header(), pendingHeader, nodeCtx, true))
 		localPendingHeaderWithTermini.Header().SetLocation(common.NodeLocation)
 		sl.phCache.Add(hash, localPendingHeaderWithTermini)
@@ -1459,16 +1459,29 @@ func (sl *Slice) GenerateRecoveryPendingHeader(pendingHeader *types.Header, chec
 // ComputeRecoveryPendingHeader generates the pending header at a given hash
 // and gets the termini from the database and returns the pending header with
 // termini
-func (sl *Slice) ComputeRecoveryPendingHeader(hash common.Hash) types.PendingHeader {
+func (sl *Slice) ComputeRecoveryPendingHeader(hash common.Hash) (types.PendingHeader, common.Hash) {
 	block := sl.hc.GetBlockByHash(hash)
 	pendingHeader, err := sl.miner.worker.GeneratePendingHeader(block, false)
 	if err != nil {
 		log.Error("Error generating pending header during the checkpoint recovery process")
-		return types.PendingHeader{}
+		parentBlock := sl.hc.GetBlockByHash(block.ParentHash())
+		termini := sl.hc.GetTerminiByHash(parentBlock.Hash())
+		pendingHeader, err = sl.miner.worker.GeneratePendingHeader(parentBlock, false)
+		if err != nil {
+			parentOfParentBlock := sl.hc.GetBlockByHash(parentBlock.ParentHash())
+			termini := sl.hc.GetTerminiByHash(parentOfParentBlock.Hash())
+			pendingHeader, err = sl.miner.worker.GeneratePendingHeader(parentOfParentBlock, false)
+			if err != nil {
+				return types.PendingHeader{}, common.Hash{}
+			}
+			hash = termini.DomTerminus()
+		}
+		hash = termini.DomTerminus()
 	}
 	termini := sl.hc.GetTerminiByHash(hash)
+	log.Info("Setting a New Ph Key", "Hash", hash)
 	sl.WriteBestPhKey(hash)
-	return types.NewPendingHeader(pendingHeader, *termini)
+	return types.NewPendingHeader(pendingHeader, *termini), hash
 }
 
 // AddToBadHashesList adds a given set of badHashes to the BadHashesList

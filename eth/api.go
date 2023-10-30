@@ -187,6 +187,16 @@ func hasAllBlocks(chain *core.Core, bs []*types.Block) bool {
 	return true
 }
 
+func (api *PrivateAdminAPI) GenerateBestPendingHeader(hash common.Hash) {
+	nodeCtx := common.NodeLocation.Context()
+	// Currently this is only supported to be started from Prime and It creates a
+	// best ph key in all slices. In the future, we can extend this function to
+	// selectively do a specific Region or a Zone
+	if nodeCtx == common.PRIME_CTX {
+		api.eth.core.Slice().SetHeadBackToRecoveryState(nil, hash)
+	}
+}
+
 // ImportChain imports a blockchain from a local file.
 func (api *PrivateAdminAPI) ImportChain(file string) (bool, error) {
 	// Make sure the can access the file to import
