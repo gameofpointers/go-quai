@@ -373,6 +373,9 @@ func (sl *Slice) miningStrategy(bestPh types.PendingHeader, pendingHeader types.
 	if bestPh.Header() == nil { // This is the case where we try to append the block before we have not initialized the bestPh
 		return true
 	}
+	if pendingHeader.Header().NumberU64(common.PRIME_CTX) > 3305 {
+		return true
+	}
 	subReorg := sl.poem(sl.engine.TotalLogPhS(pendingHeader.Header()), sl.engine.TotalLogPhS(bestPh.Header()))
 	return subReorg
 }
