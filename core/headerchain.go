@@ -410,7 +410,7 @@ func (hc *HeaderChain) SetCurrentState(head *types.Header) error {
 
 // ReadInboundEtxsAndAppendBlock reads the inbound etxs from database and appends the block
 func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.Header) error {
-	block := hc.GetBlockOrCandidate(header.Hash(), header.NumberU64())
+	block := hc.GetBlock(header.Hash(), header.NumberU64())
 	if block == nil {
 		return errors.New("Could not find block during reorg")
 	}
