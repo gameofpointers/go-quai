@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
@@ -762,6 +763,15 @@ type generateParams struct {
 	coinbase  common.Address // The fee recipient address for including transaction
 }
 
+// RandomBytes generates a random byte slice of the given length.
+func RandomBytes(n int) ([]byte, error) {
+	bytes := make([]byte, n)
+	if _, err := rand.Read(bytes); err != nil {
+		return nil, err
+	}
+	return bytes, nil
+}
+
 // prepareWork constructs the sealing task according to the given parameters,
 // either based on the last chain head or specified parent. In this function
 // the pending transactions are not filled yet, only the empty task returned.
@@ -787,6 +797,8 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 	header.SetParentHash(block.Header().Hash())
 	header.SetNumber(big.NewInt(int64(num.Uint64()) + 1))
 	header.SetTime(timestamp)
+	randomBytes, _ := RandomBytes(4)
+	header.SetExtra(randomBytes)
 
 	// Only calculate entropy if the parent is not the genesis block
 	if parent.Hash() != w.hc.config.GenesisHash {

@@ -292,6 +292,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 
 		subReorg = sl.miningStrategy(bestPh, tempPendingHeader)
+		fmt.Println("Mining strategy ", subReorg)
 
 		if order < nodeCtx {
 			// Store the inbound etxs for dom blocks that did not get picked and use
@@ -373,6 +374,7 @@ func (sl *Slice) miningStrategy(bestPh types.PendingHeader, pendingHeader types.
 	if bestPh.Header() == nil { // This is the case where we try to append the block before we have not initialized the bestPh
 		return true
 	}
+	fmt.Println("bestPh", bestPh.Header().NumberArray(), "pending header", pendingHeader.Header().NumberArray())
 	if pendingHeader.Header().NumberU64(common.PRIME_CTX) > 3305 {
 		return true
 	}
@@ -834,10 +836,10 @@ func (sl *Slice) computePendingHeader(localPendingHeaderWithTermini types.Pendin
 	var cachedPendingHeaderWithTermini types.PendingHeader
 	hash := localPendingHeaderWithTermini.Termini().DomTerminus()
 	cachedPendingHeaderWithTermini, exists := sl.readPhCache(hash)
-	log.Debug("computePendingHeader:", "hash:", hash, "pendingHeader:", cachedPendingHeaderWithTermini, "termini:", cachedPendingHeaderWithTermini.Termini)
 	var newPh *types.Header
 
 	if exists {
+		log.Info("computePendingHeader:", "hash:", hash, "pendingHeader:", cachedPendingHeaderWithTermini.Header().NumberArray(), "termini:", cachedPendingHeaderWithTermini.Termini())
 		if domOrigin {
 			newPh = sl.combinePendingHeader(localPendingHeaderWithTermini.Header(), domPendingHeader, nodeCtx, true)
 			return types.NewPendingHeader(types.CopyHeader(newPh), localPendingHeaderWithTermini.Termini())
@@ -1361,13 +1363,13 @@ func (sl *Slice) SetHeadBackToRecoveryState(pendingHeader *types.Header, hash co
 	nodeCtx := common.NodeLocation.Context()
 	if nodeCtx == common.PRIME_CTX {
 		localPendingHeaderWithTermini, hash := sl.ComputeRecoveryPendingHeader(hash)
-		sl.phCache.Add(hash, localPendingHeaderWithTermini)
+		sl.writePhCache(hash, localPendingHeaderWithTermini)
 		sl.GenerateRecoveryPendingHeader(localPendingHeaderWithTermini.Header(), localPendingHeaderWithTermini.Termini())
 	} else {
 		localPendingHeaderWithTermini, hash := sl.ComputeRecoveryPendingHeader(hash)
 		localPendingHeaderWithTermini.SetHeader(sl.combinePendingHeader(localPendingHeaderWithTermini.Header(), pendingHeader, nodeCtx, true))
 		localPendingHeaderWithTermini.Header().SetLocation(common.NodeLocation)
-		sl.phCache.Add(hash, localPendingHeaderWithTermini)
+		sl.writePhCache(hash, localPendingHeaderWithTermini)
 		return localPendingHeaderWithTermini
 	}
 	return types.PendingHeader{}
