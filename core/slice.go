@@ -212,6 +212,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 
+	time4_1 := time.Now()
 	// If this was a coincident block, our dom will be passing us a set of newly
 	// confirmed ETXs If this is not a coincident block, we need to build up the
 	// list of confirmed ETXs using the subordinate manifest In either case, if
@@ -239,6 +240,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			rawdb.WriteInboundEtxs(sl.sliceDb, block.Hash(), newInboundEtxs)
 		}
 	}
+	fmt.Println("//// Timing Analysis", "Time in Collect Newly Confirmed Etxs", common.PrettyDuration(time.Since(time4_1)))
 	time5 := common.PrettyDuration(time.Since(start))
 
 	time6 := common.PrettyDuration(time.Since(start))
@@ -583,6 +585,8 @@ func (sl *Slice) generateSlicePendingHeader(block *types.Block, newTermini types
 
 // CollectNewlyConfirmedEtxs collects all newly confirmed ETXs since the last coincident with the given location
 func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.Location) (types.Transactions, types.Transactions, error) {
+	fmt.Println("//// Calling Collect Newly Confirmed Etxs", block.Hash())
+	start := time.Now()
 	nodeCtx := common.NodeLocation.Context()
 	// Collect rollup of ETXs from the subordinate node's manifest
 	subRollup := types.Transactions{}
@@ -601,8 +605,12 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 		}
 	}
 
+	time1 := common.PrettyDuration(time.Since(start))
+
 	// Filter for ETXs destined to this slice
 	newInboundEtxs := subRollup.FilterToSlice(location, nodeCtx)
+
+	time2 := common.PrettyDuration(time.Since(start))
 
 	// Filter this list to exclude any ETX for which we are not the crossing
 	// context node. Such ETXs cannot be used by our subordinate for one of the
@@ -616,6 +624,8 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 	// both the origin & destination. See the definition of the `CommonDom()`
 	// method for more explanation.
 	newlyConfirmedEtxs := newInboundEtxs.FilterConfirmationCtx(nodeCtx)
+
+	time3 := common.PrettyDuration(time.Since(start))
 
 	// Terminate the search if we reached genesis
 	if block.NumberU64() == 0 {
@@ -632,17 +642,22 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 		return nil, nil, fmt.Errorf("unable to find ancestor, hash: %s", ancHash.String())
 	}
 
+	time4 := common.PrettyDuration(time.Since(start))
 	// Terminate the search when we find a block produced by the same sub
 	if ancestor.Location().SubIndex() == location.SubIndex() {
 		return newlyConfirmedEtxs, subRollup, nil
 	}
 
+	time5 := common.PrettyDuration(time.Since(start))
 	// Otherwise recursively process the ancestor and collect its newly confirmed ETXs too
 	ancEtxs, _, err := sl.CollectNewlyConfirmedEtxs(ancestor, location)
 	if err != nil {
 		return nil, nil, err
 	}
+	time6 := common.PrettyDuration(time.Since(start))
 	newlyConfirmedEtxs = append(ancEtxs, newlyConfirmedEtxs...)
+
+	fmt.Println("//// Calling Collect", block.Hash(), "time1", time1, "time2", time2, "time3", time3, "time4", time4, "time5", time5, "time6", time6)
 	return newlyConfirmedEtxs, subRollup, nil
 }
 
