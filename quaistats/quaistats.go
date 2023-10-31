@@ -56,7 +56,6 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rpc"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -73,6 +72,7 @@ const (
 	c_blocksPerHour             = c_blocksPerMinute * 60
 	c_txLookupCacheLimit        = c_blocksPerHour / c_txBatchSize
 	c_statsErrorValue           = int64(-1)
+	c_queueBatchSize            = 5
 	c_nodeStatsWarningThreshold = 50
 )
 
@@ -114,6 +114,11 @@ type Service struct {
 	headSub event.Subscription
 	sideSub event.Subscription
 
+	transactionStatsQueue *StatsQueue
+	detailStatsQueue      *StatsQueue
+	appendTimeStatsQueue  *StatsQueue
+	statsReadyCh          chan struct{}
+
 	txLookupCache *lru.Cache
 
 	chainID *big.Int
@@ -121,50 +126,67 @@ type Service struct {
 	instanceDir string // Path to the node's instance directory
 }
 
-// connWrapper is a wrapper to prevent concurrent-write or concurrent-read on the
-// websocket.
+// StatsQueue is a thread-safe queue designed for managing and processing stats data.
 //
-// From Gorilla websocket docs:
+// The primary objective of the StatsQueue is to provide a safe mechanism for enqueuing,
+// dequeuing, and requeuing stats objects concurrently across multiple goroutines.
 //
-//	Connections support one concurrent reader and one concurrent writer.
-//	Applications are responsible for ensuring that no more than one goroutine calls the write methods
-//	  - NextWriter, SetWriteDeadline, WriteMessage, WriteJSON, EnableWriteCompression, SetCompressionLevel
-//	concurrently and that no more than one goroutine calls the read methods
-//	  - NextReader, SetReadDeadline, ReadMessage, ReadJSON, SetPongHandler, SetPingHandler
-//	concurrently.
-//	The Close and WriteControl methods can be called concurrently with all other methods.
-type connWrapper struct {
-	conn *websocket.Conn
-
-	rlock sync.Mutex
-	wlock sync.Mutex
+// Key Features:
+//   - Enqueue: Allows adding an item to the end of the queue.
+//   - Dequeue: Removes and returns the item from the front of the queue.
+//   - RequeueFront: Adds an item back to the front of the queue, useful for failed processing attempts.
+//
+// Concurrent Access:
+//   - The internal state of the queue is protected by a mutex to prevent data races and ensure
+//     that the operations are atomic. As a result, it's safe to use across multiple goroutines
+//     without external synchronization.
+type StatsQueue struct {
+	data   []interface{}
+	length int
+	mutex  sync.Mutex
 }
 
-func newConnectionWrapper(conn *websocket.Conn) *connWrapper {
-	return &connWrapper{conn: conn}
+func NewStatsQueue() *StatsQueue {
+	return &StatsQueue{
+		data: make([]interface{}, 0),
+	}
 }
 
-// WriteJSON wraps corresponding method on the websocket but is safe for concurrent calling
-func (w *connWrapper) WriteJSON(v interface{}) error {
-	w.wlock.Lock()
-	defer w.wlock.Unlock()
+func (q *StatsQueue) Enqueue(item interface{}) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
-	return w.conn.WriteJSON(v)
+	q.data = append(q.data, item)
+	q.length++
 }
 
-// ReadJSON wraps corresponding method on the websocket but is safe for concurrent calling
-func (w *connWrapper) ReadJSON(v interface{}) error {
-	w.rlock.Lock()
-	defer w.rlock.Unlock()
+func (q *StatsQueue) Dequeue() interface{} {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 
-	return w.conn.ReadJSON(v)
+	if q.length == 0 {
+		return nil
+	}
+
+	item := q.data[0]
+	q.data = q.data[1:]
+	q.length--
+	return item
 }
 
-// Close wraps corresponding method on the websocket but is safe for concurrent calling
-func (w *connWrapper) Close() error {
-	// The Close and WriteControl methods can be called concurrently with all other methods,
-	// so the mutex is not used here
-	return w.conn.Close()
+func (q *StatsQueue) EnqueueFront(item interface{}) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	q.data = append([]interface{}{item}, q.data...)
+	q.length++
+}
+
+func (q *StatsQueue) Size() int {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	return q.length
 }
 
 // parseEthstatsURL parses the netstats connection url.
@@ -201,17 +223,21 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 	txLookupCache, _ := lru.New(c_txLookupCacheLimit)
 
 	quaistats := &Service{
-		backend:       backend,
-		engine:        engine,
-		server:        node.Server(),
-		node:          parts[0],
-		pass:          parts[1],
-		host:          parts[2],
-		pongCh:        make(chan struct{}),
-		chainID:       backend.ChainConfig().ChainID,
-		trusted:       trustednode,
-		txLookupCache: txLookupCache,
-		instanceDir:   node.InstanceDir(),
+		backend:               backend,
+		engine:                engine,
+		server:                node.Server(),
+		node:                  parts[0],
+		pass:                  parts[1],
+		host:                  parts[2],
+		pongCh:                make(chan struct{}),
+		chainID:               backend.ChainConfig().ChainID,
+		transactionStatsQueue: NewStatsQueue(),
+		detailStatsQueue:      NewStatsQueue(),
+		appendTimeStatsQueue:  NewStatsQueue(),
+		statsReadyCh:          make(chan struct{}),
+		trusted:               trustednode,
+		txLookupCache:         txLookupCache,
+		instanceDir:           node.InstanceDir(),
 	}
 
 	node.RegisterLifecycle(quaistats)
@@ -227,7 +253,8 @@ func (s *Service) Start() error {
 	s.headSub = s.backend.SubscribeChainHeadEvent(chainHeadCh)
 	s.sideSub = s.backend.SubscribeChainSideEvent(chainSideCh)
 
-	go s.loop(chainHeadCh, chainSideCh)
+	go s.loopBlocks(chainHeadCh, chainSideCh)
+	go s.loopSender(s.initializeURLMap())
 
 	log.Info("Stats daemon started")
 	return nil
@@ -241,22 +268,18 @@ func (s *Service) Stop() error {
 	return nil
 }
 
-// loop keeps trying to connect to the netstats server, reporting chain events
-// until termination.
-func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan core.ChainSideEvent) {
+func (s *Service) loopBlocks(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan core.ChainSideEvent) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Stats process crashed with error:", r)
-			go s.loop(chainHeadCh, chainSideCh)
+			log.Error("Stats process crashed", "error", r)
+			go s.loopBlocks(chainHeadCh, chainSideCh)
 		}
 	}()
 
-	// Start a goroutine that exhausts the subscriptions to avoid events piling up
-	var (
-		quitCh = make(chan struct{})
-		headCh = make(chan *types.Block, 1)
-		sideCh = make(chan *types.Block, 1)
-	)
+	quitCh := make(chan struct{})
+	headCh := make(chan *types.Block, 1)
+	sideCh := make(chan *types.Block, 1)
+
 	go func() {
 	HandleLoop:
 		for {
@@ -280,32 +303,33 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 		close(quitCh)
 	}()
 
-	// Resolve the URL, defaulting to TLS, but falling back to none too
-	paths := map[string]string{
-		"blockTransactionStats": fmt.Sprintf("%s/blockTransactionStats", s.host),
-		"blockAppendTime":       fmt.Sprintf("%s/blockAppendTime", s.host),
-		"blockDetailStats":      fmt.Sprintf("%s/blockDetailStats", s.host),
-		"nodeStats":             fmt.Sprintf("%s/nodeStats", s.host),
-		"login":                 fmt.Sprintf("%s/auth/login", s.host),
-	}
-
-	urlMap := make(map[string][]string)
-	var nodeStatsWarningCounter int
-	nodeStatsMod := 0
-
-	for key, path := range paths {
-		// url.Parse and url.IsAbs is unsuitable (https://github.com/golang/go/issues/19779)
-		if !strings.Contains(path, "://") {
-			// Append both secure (wss) and non-secure (ws) URLs
-			if key == "login" {
-				urlMap[key] = []string{"http://" + path}
-			} else {
-				urlMap[key] = []string{"wss://" + path, "ws://" + path}
-			}
-		} else {
-			urlMap[key] = []string{path}
+	for {
+		select {
+		case <-quitCh:
+			return
+		default:
+			s.handleBlock(headCh)
 		}
 	}
+}
+
+// loop keeps trying to connect to the netstats server, reporting chain events
+// until termination.
+func (s *Service) loopSender(urlMap map[string]string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Stats process crashed with error:", r)
+			go s.loopSender(urlMap)
+		}
+	}()
+
+	// Start a goroutine that exhausts the subscriptions to avoid events piling up
+	var (
+		quitCh = make(chan struct{})
+	)
+
+	var nodeStatsWarningCounter int
+	nodeStatsMod := 0
 
 	errTimer := time.NewTimer(0)
 	defer errTimer.Stop()
@@ -321,50 +345,45 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 			isJwtExpiredResult, jwtIsExpiredErr := s.isJwtExpired(authJwt)
 			if authJwt == "" || isJwtExpiredResult || jwtIsExpiredErr != nil {
 				var err error
-				authJwt, err = s.login2(urlMap["login"][0])
+				authJwt, err = s.login2(urlMap["login"])
 				if err != nil {
 					log.Warn("Stats login failed", "err", err)
 					errTimer.Reset(10 * time.Second)
 					continue
 				}
 			}
-			// Establish a websocket connection to the server on any supported URL
-			dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
-			header := make(http.Header)
-			header.Set("origin", "http://localhost")
-			header.Set("sec-websocket-protocol", authJwt)
 
-			conns := make(map[string]*connWrapper)
 			errs := make(map[string]error)
 
-			for key, urls := range urlMap {
-				if key == "login" {
+			// Authenticate the client with the server
+			for key, url := range urlMap {
+				switch key {
+				case "login":
 					continue
-				}
-				for _, url := range urls {
-					c, _, e := dialer.Dial(url, header)
-					err := e
-					if err == nil {
-						conns[key] = newConnectionWrapper(c)
-						break
-					}
-					if err != nil {
-						log.Warn(key+" stats server unreachable", "err", err)
-						errs[key] = err
-						errTimer.Reset(10 * time.Second)
+				case "nodeStats":
+					if errs[key] = s.reportNodeStats(url, 0, authJwt); errs[key] != nil {
+						log.Warn("Initial stats report failed for "+key, "err", errs[key])
+						errTimer.Reset(0)
 						continue
 					}
-					go s.readLoop(conns[key])
-				}
-			}
-
-			// Authenticate the client with the server
-			for key, conn := range conns {
-				if errs[key] = s.report(key, conn); errs[key] != nil {
-					log.Warn("Initial stats report failed", "err", errs[key])
-					conn.Close()
-					errTimer.Reset(0)
-					continue
+				case "blockTransactionStats":
+					if errs[key] = s.sendTransactionStats(url, authJwt); errs[key] != nil {
+						log.Warn("Initial stats report failed for "+key, "err", errs[key])
+						errTimer.Reset(0)
+						continue
+					}
+				case "blockDetailStats":
+					if errs[key] = s.sendDetailStats(url, authJwt); errs[key] != nil {
+						log.Warn("Initial stats report failed for "+key, "err", errs[key])
+						errTimer.Reset(0)
+						continue
+					}
+				case "blockAppendTime":
+					if errs[key] = s.sendAppendTimeStats(url, authJwt); errs[key] != nil {
+						log.Warn("Initial stats report failed for "+key, "err", errs[key])
+						errTimer.Reset(0)
+						continue
+					}
 				}
 			}
 
@@ -377,16 +396,11 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 				select {
 				case <-quitCh:
 					fullReport.Stop()
-					// Make sure the connection is closed
-					for _, conn := range conns {
-						conn.Close()
-					}
-
 					return
 
 				case <-fullReport.C:
 					nodeStatsMod ^= 1
-					if err = s.reportNodeStats(conns["nodeStats"], nodeStatsMod); err != nil {
+					if err = s.reportNodeStats(urlMap["nodeStats"], nodeStatsMod, authJwt); err != nil {
 						noErrs = false
 						nodeStatsWarningCounter += 1
 						if nodeStatsWarningCounter == c_nodeStatsWarningThreshold {
@@ -394,96 +408,374 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chainSideCh chan co
 							nodeStatsWarningCounter = 0
 						}
 					}
-				case head := <-headCh:
-					// Report block details stats every block if node is trusted
-					if s.trusted {
-						if err = s.reportBlockDetailStats(conns["blockDetailStats"], head); err != nil {
-							noErrs = false
-							log.Warn("Block detail stats report failed", "err", err)
-						}
+				case <-s.statsReadyCh:
+					if url, ok := urlMap["blockTransactionStats"]; ok {
+						s.sendTransactionStats(url, authJwt)
 					}
-
-					// Every node reports appendtime each block
-					if err = s.reportBlockAppendTime(conns["blockAppendTime"], head); err != nil {
-						noErrs = false
-						log.Warn("Block append time report failed", "err", err)
+					if url, ok := urlMap["blockDetailStats"]; ok {
+						s.sendDetailStats(url, authJwt)
 					}
-
-					// Report transaction blockstats every 20 block stats if trusted node
-					if head.NumberU64()%c_txBatchSize == 0 && s.trusted {
-						if err = s.reportBlockTransactionStats(conns["blockTransactionStats"], head); err != nil {
-							noErrs = false
-							log.Warn("Block transaction stats report failed", "err", err)
-						}
+					if url, ok := urlMap["blockAppendTime"]; ok {
+						s.sendAppendTimeStats(url, authJwt)
 					}
 				}
-				fullReport.Stop()
-				// Close the current connection and establish a new one
-				for _, conn := range conns {
-					conn.Close()
-				}
-
 				errTimer.Reset(0)
 			}
+			fullReport.Stop()
 		}
 	}
 }
 
-// readLoop loops as long as the connection is alive and retrieves data packets
-// from the network socket. If any of them match an active request, it forwards
-// it, if they themselves are requests it initiates a reply, and lastly it drops
-// unknown packets.
-func (s *Service) readLoop(conn *connWrapper) {
-	// If the read loop exits, close the connection
-	defer conn.Close()
-
-	for {
-		// Retrieve the next generic network packet and bail out on error
-		var blob json.RawMessage
-		if err := conn.ReadJSON(&blob); err != nil {
-			log.Warn("Failed to retrieve stats server message", "err", err)
-			return
-		}
-		// If the network packet is a system ping, respond to it directly
-		var ping string
-		if err := json.Unmarshal(blob, &ping); err == nil && strings.HasPrefix(ping, "primus::ping::") {
-			if err := conn.WriteJSON(strings.Replace(ping, "ping", "pong", -1)); err != nil {
-				log.Warn("Failed to respond to system ping message", "err", err)
-				return
-			}
-			continue
-		}
-		// Not a system ping, try to decode an actual state message
-		var msg map[string][]interface{}
-		if err := json.Unmarshal(blob, &msg); err != nil {
-			log.Warn("Failed to decode stats server message", "err", err)
-			return
-		}
-		log.Trace("Received message from stats server", "msg", msg)
-		if len(msg["emit"]) == 0 {
-			log.Warn("Stats server sent non-broadcast", "msg", msg)
-			return
-		}
-		command, ok := msg["emit"][0].(string)
-		if !ok {
-			log.Warn("Invalid stats server message type", "type", msg["emit"][0])
-			return
-		}
-		// If the message is a ping reply, deliver (someone must be listening!)
-		if len(msg["emit"]) == 2 && command == "node-pong" {
-			select {
-			case s.pongCh <- struct{}{}:
-				// Pong delivered, continue listening
-				continue
-			default:
-				// Ping routine dead, abort
-				log.Warn("Stats server pinger seems to have died")
-				return
-			}
-		}
-		// Report anything else and continue
-		log.Info("Unknown stats message", "msg", msg)
+func (s *Service) initializeURLMap() map[string]string {
+	return map[string]string{
+		"blockTransactionStats": fmt.Sprintf("http://%s/stats/blockTransactionStats", s.host),
+		"blockAppendTime":       fmt.Sprintf("http://%s/stats/blockAppendTime", s.host),
+		"blockDetailStats":      fmt.Sprintf("http://%s/stats/blockDetailStats", s.host),
+		"nodeStats":             fmt.Sprintf("http://%s/stats/nodeStats", s.host),
+		"login":                 fmt.Sprintf("http://%s/auth/login", s.host),
 	}
+}
+
+func (s *Service) handleBlock(headCh chan *types.Block) {
+	for head := range headCh {
+		if s.trusted {
+			dtlStats := s.assembleBlockDetailStats(head)
+			s.detailStatsQueue.Enqueue(dtlStats)
+		}
+
+		appStats := s.assembleBlockAppendTimeStats(head)
+		s.appendTimeStatsQueue.Enqueue(appStats)
+
+		if head.NumberU64()%c_txBatchSize == 0 && s.trusted {
+			txStats := s.assembleBlockTransactionStats(head)
+			s.transactionStatsQueue.Enqueue(txStats)
+		}
+
+		// After handling a block and potentially adding to the queues, notify the sendStats goroutine
+		// that stats are ready to be sent
+		s.statsReadyCh <- struct{}{}
+	}
+}
+
+func (s *Service) reportNodeStats(url string, mod int, authJwt string) error {
+	if url == "" {
+		log.Warn("node stats url is empty")
+		return errors.New("node stats connection is empty")
+	}
+
+	isRegion := strings.Contains(s.instanceDir, "region")
+	isPrime := strings.Contains(s.instanceDir, "prime")
+
+	if isRegion || isPrime {
+		log.Debug("Skipping node stats for region or prime. Filtered out on backend")
+		return nil
+	}
+
+	log.Trace("Quai Stats Instance Dir", "path", s.instanceDir+"/../..")
+
+	// Don't send if dirSize < 1
+	// Get disk usage (as a percentage)
+	diskUsage, err := dirSize(s.instanceDir + "/../..")
+	if err != nil {
+		log.Warn("Error calculating directory sizes:", "error", err)
+		diskUsage = c_statsErrorValue
+	}
+
+	diskSize, err := diskTotalSize()
+	if err != nil {
+		log.Warn("Error calculating disk size:", "error", err)
+		diskUsage = c_statsErrorValue
+	}
+
+	diskUsagePercent := float64(c_statsErrorValue)
+	if diskSize > 0 {
+		diskUsagePercent = float64(diskUsage) / float64(diskSize)
+	} else {
+		log.Warn("Error calculating disk usage percent: disk size is 0")
+	}
+
+	// Usage in your main function
+	ramUsage, err := getQuaiRAMUsage()
+	if err != nil {
+		log.Warn("Error getting Quai RAM usage:", "error", err)
+		return err
+	}
+	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
+	if vmStat, err := mem.VirtualMemory(); err == nil {
+		ramUsagePercent = float64(ramUsage) / float64(vmStat.Total)
+		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total)
+		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total)
+	} else {
+		log.Warn("Error getting RAM stats:", "error", err)
+		return err
+	}
+
+	// Get CPU usage
+	cpuUsageQuai, err := getQuaiCPUUsage()
+	if err != nil {
+		log.Warn("Error getting Quai CPU percent usage:", "error", err)
+		return err
+	} else {
+		cpuUsageQuai /= float64(100)
+	}
+
+	var cpuFree float32
+	if cpuUsageTotal, err := cpu.Percent(0, false); err == nil {
+		cpuFree = 1 - float32(cpuUsageTotal[0]/float64(100))
+	} else {
+		log.Warn("Error getting CPU free:", "error", err)
+		return err
+	}
+
+	currentHeader := s.backend.CurrentHeader()
+
+	if currentHeader == nil {
+		log.Warn("Current header is nil")
+		return errors.New("current header is nil")
+	}
+	// Get current block number
+	currentBlockHeight := currentHeader.NumberArray()
+
+	// Get location
+	location := currentHeader.Location()
+
+	// Get the first non-loopback MAC address
+	var macAddress string
+	interfaces, err := net.Interfaces()
+	if err == nil {
+		for _, interf := range interfaces {
+			if interf.HardwareAddr != nil && len(interf.HardwareAddr.String()) > 0 && (interf.Flags&net.FlagLoopback) == 0 {
+				macAddress = interf.HardwareAddr.String()
+				break
+			}
+		}
+	} else {
+		log.Warn("Error getting MAC address:", err)
+		return err
+	}
+
+	// Hash the MAC address
+	var hashedMAC string
+	if macAddress != "" {
+		hash := sha256.Sum256([]byte(macAddress))
+		hashedMAC = hex.EncodeToString(hash[:])
+	}
+
+	// Assemble the new node stats
+	log.Trace("Sending node details to quaistats")
+
+	document := map[string]interface{}{
+		"id": s.node,
+		"nodeStats": &nodeStats{
+			Name:                s.node,
+			Timestamp:           big.NewInt(time.Now().Unix()), // Current timestamp
+			RAMUsage:            int64(ramUsage),
+			RAMUsagePercent:     float32(ramUsagePercent),
+			RAMFreePercent:      float32(ramFreePercent),
+			RAMAvailablePercent: float32(ramAvailablePercent),
+			CPUUsagePercent:     float32(cpuUsageQuai),
+			CPUFree:             float32(cpuFree),
+			DiskUsageValue:      int64(diskUsage),
+			DiskUsagePercent:    float32(diskUsagePercent),
+			CurrentBlockNumber:  currentBlockHeight,
+			RegionLocation:      location.Region(),
+			ZoneLocation:        location.Zone(),
+			NodeStatsMod:        mod,
+			HashedMAC:           hashedMAC,
+		},
+	}
+
+	jsonData, err := json.Marshal(document)
+	if err != nil {
+		log.Error("Failed to marshal node stats", "err", err)
+		return err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Error("Failed to create new HTTP request", "err", err)
+		return err
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+authJwt)
+
+	// Send the request using the default HTTP client
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Error("Failed to send node stats", "err", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Failed to response body", "err", err)
+			return err
+		}
+		log.Error("Received non-OK response", "status", resp.Status, "body", string(body))
+		return errors.New("Received non-OK response: " + resp.Status)
+	}
+	log.Trace("Successfully sent node stats to quaistats")
+	return nil
+}
+
+func (s *Service) sendTransactionStats(url string, authJwt string) error {
+	if s.transactionStatsQueue.length == 0 {
+		return nil
+	}
+	statsBatch := make([]*blockTransactionStats, 0, c_queueBatchSize)
+
+	for i := 0; i < c_queueBatchSize && s.transactionStatsQueue.length > 0; i++ {
+		stat := s.transactionStatsQueue.Dequeue()
+		if stat == nil {
+			break
+		}
+		statsBatch = append(statsBatch, stat.(*blockTransactionStats))
+	}
+
+	if len(statsBatch) == 0 {
+		return nil
+	}
+
+	err := s.report(url, "blockTransactionStats", statsBatch, authJwt)
+	if err != nil && strings.Contains(err.Error(), "Received non-OK response") {
+		log.Warn("Failed to send transaction stats, requeuing stats", "err", err)
+		// Re-enqueue the failed stats from end to beginning
+		for i := len(statsBatch) - 1; i >= 0; i-- {
+			s.transactionStatsQueue.EnqueueFront(statsBatch[i])
+		}
+		return err
+	} else if err != nil {
+		log.Warn("Failed to send transaction stats", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) sendDetailStats(url string, authJwt string) error {
+	if s.detailStatsQueue.length == 0 {
+		return nil
+	}
+	statsBatch := make([]*blockDetailStats, 0, c_queueBatchSize)
+
+	for i := 0; i < c_queueBatchSize && s.detailStatsQueue.Size() > 0; i++ {
+		stat := s.detailStatsQueue.Dequeue()
+		if stat == nil {
+			break
+		}
+		statsBatch = append(statsBatch, stat.(*blockDetailStats))
+	}
+
+	if len(statsBatch) == 0 {
+		return nil
+	}
+
+	err := s.report(url, "blockDetailStats", statsBatch, authJwt)
+	if err != nil && strings.Contains(err.Error(), "Received non-OK response") {
+		log.Warn("Failed to send detail stats, requeuing stats", "err", err)
+		// Re-enqueue the failed stats from end to beginning
+		for i := len(statsBatch) - 1; i >= 0; i-- {
+			s.detailStatsQueue.EnqueueFront(statsBatch[i])
+		}
+		return err
+	} else if err != nil {
+		log.Warn("Failed to send detail stats", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) sendAppendTimeStats(url string, authJwt string) error {
+	if s.appendTimeStatsQueue.length == 0 {
+		return nil
+	}
+
+	statsBatch := make([]*blockAppendTime, 0, c_queueBatchSize)
+
+	for i := 0; i < c_queueBatchSize && s.appendTimeStatsQueue.Size() > 0; i++ {
+		stat := s.appendTimeStatsQueue.Dequeue()
+		if stat == nil {
+			break
+		}
+		statsBatch = append(statsBatch, stat.(*blockAppendTime))
+	}
+
+	if len(statsBatch) == 0 {
+		return nil
+	}
+
+	err := s.report(url, "blockAppendTime", statsBatch, authJwt)
+	if err != nil && strings.Contains(err.Error(), "Received non-OK response") {
+		log.Warn("Failed to send append time stats, requeuing stats", "err", err)
+		// Re-enqueue the failed stats from end to beginning
+		for i := len(statsBatch) - 1; i >= 0; i-- {
+			s.appendTimeStatsQueue.EnqueueFront(statsBatch[i])
+		}
+		return err
+	} else if err != nil {
+		log.Warn("Failed to send append time stats", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) report(url string, dataType string, stats interface{}, authJwt string) error {
+	if url == "" {
+		log.Warn(dataType + " url is empty")
+		return errors.New(dataType + " url is empty")
+	}
+
+	if stats == nil {
+		log.Warn(dataType + " stats are nil")
+		return errors.New(dataType + " stats are nil")
+	}
+
+	log.Trace("Sending " + dataType + " stats to quaistats")
+
+	document := map[string]interface{}{
+		"id":     s.node,
+		dataType: stats,
+	}
+
+	jsonData, err := json.Marshal(document)
+	if err != nil {
+		log.Error("Failed to marshal "+dataType+" stats", "err", err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Error("Failed to create new request for "+dataType+" stats", "err", err)
+		return err
+	}
+
+	// Add headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+authJwt) // Add this line for the Authorization header
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error("Failed to send "+dataType+" stats", "err", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Failed to response body", "err", err)
+			return err
+		}
+		log.Error("Received non-OK response", "status", resp.Status, "body", string(body))
+		return errors.New("Received non-OK response: " + resp.Status)
+	}
+	log.Trace("Successfully sent " + dataType + " stats to quaistats")
+	return nil
 }
 
 // nodeInfo is the collection of meta information about a node that is displayed
@@ -579,7 +871,11 @@ func (s *Service) login2(url string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Error("Failed to response body", "err", err)
+		return "", err
+	}
 
 	var authResponse AuthResponse
 	err = json.Unmarshal(body, &authResponse)
@@ -616,110 +912,6 @@ func (s *Service) isJwtExpired(authJwt string) (bool, error) {
 	}
 
 	return false, errors.New("exp claim not found in token")
-}
-
-// report collects all possible data to report and send it to the stats server.
-// This should only be used on reconnects or rarely to avoid overloading the
-// server. Use the individual methods for reporting subscribed events.
-func (s *Service) report(dataType string, conn *connWrapper) error {
-	if conn == nil || conn.conn == nil {
-		log.Warn(dataType + " connection is nil")
-		return errors.New(dataType + " connection is nil")
-	}
-
-	switch dataType {
-	case "nodeStats":
-		if err := s.reportNodeStats(conn, 0); err != nil {
-			return err
-		}
-	default:
-		return nil
-	}
-	return nil
-}
-
-// reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlockTransactionStats(conn *connWrapper, block *types.Block) error {
-	// Gather the block details from the header or block chain
-	details := s.assembleBlockTransactionStats(block)
-
-	if details == nil {
-		log.Warn("block transaction stats details are nil")
-		return errors.New("block transaction stats details are nil")
-	}
-
-	// Assemble the block report and send it to the server
-	log.Trace("Sending block transaction stats to quaistats", "timestamp", details.Timestamp)
-
-	if conn == nil || conn.conn == nil {
-		log.Warn("block transaction stats connection is nil")
-		return errors.New("block transaction stats connection is nil")
-	}
-
-	stats := map[string]interface{}{
-		"id":                    s.node,
-		"blockTransactionStats": details,
-	}
-	report := map[string][]interface{}{
-		"emit": {"blockTransactionStats", stats},
-	}
-	return conn.WriteJSON(report)
-}
-
-// reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlockAppendTime(conn *connWrapper, block *types.Block) error {
-	// Gather the block details from the header or block chain
-	details := s.assembleBlockAppendTimeStats(block)
-
-	if details == nil {
-		log.Warn("block append time details are nil")
-		return errors.New("block append time details are nil")
-	}
-
-	// Assemble the block report and send it to the server
-	log.Trace("Sending block append time stats to quaistats", "number", details.BlockNumber)
-
-	if conn == nil || conn.conn == nil {
-		log.Warn("block append time connection is nil")
-		return errors.New("block append time connection is nil")
-	}
-
-	stats := map[string]interface{}{
-		"id":              s.node,
-		"blockAppendTime": details,
-	}
-	report := map[string][]interface{}{
-		"emit": {"blockAppendTime", stats},
-	}
-	return conn.WriteJSON(report)
-}
-
-// reportBlock retrieves the current chain head and reports it to the stats server.
-func (s *Service) reportBlockDetailStats(conn *connWrapper, block *types.Block) error {
-	// Gather the block details from the header or block chain
-	details := s.assembleBlockDetailStats(block)
-
-	if details == nil {
-		log.Warn("block detail stats are nil")
-		return errors.New("block detail stats are nil")
-	}
-
-	// Assemble the block report and send it to the server
-	log.Trace("Sending block detail stats to quaistats", "time", details.Timestamp, "zoneHeight", details.ZoneHeight, "chain", details.Chain, "entropy", details.Entropy)
-
-	if conn == nil || conn.conn == nil {
-		log.Warn("block detail stats connection is nil")
-		return errors.New("block detail stats connection is nil")
-	}
-
-	stats := map[string]interface{}{
-		"id":               s.node,
-		"blockDetailStats": details,
-	}
-	report := map[string][]interface{}{
-		"emit": {"blockDetailStats", stats},
-	}
-	return conn.WriteJSON(report)
 }
 
 // Trusted Only
@@ -926,142 +1118,6 @@ func (s *Service) assembleBlockTransactionStats(block *types.Block) *blockTransa
 		TotalNoTransactions1m: totalTransactions.TotalNoTransactions1m,
 		Chain:                 common.NodeLocation.Name(),
 	}
-}
-
-// reportNodeStats retrieves various stats about the node at the networking and
-// mining layer and reports it to the stats server.
-func (s *Service) reportNodeStats(conn *connWrapper, mod int) error {
-	if conn == nil || conn.conn == nil {
-		log.Warn("node stats connection is nil")
-		return errors.New("node stats connection is nil")
-	}
-
-	isRegion := strings.Contains(s.instanceDir, "region")
-	isPrime := strings.Contains(s.instanceDir, "prime")
-
-	if isRegion || isPrime {
-		log.Debug("Skipping node stats for region or prime. Filtered out on backend")
-		return nil
-	}
-
-	log.Info("Quai Stats Instance Dir", "path", s.instanceDir+"/../..")
-
-	// Don't send if dirSize < 1
-	// Get disk usage (as a percentage)
-	diskUsage, err := dirSize(s.instanceDir + "/../..")
-	if err != nil {
-		log.Warn("Error calculating directory sizes:", "error", err)
-		diskUsage = c_statsErrorValue
-	}
-
-	diskSize, err := diskTotalSize()
-	if err != nil {
-		log.Warn("Error calculating disk size:", "error", err)
-		diskUsage = c_statsErrorValue
-	}
-
-	diskUsagePercent := float64(c_statsErrorValue)
-	if diskSize > 0 {
-		diskUsagePercent = float64(diskUsage) / float64(diskSize)
-	} else {
-		log.Warn("Error calculating disk usage percent: disk size is 0")
-	}
-
-	// Usage in your main function
-	ramUsage, err := getQuaiRAMUsage()
-	if err != nil {
-		log.Warn("Error getting Quai RAM usage:", "error", err)
-		return err
-	}
-	var ramUsagePercent, ramFreePercent, ramAvailablePercent float64
-	if vmStat, err := mem.VirtualMemory(); err == nil {
-		ramUsagePercent = float64(ramUsage) / float64(vmStat.Total)
-		ramFreePercent = float64(vmStat.Free) / float64(vmStat.Total)
-		ramAvailablePercent = float64(vmStat.Available) / float64(vmStat.Total)
-	} else {
-		log.Warn("Error getting RAM stats:", "error", err)
-		return err
-	}
-
-	// Get CPU usage
-	cpuUsageQuai, err := getQuaiCPUUsage()
-	if err != nil {
-		log.Warn("Error getting Quai CPU percent usage:", "error", err)
-		return err
-	} else {
-		cpuUsageQuai /= float64(100)
-	}
-
-	var cpuFree float32
-	if cpuUsageTotal, err := cpu.Percent(0, false); err == nil {
-		cpuFree = 1 - float32(cpuUsageTotal[0]/float64(100))
-	} else {
-		log.Warn("Error getting CPU free:", "error", err)
-		return err
-	}
-
-	currentHeader := s.backend.CurrentHeader()
-
-	if currentHeader == nil {
-		log.Warn("Current header is nil")
-		return errors.New("current header is nil")
-	}
-	// Get current block number
-	currentBlockHeight := currentHeader.NumberArray()
-
-	// Get location
-	location := currentHeader.Location()
-
-	// Get the first non-loopback MAC address
-	var macAddress string
-	interfaces, err := net.Interfaces()
-	if err == nil {
-		for _, interf := range interfaces {
-			if interf.HardwareAddr != nil && len(interf.HardwareAddr.String()) > 0 && (interf.Flags&net.FlagLoopback) == 0 {
-				macAddress = interf.HardwareAddr.String()
-				break
-			}
-		}
-	} else {
-		log.Warn("Error getting MAC address:", err)
-		return err
-	}
-
-	// Hash the MAC address
-	var hashedMAC string
-	if macAddress != "" {
-		hash := sha256.Sum256([]byte(macAddress))
-		hashedMAC = hex.EncodeToString(hash[:])
-	}
-
-	// Assemble the new node stats
-	log.Trace("Sending node details to quaistats")
-
-	stats := map[string]interface{}{
-		"id": s.node,
-		"stats": &nodeStats{
-			Name:                s.node,
-			Timestamp:           big.NewInt(time.Now().Unix()), // Current timestamp
-			RAMUsage:            int64(ramUsage),
-			RAMUsagePercent:     float32(ramUsagePercent),
-			RAMFreePercent:      float32(ramFreePercent),
-			RAMAvailablePercent: float32(ramAvailablePercent),
-			CPUUsagePercent:     float32(cpuUsageQuai),
-			CPUFree:             float32(cpuFree),
-			DiskUsageValue:      int64(diskUsage),
-			DiskUsagePercent:    float32(diskUsagePercent),
-			CurrentBlockNumber:  currentBlockHeight,
-			RegionLocation:      location.Region(),
-			ZoneLocation:        location.Zone(),
-			NodeStatsMod:        mod,
-			HashedMAC:           hashedMAC,
-		},
-	}
-
-	report := map[string][]interface{}{
-		"emit": {"stats", stats},
-	}
-	return conn.WriteJSON(report)
 }
 
 func getQuaiCPUUsage() (float64, error) {
