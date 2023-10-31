@@ -127,6 +127,7 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, pEtxsRollupFetch
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
 // chain in the slice which emitted the given block.
 func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, error) {
+	start := time.Now()
 	nodeCtx := common.NodeLocation.Context()
 	subRollup := types.Transactions{}
 	if nodeCtx < common.ZONE_CTX {
@@ -170,6 +171,7 @@ func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, err
 			}
 		}
 	}
+	fmt.Println("//// Calling Collect Sub Rollup", "Hash", b.Hash(), "Time Taken", common.PrettyDuration(time.Since(start)))
 	return subRollup, nil
 }
 
