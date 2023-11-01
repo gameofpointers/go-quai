@@ -217,22 +217,26 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	// list of confirmed ETXs using the subordinate manifest In either case, if
 	// we are a dominant node, we need to collect the ETX rollup from our sub.
 	if !domOrigin && nodeCtx != common.ZONE_CTX {
-		newInboundEtxs, _, err = sl.CollectNewlyConfirmedEtxs(block, block.Location())
-		if err != nil {
-			log.Trace("Error collecting newly confirmed etxs: ", "err", err)
-			// Keeping track of the number of times pending etx fails and if it crossed the retry threshold
-			// ask the sub for the pending etx/rollup data
-			val, exist := sl.pEtxRetryCache.Get(block.Hash())
-			var retry uint64
-			if exist {
-				pEtxCurrent, ok := val.(pEtxRetry)
-				if ok {
-					retry = pEtxCurrent.retries + 1
+		newInboundEtxs = rawdb.ReadInboundEtxs(sl.sliceDb, block.Hash())
+		if newInboundEtxs == nil {
+			newInboundEtxs, _, err = sl.CollectNewlyConfirmedEtxs(block, block.Location())
+			if err != nil {
+				log.Trace("Error collecting newly confirmed etxs: ", "err", err)
+				// Keeping track of the number of times pending etx fails and if it crossed the retry threshold
+				// ask the sub for the pending etx/rollup data
+				val, exist := sl.pEtxRetryCache.Get(block.Hash())
+				var retry uint64
+				if exist {
+					pEtxCurrent, ok := val.(pEtxRetry)
+					if ok {
+						retry = pEtxCurrent.retries + 1
+					}
 				}
+				pEtxNew := pEtxRetry{hash: block.Hash(), retries: retry}
+				sl.pEtxRetryCache.Add(block.Hash(), pEtxNew)
+				return nil, false, false, ErrSubNotSyncedToDom
 			}
-			pEtxNew := pEtxRetry{hash: block.Hash(), retries: retry}
-			sl.pEtxRetryCache.Add(block.Hash(), pEtxNew)
-			return nil, false, false, ErrSubNotSyncedToDom
+			rawdb.WriteInboundEtxs(sl.sliceDb, block.Hash(), newInboundEtxs)
 		}
 	}
 	time5 := common.PrettyDuration(time.Since(start))
