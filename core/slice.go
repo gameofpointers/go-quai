@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	c_maxPendingEtxBatches            = 1024
+	c_maxPendingEtxBatches            = 10000
 	c_maxPendingEtxsRollup            = 256
 	c_maxBloomFilters                 = 1024
 	c_pendingHeaderChacheBufferFactor = 2
