@@ -362,7 +362,7 @@ func DefaultGardenGenesisBlock(consensusEngine string) *Genesis {
 		Nonce:      0,
 		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353539"),
 		GasLimit:   5000000,
-		Difficulty: big.NewInt(300000000),
+		Difficulty: big.NewInt(1000000000),
 	}
 }
 
