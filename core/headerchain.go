@@ -191,8 +191,10 @@ func (hc *HeaderChain) GetPendingEtxs(hash common.Hash) (*types.PendingEtxs, err
 	var pendingEtxs types.PendingEtxs
 	// Look for pending ETXs first in pending ETX cache, then in database
 	if res, ok := hc.pendingEtxs.Get(hash); ok && res != nil {
+		log.Info("//// cache etx")
 		pendingEtxs = res.(types.PendingEtxs)
 	} else if res := rawdb.ReadPendingEtxs(hc.headerDb, hash); res != nil {
+		log.Info("//// db etx")
 		pendingEtxs = *res
 	} else {
 		log.Trace("unable to find pending etxs for hash in manifest", "hash:", hash.String())
@@ -205,8 +207,10 @@ func (hc *HeaderChain) GetPendingEtxsRollup(hash common.Hash) (*types.PendingEtx
 	var rollups types.PendingEtxsRollup
 	// Look for pending ETXs first in pending ETX cache, then in database
 	if res, ok := hc.pendingEtxsRollup.Get(hash); ok && res != nil {
+		log.Info("//// cache rup")
 		rollups = res.(types.PendingEtxsRollup)
 	} else if res := rawdb.ReadPendingEtxsRollup(hc.headerDb, hash); res != nil {
+		log.Info("//// db rup")
 		rollups = *res
 	} else {
 		log.Trace("unable to find pending etxs rollups for hash in manifest", "hash:", hash.String())
