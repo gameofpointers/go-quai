@@ -48,6 +48,19 @@ func (a Address) InternalAddress() (InternalAddress, error) {
 	return *internal, nil
 }
 
+func (a Address) InSameSliceAs(cmp Location) bool {
+	loc := *a.Location()
+	// Figure out which location is shorter
+	shorter := loc
+	longer := cmp
+	if len(loc) > len(cmp) {
+		longer = loc
+		shorter = cmp
+	}
+	// Compare bytes up to the shorter depth
+	return shorter.Equal(longer[:len(shorter)])
+}
+
 func (a Address) Equal(b Address) bool {
 	if a.inner == nil && b.inner == nil {
 		return true

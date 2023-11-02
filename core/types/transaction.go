@@ -450,8 +450,7 @@ func (s Transactions) FilterToLocation(l common.Location) Transactions {
 func (s Transactions) FilterToSlice(slice common.Location, minCtx int) Transactions {
 	filteredList := Transactions{}
 	for _, tx := range s {
-		toChain := tx.To().Location()
-		if toChain.InSameSliceAs(slice) {
+		if tx.To().InSameSliceAs(slice) {
 			filteredList = append(filteredList, tx)
 		}
 	}
