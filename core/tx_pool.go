@@ -176,9 +176,9 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	PriceBump:  10,
 
 	AccountSlots:    1,
-	GlobalSlots:     9000 + 1024, // urgent + floating queue capacity with 4:1 ratio
-	MaxSenders:      100000,      // 5 MB - at least 10 blocks worth of transactions in case of reorg or high production rate
-	SendersChBuffer: 1024,        // at 500 TPS in zone, 2s buffer
+	GlobalSlots:     18000 + 1024, // urgent + floating queue capacity with 4:1 ratio
+	MaxSenders:      100000,       // 5 MB - at least 10 blocks worth of transactions in case of reorg or high production rate
+	SendersChBuffer: 1024,         // at 500 TPS in zone, 2s buffer
 	AccountQueue:    1,
 	GlobalQueue:     2048,
 
