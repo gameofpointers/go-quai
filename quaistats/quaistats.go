@@ -66,14 +66,24 @@ const (
 	// reportInterval is the time interval between two reports.
 	reportInterval = 15
 
-	c_alpha                     = 8
-	c_txBatchSize               = 20
-	c_blocksPerMinute           = 5
-	c_blocksPerHour             = c_blocksPerMinute * 60
-	c_txLookupCacheLimit        = c_blocksPerHour / c_txBatchSize
-	c_statsErrorValue           = int64(-1)
-	c_queueBatchSize            = 5
-	c_nodeStatsWarningThreshold = 50
+	c_alpha           = 8
+	c_statsErrorValue = int64(-1)
+
+	// Max number of stats objects to send in one batch
+	c_queueBatchSize = 5
+	// Number of blocks to include in one batch of transactions
+	c_txBatchSize = 20
+)
+
+var (
+	c_blocksPerMinute    int
+	c_blocksPerHour      int
+	c_txLookupCacheLimit int // Number of tx batches to have in the cache
+	chainID9000          = big.NewInt(9000)
+	chainID12000         = big.NewInt(12000)
+	chainID15000         = big.NewInt(15000)
+	chainID17000         = big.NewInt(17000)
+	chainID1337          = big.NewInt(1337)
 )
 
 // backend encompasses the bare-minimum functionality needed for quaistats reporting
@@ -220,6 +230,30 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 		return err
 	}
 
+	chainID := backend.ChainConfig().ChainID
+	var durationLimit *big.Int
+
+	switch {
+	case chainID.Cmp(chainID9000) == 0:
+		durationLimit = params.DurationLimit
+	case chainID.Cmp(chainID12000) == 0:
+		durationLimit = params.GardenDurationLimit
+	case chainID.Cmp(chainID15000) == 0:
+		durationLimit = params.OrchardDurationLimit
+	case chainID.Cmp(chainID17000) == 0:
+		durationLimit = params.LighthouseDurationLimit
+	case chainID.Cmp(chainID1337) == 0:
+		durationLimit = params.LocalDurationLimit
+	default:
+		durationLimit = params.DurationLimit
+	}
+
+	durationLimitInt := int(durationLimit.Int64())
+
+	c_blocksPerMinute = 60 / durationLimitInt
+	c_blocksPerHour = 60 * c_blocksPerMinute
+	c_txLookupCacheLimit = c_blocksPerHour / c_txBatchSize
+
 	txLookupCache, _ := lru.New(c_txLookupCacheLimit)
 
 	quaistats := &Service{
@@ -328,7 +362,6 @@ func (s *Service) loopSender(urlMap map[string]string) {
 		quitCh = make(chan struct{})
 	)
 
-	var nodeStatsWarningCounter int
 	nodeStatsMod := 0
 
 	errTimer := time.NewTimer(0)
@@ -341,9 +374,9 @@ func (s *Service) loopSender(urlMap map[string]string) {
 			return
 		case <-errTimer.C:
 			// If we don't have a JWT or it's expired, get a new one
-			log.Info("Trying to login to quaistats")
 			isJwtExpiredResult, jwtIsExpiredErr := s.isJwtExpired(authJwt)
 			if authJwt == "" || isJwtExpiredResult || jwtIsExpiredErr != nil {
+				log.Info("Trying to login to quaistats")
 				var err error
 				authJwt, err = s.login2(urlMap["login"])
 				if err != nil {
@@ -402,11 +435,7 @@ func (s *Service) loopSender(urlMap map[string]string) {
 					nodeStatsMod ^= 1
 					if err = s.reportNodeStats(urlMap["nodeStats"], nodeStatsMod, authJwt); err != nil {
 						noErrs = false
-						nodeStatsWarningCounter += 1
-						if nodeStatsWarningCounter == c_nodeStatsWarningThreshold {
-							log.Warn("nodeStats full stats report failed", "err", err)
-							nodeStatsWarningCounter = 0
-						}
+						log.Warn("nodeStats full stats report failed", "err", err)
 					}
 				case <-s.statsReadyCh:
 					if url, ok := urlMap["blockTransactionStats"]; ok {
@@ -963,7 +992,7 @@ type totalTransactions struct {
 	TotalNoTransactions1m uint64
 }
 
-func (s *Service) evictOutdatedEntries(currentMaxBlock uint64) {
+func (s *Service) evictOutdatedEntries(currentMaxBlock int) {
 	minAcceptableBlock := currentMaxBlock - c_blocksPerHour
 	for key := minAcceptableBlock - 20; key >= minAcceptableBlock-c_blocksPerHour; key -= 20 {
 		// Check if the key exists before trying to delete
@@ -1051,7 +1080,7 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 	}
 
 	if s.txLookupCache.Len() > c_txLookupCacheLimit {
-		s.evictOutdatedEntries(block.NumberU64())
+		s.evictOutdatedEntries(int(block.NumberU64()))
 	}
 
 	// Now totalTransactions1h and totalTransactions1m have the transaction counts for the last c_blocksPerHour and c_txBatchSize blocks respectively
@@ -1164,7 +1193,7 @@ func getQuaiRAMUsage() (uint64, error) {
 	var totalRam uint64
 
 	// Debug: log number of processes
-	log.Info("Number of processes", "number", len(processes))
+	log.Trace("Number of processes", "number", len(processes))
 
 	for _, p := range processes {
 		cmdline, err := p.Cmdline()
