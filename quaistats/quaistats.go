@@ -947,7 +947,8 @@ func (s *Service) isJwtExpired(authJwt string) (bool, error) {
 type blockTransactionStats struct {
 	Timestamp             *big.Int `json:"timestamp"`
 	TotalNoTransactions1h uint64   `json:"totalNoTransactions1h"`
-	TotalNoTransactions1m uint64   `json:"totalNoTransactions1m"`
+	TPS1m                 uint64   `json:"tps1m"`
+	TPS1hr                uint64   `json:"tps1hr"`
 	Chain                 string   `json:"chain"`
 }
 
@@ -987,16 +988,30 @@ type nodeStats struct {
 	HashedMAC           string     `json:"hashedMAC"`
 }
 
-type totalTransactions struct {
-	TotalNoTransactions1h uint64
-	TotalNoTransactions1m uint64
+type tps struct {
+	TPS1m                     uint64
+	TPS1hr                    uint64
+	TotalNumberTransactions1h uint64
+}
+
+type BatchObject struct {
+	TotalNoTransactions uint64
+	OldestBlockTime     uint64
 }
 
 func (s *Service) evictOutdatedEntries(currentMaxBlock int) {
-	minAcceptableBlock := currentMaxBlock - c_blocksPerHour
-	for key := minAcceptableBlock - 20; key >= minAcceptableBlock-c_blocksPerHour; key -= 20 {
-		// Check if the key exists before trying to delete
-		if _, found := s.txLookupCache.Get(key); found {
+	for {
+		key, _, ok := s.txLookupCache.GetOldest()
+		if !ok {
+			break
+		}
+
+		keyInt, ok := key.(int)
+		if !ok {
+			return
+		}
+
+		if keyInt < currentMaxBlock {
 			s.txLookupCache.Remove(key)
 		} else {
 			return
@@ -1004,12 +1019,14 @@ func (s *Service) evictOutdatedEntries(currentMaxBlock int) {
 	}
 }
 
-func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransactions {
+func (s *Service) calculateTPS(block *types.Block) *tps {
 	var totalTransactions1h uint64
 	var totalTransactions1m uint64
 
 	currentBlock := block
 	batchesNeeded := c_blocksPerHour / c_txBatchSize // calculate how many batches of c_txBatchSize are needed
+	var oldestKeyUsed uint64
+	var oldest1mBlockTime uint64
 
 	for i := 0; i < batchesNeeded; i++ {
 		if currentBlock == nil {
@@ -1017,6 +1034,12 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 			break
 		}
 		currentBlockNum := currentBlock.NumberU64()
+		if oldestKeyUsed == 0 {
+			oldestKeyUsed = currentBlockNum
+		} else {
+			oldestKeyUsed = min(oldestKeyUsed, currentBlockNum)
+		}
+
 		subtractionAmount := uint64(i * c_txBatchSize)
 
 		if currentBlockNum < subtractionAmount {
@@ -1027,10 +1050,11 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 		startBlockNum := currentBlockNum - subtractionAmount
 
 		// Try to get the data from the LRU cache
-		cachedTxCount, ok := s.txLookupCache.Get(startBlockNum)
+		cachedBatchObject, ok := s.txLookupCache.Get(startBlockNum)
 		if !ok {
 			// Not in cache, so we need to calculate the transaction count for this batch
 			txCount := uint64(0)
+			oldestBlockTimeInBatch := uint64(0)
 
 			for j := 0; j < c_txBatchSize; j++ {
 				// Add the number of transactions in the current block to the total
@@ -1041,15 +1065,22 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 					totalTransactions1m += uint64(len(currentBlock.Transactions()))
 				}
 
+				if j == c_blocksPerMinute-1 {
+					oldest1mBlockTime = currentBlock.Time()
+				}
+
 				// Get the parent block for the next iteration
 				fullBackend, ok := s.backend.(fullNodeBackend)
 				if !ok {
 					log.Error("Not running fullnode, cannot get parent block")
-					return &totalTransactions{
-						TotalNoTransactions1h: totalTransactions1h,
-						TotalNoTransactions1m: totalTransactions1m,
+					return &tps{
+						TPS1m:                     totalTransactions1m / 60,
+						TPS1hr:                    totalTransactions1h / 3600,
+						TotalNumberTransactions1h: totalTransactions1h,
 					}
 				}
+
+				oldestBlockTimeInBatch = min(oldestBlockTimeInBatch, currentBlock.Time())
 
 				var err error
 				var currentNumber = currentBlock.NumberU64()
@@ -1064,30 +1095,86 @@ func (s *Service) calculateTotalNoTransactions(block *types.Block) *totalTransac
 				}
 			}
 
-			// Store the sum in the cache
-			s.txLookupCache.Add(startBlockNum, txCount)
+			batchObject := &BatchObject{
+				TotalNoTransactions: txCount,
+				OldestBlockTime:     oldestBlockTimeInBatch,
+			}
 
-			cachedTxCount = txCount
+			// Store the sum in the cache
+			s.txLookupCache.Add(startBlockNum, batchObject)
+
+			cachedBatchObject = batchObject
 		}
 
 		// Add the transactions from this batch
-		txCount, ok := cachedTxCount.(uint64)
-		if !ok {
-			log.Error("Error casting cachedTxCount to uint64")
-			break
-		}
-		totalTransactions1h += txCount
+		totalTransactions1h += cachedBatchObject.(*BatchObject).TotalNoTransactions
 	}
 
 	if s.txLookupCache.Len() > c_txLookupCacheLimit {
-		s.evictOutdatedEntries(int(block.NumberU64()))
+		s.evictOutdatedEntries(int(block.NumberU64()) - c_blocksPerHour)
+	}
+
+	// Find the oldest batch object in the cache
+	// and use that oldest block time to calculate the TPS
+	found := false
+	notFoundCount := 0
+	var batchObject *BatchObject
+	var ok bool
+
+	for !found {
+		if notFoundCount >= c_txBatchSize {
+			log.Error("Could not find any batch object in cache returning estimations")
+			return &tps{
+				TPS1m:                     totalTransactions1m / 60,
+				TPS1hr:                    totalTransactions1h / 3600,
+				TotalNumberTransactions1h: totalTransactions1h,
+			}
+		}
+
+		// Retrieve the batch object from the cache
+		value, exists := s.txLookupCache.Get(oldestKeyUsed)
+		if !exists {
+			log.Warn("Could not find batch object in cache")
+			notFoundCount += 1
+			oldestKeyUsed += c_txBatchSize
+			continue
+		}
+
+		found = true
+
+		// Type assert the value to a *BatchObject
+		batchObject, ok = value.(*BatchObject)
+		if !ok {
+			log.Warn("Error casting value to *BatchObject")
+			return &tps{
+				TPS1m:                     totalTransactions1m / 60,
+				TPS1hr:                    totalTransactions1h / 3600,
+				TotalNumberTransactions1h: totalTransactions1h,
+			}
+		}
+	}
+
+	// Now use the BatchObject to get the oldest block time
+	TPS1hr := totalTransactions1h / (block.Time() - batchObject.OldestBlockTime)
+	TPS1m := totalTransactions1m / 60
+
+	if oldest1mBlockTime > 0 {
+		TPS1m = totalTransactions1m / (block.Time() - oldest1mBlockTime)
 	}
 
 	// Now totalTransactions1h and totalTransactions1m have the transaction counts for the last c_blocksPerHour and c_txBatchSize blocks respectively
-	return &totalTransactions{
-		TotalNoTransactions1h: totalTransactions1h,
-		TotalNoTransactions1m: totalTransactions1m,
+	return &tps{
+		TPS1m:                     TPS1m,
+		TPS1hr:                    TPS1hr,
+		TotalNumberTransactions1h: totalTransactions1h,
 	}
+}
+
+func min(a uint64, b uint64) uint64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats {
@@ -1138,13 +1225,14 @@ func (s *Service) assembleBlockTransactionStats(block *types.Block) *blockTransa
 		return nil
 	}
 	header := block.Header()
-	totalTransactions := s.calculateTotalNoTransactions(block)
+	tps := s.calculateTPS(block)
 
 	// Assemble and return the block stats
 	return &blockTransactionStats{
 		Timestamp:             new(big.Int).SetUint64(header.Time()),
-		TotalNoTransactions1h: totalTransactions.TotalNoTransactions1h,
-		TotalNoTransactions1m: totalTransactions.TotalNoTransactions1m,
+		TotalNoTransactions1h: tps.TotalNumberTransactions1h,
+		TPS1m:                 tps.TPS1m,
+		TPS1hr:                tps.TPS1hr,
 		Chain:                 common.NodeLocation.Name(),
 	}
 }
@@ -1199,7 +1287,7 @@ func getQuaiRAMUsage() (uint64, error) {
 		cmdline, err := p.Cmdline()
 		if err != nil {
 			// Debug: log error
-			log.Warn("Error getting process cmdline", "error", err)
+			log.Trace("Error getting process cmdline", "error", err)
 			continue
 		}
 
