@@ -114,20 +114,6 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	sl.pEtxRetryCache, _ = lru.New(c_pEtxRetryThreshold)
 
 	sl.inboundEtxsCache, _ = lru.New(c_inboundEtxCacheSize)
-
-	// only set the subClients if the chain is not Zone
-	sl.subClients = make([]*quaiclient.Client, 3)
-	if nodeCtx != common.ZONE_CTX {
-		sl.subClients = makeSubClients(subClientUrls)
-	}
-
-	// only set domClient if the chain is not Prime.
-	if nodeCtx != common.PRIME_CTX {
-		go func() {
-			sl.domClient = makeDomClient(domClientUrl)
-		}()
-	}
-
 	if err := sl.init(genesis); err != nil {
 		return nil, err
 	}
@@ -177,11 +163,6 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		return nil, false, false, nil
 	}
 	time1 := common.PrettyDuration(time.Since(start))
-	// This is to prevent a crash when we try to insert blocks before domClient is on.
-	// Ideally this check should not exist here and should be fixed before we start the slice.
-	if sl.domClient == nil && nodeCtx != common.PRIME_CTX {
-		return nil, false, false, ErrDomClientNotUp
-	}
 
 	batch := sl.sliceDb.NewBatch()
 
@@ -1054,7 +1035,7 @@ func (sl *Slice) init(genesis *Genesis) error {
 		}
 		rawdb.WriteEtxSet(sl.sliceDb, genesisHash, 0, types.NewEtxSet())
 
-		if common.NodeLocation.Context() == common.PRIME_CTX {
+		if common.NodeLocation.Context() == common.ZONE_CTX {
 			go sl.NewGenesisPendingHeader(nil)
 		}
 	} else { // load the phCache and slice current pending header hash
@@ -1173,28 +1154,15 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.Header) {
 	nodeCtx := common.NodeLocation.Context()
 	genesisHash := sl.config.GenesisHash
 	// Upate the local pending header
+	domPendingHeader = types.EmptyHeader()
 	localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(sl.hc.GetBlockByHash(genesisHash), false)
 	if err != nil {
 		return
 	}
 
-	if nodeCtx == common.PRIME_CTX {
-		domPendingHeader = types.CopyHeader(localPendingHeader)
-	} else {
-		domPendingHeader = sl.combinePendingHeader(localPendingHeader, domPendingHeader, nodeCtx, true)
-		domPendingHeader.SetLocation(common.NodeLocation)
-	}
+	domPendingHeader = sl.combinePendingHeader(localPendingHeader, domPendingHeader, nodeCtx, true)
+	domPendingHeader.SetLocation(common.NodeLocation)
 
-	if nodeCtx != common.ZONE_CTX {
-		for _, client := range sl.subClients {
-			if client != nil {
-				client.NewGenesisPendingHeader(context.Background(), domPendingHeader)
-				if err != nil {
-					return
-				}
-			}
-		}
-	}
 	genesisTermini := types.EmptyTermini()
 	for i := 0; i < len(genesisTermini.SubTermini()); i++ {
 		genesisTermini.SetSubTerminiAtIndex(genesisHash, i)

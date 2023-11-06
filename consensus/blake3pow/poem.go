@@ -5,14 +5,13 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
-	"github.com/dominant-strategies/go-quai/params"
 	"modernc.org/mathutil"
 )
 
 // CalcOrder returns the order of the block within the hierarchy of chains
 func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, error) {
 	if header.NumberU64() == 0 {
-		return common.Big0, common.PRIME_CTX, nil
+		return common.Big0, common.ZONE_CTX, nil
 	}
 
 	// Verify the seal and get the powHash for the given header
@@ -23,33 +22,6 @@ func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, erro
 
 	// Get entropy reduction of this header
 	intrinsicS := blake3pow.IntrinsicLogS(header.Hash())
-	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
-	zoneThresholdS := blake3pow.IntrinsicLogS(common.BytesToHash(target.Bytes()))
-
-	// PRIME
-	// PrimeEntropyThreshold number of zone blocks times the intrinsic logs of
-	// the given header determines the prime block
-	totalDeltaSPrime := new(big.Int).Add(header.ParentDeltaS(common.REGION_CTX), header.ParentDeltaS(common.ZONE_CTX))
-	totalDeltaSPrime = new(big.Int).Add(totalDeltaSPrime, intrinsicS)
-	primeDeltaSTarget := new(big.Int).Div(params.PrimeEntropyTarget, big2)
-	primeDeltaSTarget = new(big.Int).Mul(zoneThresholdS, primeDeltaSTarget)
-
-	primeBlockEntropyThreshold := new(big.Int).Add(zoneThresholdS, common.BitsToBigBits(params.PrimeEntropyTarget))
-	if intrinsicS.Cmp(primeBlockEntropyThreshold) > 0 && totalDeltaSPrime.Cmp(primeDeltaSTarget) > 0 {
-		return intrinsicS, common.PRIME_CTX, nil
-	}
-
-	// REGION
-	// Compute the total accumulated entropy since the last region block
-	totalDeltaSRegion := new(big.Int).Add(header.ParentDeltaS(common.ZONE_CTX), intrinsicS)
-	regionDeltaSTarget := new(big.Int).Div(params.RegionEntropyTarget, big2)
-	regionDeltaSTarget = new(big.Int).Mul(zoneThresholdS, regionDeltaSTarget)
-	regionBlockEntropyThreshold := new(big.Int).Add(zoneThresholdS, common.BitsToBigBits(params.RegionEntropyTarget))
-	if intrinsicS.Cmp(regionBlockEntropyThreshold) > 0 && totalDeltaSRegion.Cmp(regionDeltaSTarget) > 0 {
-		return intrinsicS, common.REGION_CTX, nil
-	}
-
-	// Zone case
 	return intrinsicS, common.ZONE_CTX, nil
 }
 

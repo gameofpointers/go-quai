@@ -119,6 +119,12 @@ endif
 	@nohup $(BASE_CMD) --miner.etherbase $(ZONE_2_1_COINBASE) --port $(ZONE_2_1_PORT_TCP) --http.port $(ZONE_2_1_PORT_HTTP) --ws.port $(ZONE_2_1_PORT_WS) --dom.url $(ZONE_2_1_DOM_URL):$(REGION_2_PORT_WS)                                 --region 2 --zone 1 >> nodelogs/zone-2-1.log 2>&1 &
 	@nohup $(BASE_CMD) --miner.etherbase $(ZONE_2_2_COINBASE) --port $(ZONE_2_2_PORT_TCP) --http.port $(ZONE_2_2_PORT_HTTP) --ws.port $(ZONE_2_2_PORT_WS) --dom.url $(ZONE_2_2_DOM_URL):$(REGION_2_PORT_WS)                                 --region 2 --zone 2 >> nodelogs/zone-2-2.log 2>&1 &
 
+run-sim:
+ifeq (,$(wildcard nodelogs))
+	mkdir nodelogs
+endif
+	@nohup $(BASE_CMD) --miner.etherbase $(ZONE_0_0_COINBASE) --port $(ZONE_0_0_PORT_TCP) --http.port $(ZONE_0_0_PORT_HTTP) --ws.port $(ZONE_0_0_PORT_WS) --dom.url $(ZONE_0_0_DOM_URL):$(REGION_0_PORT_WS)                                 --region 0 --zone 0 >> nodelogs/zone-0-0.log 2>&1 &
+
 stop:
 ifeq ($(shell uname -s), $(filter $(shell uname -s), Darwin Linux))
 	@-pkill -f ./build/bin/go-quai;

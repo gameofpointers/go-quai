@@ -24,7 +24,6 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rlp"
-	"github.com/dominant-strategies/go-quai/trie"
 	lru "github.com/hnlq715/golang-lru"
 )
 
@@ -132,22 +131,13 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 				log.Info("Already processing block:", "Number:", block.Header().NumberArray(), "Hash:", block.Hash())
 				return idx, errors.New("Already in process of appending this block")
 			}
-			newPendingEtxs, _, _, err := c.sl.Append(block.Header(), types.EmptyHeader(), common.Hash{}, false, nil)
+			_, _, _, err := c.sl.Append(block.Header(), types.EmptyHeader(), common.Hash{}, false, nil)
 			c.processingCache.Remove(block.Hash())
 			if err == nil {
 				// If we have a dom, send the dom any pending ETXs which will become
 				// referencable by this block. When this block is referenced in the dom's
 				// subordinate block manifest, then ETXs produced by this block and the rollup
 				// of ETXs produced by subordinate chain(s) will become referencable.
-				if nodeCtx > common.PRIME_CTX {
-					pendingEtx := types.PendingEtxs{block.Header(), newPendingEtxs}
-					// Only send the pending Etxs to dom if valid, because in the case of running a slice, for the zones that the node doesn't run, it cannot have the etxs generated
-					if pendingEtx.IsValid(trie.NewStackTrie(nil)) {
-						if err := c.SendPendingEtxsToDom(pendingEtx); err != nil {
-							log.Error("failed to send ETXs to domclient", "block: ", block.Hash(), "err", err)
-						}
-					}
-				}
 				c.removeFromAppendQueue(block)
 			} else if err.Error() == consensus.ErrFutureBlock.Error() ||
 				err.Error() == ErrBodyNotFound.Error() ||
