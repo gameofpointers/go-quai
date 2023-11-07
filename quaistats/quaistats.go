@@ -372,24 +372,28 @@ func (s *Service) loopSender(urlMap map[string]string) {
 				case "login":
 					continue
 				case "nodeStats":
+					fmt.Println("/// Reporting node stats")
 					if errs[key] = s.reportNodeStats(url, 0, authJwt); errs[key] != nil {
 						log.Warn("Initial stats report failed for "+key, "err", errs[key])
 						errTimer.Reset(0)
 						continue
 					}
 				case "blockTransactionStats":
+					fmt.Println("/// Reporting block tx stats")
 					if errs[key] = s.sendTransactionStats(url, authJwt); errs[key] != nil {
 						log.Warn("Initial stats report failed for "+key, "err", errs[key])
 						errTimer.Reset(0)
 						continue
 					}
 				case "blockDetailStats":
+					fmt.Println("/// Reporting block details stats")
 					if errs[key] = s.sendDetailStats(url, authJwt); errs[key] != nil {
 						log.Warn("Initial stats report failed for "+key, "err", errs[key])
 						errTimer.Reset(0)
 						continue
 					}
 				case "blockAppendTime":
+					fmt.Println("/// Reporting block append stats")
 					if errs[key] = s.sendAppendTimeStats(url, authJwt); errs[key] != nil {
 						log.Warn("Initial stats report failed for "+key, "err", errs[key])
 						errTimer.Reset(0)
@@ -411,11 +415,13 @@ func (s *Service) loopSender(urlMap map[string]string) {
 
 				case <-fullReport.C:
 					nodeStatsMod ^= 1
+					fmt.Println("/// Reporting node stats full report")
 					if err = s.reportNodeStats(urlMap["nodeStats"], nodeStatsMod, authJwt); err != nil {
 						noErrs = false
 						log.Warn("nodeStats full stats report failed", "err", err)
 					}
 				case <-s.statsReadyCh:
+					fmt.Println("/// Reporting tx/detail/append stats full report")
 					if url, ok := urlMap["blockTransactionStats"]; ok {
 						s.sendTransactionStats(url, authJwt)
 					}
@@ -666,6 +672,7 @@ func (s *Service) sendTransactionStats(url string, authJwt string) error {
 
 func (s *Service) sendDetailStats(url string, authJwt string) error {
 	if len(s.detailStatsQueue.data) == 0 {
+		fmt.Println("/// Cannot send detail stats because len is zero")
 		return nil
 	}
 	statsBatch := make([]*blockDetailStats, 0, c_queueBatchSize)
@@ -699,6 +706,7 @@ func (s *Service) sendDetailStats(url string, authJwt string) error {
 
 func (s *Service) sendAppendTimeStats(url string, authJwt string) error {
 	if len(s.appendTimeStatsQueue.data) == 0 {
+		fmt.Println("/// Cannot send append stats because len is zero")
 		return nil
 	}
 
