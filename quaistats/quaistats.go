@@ -254,7 +254,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 	c_blocksPerHour = 60 * c_blocksPerMinute
 	c_txLookupCacheLimit = c_blocksPerHour / c_txBatchSize
 
-	txLookupCache, _ := lru.New(c_txLookupCacheLimit)
+	txLookupCache, _ := lru.New(c_txLookupCacheLimit * 2)
 
 	quaistats := &Service{
 		backend:               backend,
@@ -1024,33 +1024,29 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 	var totalTransactions1m uint64
 
 	currentBlock := block
+	startBlockTime := block.Time()
 	batchesNeeded := c_blocksPerHour / c_txBatchSize // calculate how many batches of c_txBatchSize are needed
 	var oldestKeyUsed uint64
 	var oldest1mBlockTime uint64
+	startBlockNum := currentBlock.NumberU64()
+
+	// Get the parent block for the next iteration
+	fullBackend := s.backend.(fullNodeBackend)
 
 	for i := 0; i < batchesNeeded; i++ {
 		if currentBlock == nil {
 			log.Error("Encountered a nil block, stopping iteration")
 			break
 		}
-		currentBlockNum := currentBlock.NumberU64()
+
 		if oldestKeyUsed == 0 {
-			oldestKeyUsed = currentBlockNum
+			oldestKeyUsed = startBlockNum
 		} else {
-			oldestKeyUsed = min(oldestKeyUsed, currentBlockNum)
+			oldestKeyUsed = min(oldestKeyUsed, startBlockNum)
 		}
-
-		subtractionAmount := uint64(i * c_txBatchSize)
-
-		if currentBlockNum < subtractionAmount {
-			log.Error(fmt.Sprintf("Potential underflow detected: current block number (%d) is less than subtraction amount (%d)", currentBlockNum, subtractionAmount))
-			break
-		}
-
-		startBlockNum := currentBlockNum - subtractionAmount
 
 		// Try to get the data from the LRU cache
-		cachedBatchObject, ok := s.txLookupCache.Get(startBlockNum)
+		cachedBatchObject, ok := s.txLookupCache.Get(uint64(startBlockNum))
 		if !ok {
 			// Not in cache, so we need to calculate the transaction count for this batch
 			txCount := uint64(0)
@@ -1065,25 +1061,23 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 					totalTransactions1m += uint64(len(currentBlock.Transactions()))
 				}
 
-				if j == c_blocksPerMinute-1 {
+				if i == 0 && j == c_blocksPerMinute-1 {
 					oldest1mBlockTime = currentBlock.Time()
 				}
 
-				// Get the parent block for the next iteration
-				fullBackend, ok := s.backend.(fullNodeBackend)
-				if !ok {
-					log.Error("Not running fullnode, cannot get parent block")
-					return &tps{
-						TPS1m:                     totalTransactions1m / 60,
-						TPS1hr:                    totalTransactions1h / 3600,
-						TotalNumberTransactions1h: totalTransactions1h,
-					}
+				if oldestBlockTimeInBatch == 0 {
+					oldestBlockTimeInBatch = currentBlock.Time()
+				} else {
+					oldestBlockTimeInBatch = min(oldestBlockTimeInBatch, currentBlock.Time())
 				}
 
-				oldestBlockTimeInBatch = min(oldestBlockTimeInBatch, currentBlock.Time())
+				currentNumber := currentBlock.NumberU64()
+				if currentNumber == 0 {
+					log.Trace("Current block number is 0, stopping iteration")
+					break
+				}
 
 				var err error
-				var currentNumber = currentBlock.NumberU64()
 				currentBlock, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentNumber-1))
 				if err != nil {
 					log.Error(fmt.Sprintf("Error getting block number %d: %s", currentNumber-1, err.Error()))
@@ -1108,6 +1102,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 
 		// Add the transactions from this batch
 		totalTransactions1h += cachedBatchObject.(*BatchObject).TotalNoTransactions
+		startBlockNum -= c_txBatchSize
 	}
 
 	if s.txLookupCache.Len() > c_txLookupCacheLimit {
@@ -1155,7 +1150,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 	}
 
 	// Now use the BatchObject to get the oldest block time
-	TPS1hr := totalTransactions1h / (block.Time() - batchObject.OldestBlockTime)
+	TPS1hr := totalTransactions1h / (startBlockTime - batchObject.OldestBlockTime)
 	TPS1m := totalTransactions1m / 60
 
 	if oldest1mBlockTime > 0 {
