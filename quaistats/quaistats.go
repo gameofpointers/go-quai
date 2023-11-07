@@ -1036,7 +1036,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 	fullBackend := s.backend.(fullNodeBackend)
 
 	for i := 0; i < int(batchesNeeded); i++ {
-		if currentBlock == nil {
+		if currentBlock == nil || currentBlock.NumberU64() == 0 {
 			log.Error("Encountered a nil block, stopping iteration")
 			break
 		}
@@ -1064,7 +1064,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 				// Add the number of transactions in the current block to the total
 				txCount += uint64(len(currentBlock.Transactions()))
 
-				if withinMinute && startBlockTime-currentBlock.Time() < 60 {
+				if withinMinute && startBlockTime < currentBlock.Time()+60 {
 					totalTransactions1m += uint64(len(currentBlock.Transactions()))
 				} else {
 					withinMinute = false
