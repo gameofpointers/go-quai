@@ -76,14 +76,15 @@ const (
 )
 
 var (
-	c_blocksPerMinute    uint64
-	c_blocksPerHour      uint64
-	c_txLookupCacheLimit uint64 // Number of tx batches to have in the cache
-	chainID9000          = big.NewInt(9000)
-	chainID12000         = big.NewInt(12000)
-	chainID15000         = big.NewInt(15000)
-	chainID17000         = big.NewInt(17000)
-	chainID1337          = big.NewInt(1337)
+	c_blocksPerMinute         uint64
+	c_blocksPerHour           uint64
+	c_txLookupCacheLimit      uint64
+	c_txLookupCacheEvictLimit uint64
+	chainID9000               = big.NewInt(9000)
+	chainID12000              = big.NewInt(12000)
+	chainID15000              = big.NewInt(15000)
+	chainID17000              = big.NewInt(17000)
+	chainID1337               = big.NewInt(1337)
 )
 
 // backend encompasses the bare-minimum functionality needed for quaistats reporting
@@ -252,7 +253,8 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 
 	c_blocksPerMinute = 60 / durationLimitInt
 	c_blocksPerHour = 60 * c_blocksPerMinute
-	c_txLookupCacheLimit = c_blocksPerHour / c_txBatchSize
+	c_txLookupCacheEvictLimit = c_blocksPerHour / c_txBatchSize
+	c_txLookupCacheLimit = 2 * c_txLookupCacheEvictLimit
 
 	txLookupCache, _ := lru.New(int(c_txLookupCacheLimit * 2))
 
@@ -311,8 +313,8 @@ func (s *Service) loopBlocks(chainHeadCh chan core.ChainHeadEvent, chainSideCh c
 	}()
 
 	quitCh := make(chan struct{})
-	headCh := make(chan *types.Block, 1)
-	sideCh := make(chan *types.Block, 1)
+	headCh := make(chan *types.Block, chainHeadChanSize)
+	sideCh := make(chan *types.Block, chainSideChanSize)
 
 	go func() {
 	HandleLoop:
@@ -1047,7 +1049,6 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 
 		// Try to get the data from the LRU cache
 		cachedBatchObject, ok := s.txLookupCache.Get(uint64(startBlockNum))
-		log.Info("TPS - just looked in cache", "startBlockNum", startBlockNum)
 		if !ok {
 			// Not in cache, so we need to calculate the transaction count for this batch
 			txCount := uint64(0)
@@ -1078,16 +1079,14 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 				var err error
 				currentBlock, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentNumber-1))
 				if err != nil {
-					log.Error(fmt.Sprintf("TPS - Error getting block number %d: %s", currentNumber-1, err.Error()))
+					log.Error(fmt.Sprintf("Error getting block number %d: %s", currentNumber-1, err.Error()))
 					break
 				}
 				if currentBlock == nil {
-					log.Error(fmt.Sprintf("TPS - No block found at number %d", currentNumber-1))
+					log.Error(fmt.Sprintf("No block found at number %d", currentNumber-1))
 					break
 				}
 			}
-
-			log.Info("TPS - Batch Object", "currentBlockNum", currentBlock.NumberU64(), "txCount", txCount, "oldestBlockTimeInBatch", oldestBlockTimeInBatch)
 
 			batchObject := &BatchObject{
 				TotalNoTransactions: txCount,
@@ -1096,7 +1095,6 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 
 			// Store the sum in the cache
 			s.txLookupCache.Add(startBlockNum, batchObject)
-			log.Info("TPS - just added to cache", "startBlockNum", startBlockNum)
 
 			cachedBatchObject = batchObject
 		}
@@ -1106,7 +1104,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 		startBlockNum -= uint64(c_txBatchSize)
 	}
 
-	if s.txLookupCache.Len() > int(c_txLookupCacheLimit) {
+	if s.txLookupCache.Len() > int(c_txLookupCacheEvictLimit) {
 		s.evictOutdatedEntries(int(block.NumberU64() - c_blocksPerHour))
 	}
 
@@ -1141,7 +1139,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 		// Type assert the value to a *BatchObject
 		batchObject, ok = value.(*BatchObject)
 		if !ok {
-			log.Warn("TPS - Error casting value to *BatchObject")
+			log.Warn("Error casting value to *BatchObject")
 			return &tps{
 				TPS1m:                     totalTransactions1m / 60,
 				TPS1hr:                    totalTransactions1h / 3600,
