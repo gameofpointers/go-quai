@@ -152,9 +152,8 @@ type Service struct {
 //     that the operations are atomic. As a result, it's safe to use across multiple goroutines
 //     without external synchronization.
 type StatsQueue struct {
-	data   []interface{}
-	length int
-	mutex  sync.Mutex
+	data  []interface{}
+	mutex sync.Mutex
 }
 
 func NewStatsQueue() *StatsQueue {
@@ -168,20 +167,18 @@ func (q *StatsQueue) Enqueue(item interface{}) {
 	defer q.mutex.Unlock()
 
 	q.data = append(q.data, item)
-	q.length++
 }
 
 func (q *StatsQueue) Dequeue() interface{} {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	if q.length == 0 {
+	if len(q.data) == 0 {
 		return nil
 	}
 
 	item := q.data[0]
 	q.data = q.data[1:]
-	q.length--
 	return item
 }
 
@@ -190,14 +187,13 @@ func (q *StatsQueue) EnqueueFront(item interface{}) {
 	defer q.mutex.Unlock()
 
 	q.data = append([]interface{}{item}, q.data...)
-	q.length++
 }
 
 func (q *StatsQueue) Size() int {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	return q.length
+	return len(q.data)
 }
 
 // parseEthstatsURL parses the netstats connection url.
@@ -655,12 +651,12 @@ func (s *Service) reportNodeStats(url string, mod int, authJwt string) error {
 }
 
 func (s *Service) sendTransactionStats(url string, authJwt string) error {
-	if s.transactionStatsQueue.length == 0 {
+	if len(s.transactionStatsQueue.data) == 0 {
 		return nil
 	}
 	statsBatch := make([]*blockTransactionStats, 0, c_queueBatchSize)
 
-	for i := 0; i < int(c_queueBatchSize) && s.transactionStatsQueue.length > 0; i++ {
+	for i := 0; i < int(c_queueBatchSize) && len(s.transactionStatsQueue.data) > 0; i++ {
 		stat := s.transactionStatsQueue.Dequeue()
 		if stat == nil {
 			break
@@ -688,7 +684,7 @@ func (s *Service) sendTransactionStats(url string, authJwt string) error {
 }
 
 func (s *Service) sendDetailStats(url string, authJwt string) error {
-	if s.detailStatsQueue.length == 0 {
+	if len(s.transactionStatsQueue.data) == 0 {
 		return nil
 	}
 	statsBatch := make([]*blockDetailStats, 0, c_queueBatchSize)
@@ -721,7 +717,7 @@ func (s *Service) sendDetailStats(url string, authJwt string) error {
 }
 
 func (s *Service) sendAppendTimeStats(url string, authJwt string) error {
-	if s.appendTimeStatsQueue.length == 0 {
+	if len(s.transactionStatsQueue.data) == 0 {
 		return nil
 	}
 
@@ -1180,18 +1176,14 @@ func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats
 		return nil
 	}
 	header := block.Header()
-	location := header.NumberArray()
-	primeHeight := location[0]
-	regionHeight := location[1]
-	zoneHeight := location[2]
 	difficulty := header.Difficulty().String()
 
 	// Assemble and return the block stats
 	return &blockDetailStats{
 		Timestamp:    new(big.Int).SetUint64(header.Time()),
-		ZoneHeight:   zoneHeight.Uint64(),
-		RegionHeight: regionHeight.Uint64(),
-		PrimeHeight:  primeHeight.Uint64(),
+		ZoneHeight:   header.NumberArray()[2].Uint64(),
+		RegionHeight: header.NumberArray()[1].Uint64(),
+		PrimeHeight:  header.NumberArray()[0].Uint64(),
 		Chain:        common.NodeLocation.Name(),
 		Entropy:      common.BigBitsToBits(s.backend.TotalLogS(block.Header())).String(),
 		Difficulty:   difficulty,

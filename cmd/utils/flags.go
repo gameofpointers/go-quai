@@ -401,7 +401,7 @@ var (
 	}
 	TrustedNodeFlag = cli.BoolFlag{
 		Name:  "trustednode",
-		Usage: "Truted node boolean flag for use by team",
+		Usage: "Truted node boolean flag for trusted nodes",
 	}
 	FakePoWFlag = cli.BoolFlag{
 		Name:  "fakepow",
