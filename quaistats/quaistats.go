@@ -1036,7 +1036,7 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 	fullBackend := s.backend.(fullNodeBackend)
 
 	for i := 0; i < int(batchesNeeded); i++ {
-		if currentBlock == nil || currentBlock.NumberU64() == 0 {
+		if currentBlock == nil {
 			log.Error("Encountered a nil block, stopping iteration")
 			break
 		}
@@ -1101,6 +1101,9 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 
 		// Add the transactions from this batch
 		totalTransactions1h += cachedBatchObject.(*BatchObject).TotalNoTransactions
+		if startBlockNum == 0 {
+			break
+		}
 		startBlockNum -= uint64(c_txBatchSize)
 	}
 
