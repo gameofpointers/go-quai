@@ -65,9 +65,6 @@ endif
 ifeq ($(QUAI_STATS),true)
 	BASE_CMD += --quaistats ${STATS_NAME}:${STATS_PASS}@${STATS_HOST}
 endif
-ifeq ($(SEND_FULL_STATS),true)
-	BASE_CMD += --sendfullstats
-endif
 
 ifeq ($(SHOW_COLORS),true)
 	BASE_CMD += --showcolors

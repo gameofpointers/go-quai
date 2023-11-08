@@ -399,10 +399,6 @@ var (
 		Name:  "quaistats",
 		Usage: "Reporting URL of a quaistats service (nodename:secret@host:port)",
 	}
-	SendFullStatsFlag = cli.BoolFlag{
-		Name:  "sendfullstats",
-		Usage: "Send full stats boolean flag for quaistats",
-	}
 	FakePoWFlag = cli.BoolFlag{
 		Name:  "fakepow",
 		Usage: "Disables proof-of-work verification",
@@ -1637,8 +1633,8 @@ func RegisterEthService(stack *node.Node, cfg *ethconfig.Config) (quaiapi.Backen
 
 // RegisterQuaiStatsService configures the Quai Stats daemon and adds it to
 // the given node.
-func RegisterQuaiStatsService(stack *node.Node, backend quaiapi.Backend, url string, sendfullstats bool) {
-	if err := quaistats.New(stack, backend, backend.Engine(), url, sendfullstats); err != nil {
+func RegisterQuaiStatsService(stack *node.Node, backend quaiapi.Backend, url string) {
+	if err := quaistats.New(stack, backend, backend.Engine(), url); err != nil {
 		Fatalf("Failed to register the Quai Stats service: %v", err)
 	}
 }
