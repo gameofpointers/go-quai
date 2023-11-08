@@ -221,7 +221,7 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(node *node.Node, backend backend, engine consensus.Engine, url string, trustednode bool) error {
+func New(node *node.Node, backend backend, engine consensus.Engine, url string, trustedstatsprovider bool) error {
 	parts, err := parseEthstatsURL(url)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 		detailStatsQueue:      NewStatsQueue(),
 		appendTimeStatsQueue:  NewStatsQueue(),
 		statsReadyCh:          make(chan struct{}),
-		trusted:               trustednode,
+		trusted:               trustedstatsprovider,
 		txLookupCache:         txLookupCache,
 		instanceDir:           node.InstanceDir(),
 	}

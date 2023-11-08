@@ -51,7 +51,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.GCModeFlag,
 			utils.TxLookupLimitFlag,
 			utils.QuaiStatsURLFlag,
-			utils.TrustedNodeFlag,
+			utils.TrustedStatsProviderFlag,
 			utils.IdentityFlag,
 			utils.LightKDFFlag,
 			utils.WhitelistFlag,
