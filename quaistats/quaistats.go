@@ -73,11 +73,14 @@ const (
 	c_queueBatchSize uint64 = 5
 	// Number of blocks to include in one batch of transactions
 	c_txBatchSize uint64 = 20
+
+	// Seconds that we want to iterate over (3600s = 1 hr)
+	c_windowSize uint64 = 3600
 )
 
 var (
 	c_blocksPerMinute         uint64
-	c_blocksPerHour           uint64
+	c_blocksPerWindow         uint64
 	c_txLookupCacheLimit      uint64
 	c_txLookupCacheEvictLimit uint64
 	chainID9000               = big.NewInt(9000)
@@ -128,9 +131,12 @@ type Service struct {
 	transactionStatsQueue *StatsQueue
 	detailStatsQueue      *StatsQueue
 	appendTimeStatsQueue  *StatsQueue
-	statsReadyCh          chan struct{}
 
-	txLookupCache *lru.Cache
+	// After handling a block and potentially adding to the queues, it will notify the sendStats goroutine
+	// that stats are ready to be sent
+	statsReadyCh chan struct{}
+
+	blockLookupCache *lru.Cache
 
 	chainID *big.Int
 
@@ -248,11 +254,9 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 	durationLimitInt := durationLimit.Uint64()
 
 	c_blocksPerMinute = 60 / durationLimitInt
-	c_blocksPerHour = 60 * c_blocksPerMinute
-	c_txLookupCacheEvictLimit = c_blocksPerHour / c_txBatchSize
-	c_txLookupCacheLimit = 2 * c_txLookupCacheEvictLimit
+	c_blocksPerWindow = 3600 / durationLimitInt
 
-	txLookupCache, _ := lru.New(int(c_txLookupCacheLimit * 2))
+	blockLookupCache, _ := lru.New(int(c_blocksPerWindow * 2))
 
 	quaistats := &Service{
 		backend:               backend,
@@ -268,7 +272,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 		appendTimeStatsQueue:  NewStatsQueue(),
 		statsReadyCh:          make(chan struct{}),
 		sendfullstats:         sendfullstats,
-		txLookupCache:         txLookupCache,
+		blockLookupCache:      blockLookupCache,
 		instanceDir:           node.InstanceDir(),
 	}
 
@@ -465,6 +469,14 @@ func (s *Service) initializeURLMap() map[string]string {
 
 func (s *Service) handleBlock(headCh chan *types.Block) {
 	for head := range headCh {
+		// Cache the block
+		s.blockLookupCache.Add(head.Hash(), &cachedBlock{
+			number:     head.NumberU64(),
+			parentHash: head.ParentHash(),
+			txCount:    uint64(len(head.Transactions())),
+			time:       head.Time(),
+		})
+
 		if s.sendfullstats {
 			dtlStats := s.assembleBlockDetailStats(head)
 			s.detailStatsQueue.Enqueue(dtlStats)
@@ -805,6 +817,13 @@ func (s *Service) report(url string, dataType string, stats interface{}, authJwt
 	return nil
 }
 
+type cachedBlock struct {
+	number     uint64
+	parentHash common.Hash
+	txCount    uint64
+	time       uint64
+}
+
 // nodeInfo is the collection of meta information about a node that is displayed
 // on the monitoring page.
 type nodeInfo struct {
@@ -997,27 +1016,7 @@ type BatchObject struct {
 	OldestBlockTime     uint64
 }
 
-func (s *Service) evictOutdatedEntries(currentMaxBlock int) {
-	for {
-		key, _, ok := s.txLookupCache.GetOldest()
-		if !ok {
-			break
-		}
-
-		keyInt, ok := key.(int)
-		if !ok {
-			return
-		}
-
-		if keyInt < currentMaxBlock {
-			s.txLookupCache.Remove(key)
-		} else {
-			return
-		}
-	}
-}
-
-func (s *Service) calculateTPS(block *types.Block) *tps {
+/*func (s *Service) calculateTPS(block *types.Block) *tps {
 	var totalTransactions1h uint64
 	var totalTransactions1m uint64
 
@@ -1161,13 +1160,82 @@ func (s *Service) calculateTPS(block *types.Block) *tps {
 		TPS1hr:                    TPS1hr,
 		TotalNumberTransactions1h: totalTransactions1h,
 	}
-}
+}*/
 
-func min(a uint64, b uint64) uint64 {
-	if a < b {
-		return a
+func (s *Service) calculateTPS(block *types.Block) *tps {
+	var totalTransactions1h uint64
+	var totalTransactions1m uint64
+	var currentBlock interface{}
+	var ok bool
+
+	fullNodeBackend := s.backend.(fullNodeBackend)
+	withinMinute := true
+
+	currentBlock, ok = s.blockLookupCache.Get(block.Hash())
+	if !ok {
+		currentBlock = &cachedBlock{
+			number:     block.NumberU64(),
+			parentHash: block.ParentHash(),
+			txCount:    uint64(len(block.Transactions())),
+			time:       block.Time(),
+		}
+		s.blockLookupCache.Add(block.Hash(), currentBlock)
 	}
-	return b
+
+	for {
+		if currentBlock == nil || currentBlock.(*cachedBlock).time+c_windowSize < block.Time() {
+			break
+		}
+
+		totalTransactions1h += currentBlock.(*cachedBlock).txCount
+		if withinMinute && currentBlock.(*cachedBlock).time+60 < block.Time() {
+			totalTransactions1m += currentBlock.(*cachedBlock).txCount
+		} else {
+			withinMinute = false
+		}
+
+		if currentBlock.(*cachedBlock).number == 0 {
+			break
+		}
+
+		currentBlock, ok = s.blockLookupCache.Get(currentBlock.(*cachedBlock).parentHash)
+		if !ok {
+			fullBlock, fullBlockOk := fullNodeBackend.BlockByNumber(context.Background(), rpc.BlockNumber(currentBlock.(*cachedBlock).number-1))
+			if fullBlockOk != nil {
+				log.Error("Error getting block number "+strconv.FormatUint(currentBlock.(*cachedBlock).number-1, 10), "err", fullBlockOk)
+				return &tps{}
+			}
+			currentBlock = &cachedBlock{
+				number:     fullBlock.NumberU64(),
+				parentHash: fullBlock.ParentHash(),
+				txCount:    uint64(len(fullBlock.Transactions())),
+				time:       fullBlock.Time(),
+			}
+			s.blockLookupCache.Add(fullBlock.Hash(), currentBlock)
+		}
+	}
+
+	if currentBlock.(*cachedBlock).number == 0 && withinMinute {
+		delta := block.Time() - currentBlock.(*cachedBlock).time
+		return &tps{
+			TPS1m:                     totalTransactions1m / delta,
+			TPS1hr:                    totalTransactions1h / delta,
+			TotalNumberTransactions1h: totalTransactions1h,
+		}
+	} else if currentBlock.(*cachedBlock).number == 0 {
+		delta := block.Time() - currentBlock.(*cachedBlock).time
+		return &tps{
+			TPS1m:                     totalTransactions1m / 60,
+			TPS1hr:                    totalTransactions1h / delta,
+			TotalNumberTransactions1h: totalTransactions1h,
+		}
+	}
+
+	return &tps{
+		TPS1m:                     totalTransactions1m / 60,
+		TPS1hr:                    totalTransactions1h / 3600,
+		TotalNumberTransactions1h: totalTransactions1h,
+	}
 }
 
 func (s *Service) assembleBlockDetailStats(block *types.Block) *blockDetailStats {
@@ -1215,6 +1283,9 @@ func (s *Service) assembleBlockTransactionStats(block *types.Block) *blockTransa
 	}
 	header := block.Header()
 	tps := s.calculateTPS(block)
+	if tps == nil {
+		return nil
+	}
 
 	// Assemble and return the block stats
 	return &blockTransactionStats{
