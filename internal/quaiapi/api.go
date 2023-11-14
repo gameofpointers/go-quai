@@ -833,6 +833,7 @@ type ExecutionResult struct {
 	Failed      bool           `json:"failed"`
 	ReturnValue string         `json:"returnValue"`
 	StructLogs  []StructLogRes `json:"structLogs"`
+	Err         string         `json:"err"`
 }
 
 // StructLogRes stores a structured log emitted by the EVM while replaying a
