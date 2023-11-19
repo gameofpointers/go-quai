@@ -381,18 +381,12 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
 
+	// Sleep for 1 sec before broadcasting to all peers
+	time.Sleep(1 * time.Second)
+
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
-		// Send the block to a subset of our peers
-		var peerThreshold int
-		sqrtNumPeers := int(math.Sqrt(float64(len(peers))))
-		if sqrtNumPeers < minPeerSend {
-			peerThreshold = len(peers)
-		} else {
-			peerThreshold = sqrtNumPeers
-		}
-		transfer := peers[:peerThreshold]
-		for _, peer := range transfer {
+		for _, peer := range peers {
 			currentHead := h.core.CurrentHeader()
 			entropy := big.NewInt(0)
 			if currentHead != nil {
@@ -400,15 +394,8 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 			}
 			peer.AsyncSendNewBlock(block, entropy)
 		}
-		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
+		log.Info("Propagated block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
-	}
-	// Otherwise if the block is indeed in out own chain, announce it
-	if h.core.HasBlock(hash, block.NumberU64()) {
-		for _, peer := range peers {
-			peer.AsyncSendNewBlockHash(block)
-		}
-		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}
 }
 

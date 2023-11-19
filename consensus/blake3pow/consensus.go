@@ -17,7 +17,6 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/trie"
-	"modernc.org/mathutil"
 )
 
 // Blake3pow proof-of-work protocol constants.
