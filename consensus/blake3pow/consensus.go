@@ -340,41 +340,7 @@ func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, pa
 		return nil
 	}
 
-	///// Algorithm:
-	///// e = (DurationLimit - (parent.Time() - parentOfParent.Time())) * parent.Difficulty()
-	///// k = Floor(BinaryLog(parent.Difficulty()))/(DurationLimit*DifficultyAdjustmentFactor*AdjustmentPeriod)
-	///// Difficulty = Max(parent.Difficulty() + e * k, MinimumDifficulty)
-
-	if parent.Hash() == chain.Config().GenesisHash {
-		return parent.Difficulty()
-	}
-
-	parentOfParent := chain.GetHeaderByHash(parent.ParentHash())
-	if parentOfParent == nil || parentOfParent.Hash() == chain.Config().GenesisHash {
-		return parent.Difficulty()
-	}
-
-	time := parent.Time()
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).SetUint64(parentOfParent.Time())
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	x.Sub(bigTime, bigParentTime)
-	x.Sub(blake3pow.config.DurationLimit, x)
-	x.Mul(x, parent.Difficulty())
-	k, _ := mathutil.BinaryLog(new(big.Int).Set(parent.Difficulty()), 64)
-	x.Mul(x, big.NewInt(int64(k)))
-	x.Div(x, blake3pow.config.DurationLimit)
-	x.Div(x, big.NewInt(params.DifficultyAdjustmentFactor))
-	x.Div(x, params.DifficultyAdjustmentPeriod)
-	x.Add(x, parent.Difficulty())
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(blake3pow.config.MinDifficulty) < 0 {
-		x.Set(blake3pow.config.MinDifficulty)
-	}
-	return x
+	return parent.Difficulty()
 }
 
 func (blake3pow *Blake3pow) IsDomCoincident(chain consensus.ChainHeaderReader, header *types.Header) bool {
