@@ -168,10 +168,8 @@ var ColosseumBootnodes = map[string][]string{
 
 // GardenBootnodes are the enode URLs of the P2P bootstrap nodes running on the
 // Garden test network.
-var GardenBootnodes = []string{
-	"enode://f353567741755a4b35afb4641618b34c7e3c1666b49c9e519e8336c124ba8c2c556f00e9edcd87599994e9674ebdea3503a5ff1948a257c1540fe9f8c0fedf62@35.231.138.241", // us-east1-b
-	"enode://aa3d4daa8ea958c8a4fe3c56a7c5c0509754eec9b2e4eb45ac5fe9eb16bea442da0b50a0ac09e5fdf7711eb6b64df76dcd22e48d69f2f938d19fc60b9a8fd579@34.118.24.175",  // europe-central2-a
-	"enode://13ed279b8013b61ef41466d4f07679fe17c407af4f6ae09b34042c72635eef314e9020f732a96a739abaa88f51108b76698f6b7335397be99418c371e5c3bcce@34.68.104.77",   // us-central1-a
+var GardenBootnodes = map[string][]string{
+	"cyprus1": {"enode://a033e2920c07a50e0f127defdab6d22345d028d0beed7f5d3f0dac1d6a0c2b263d38e8739ab122271bd2bacd64ab19617e8c2b7e5f2b99dc20fe37e4aa0c5c42@34.66.126.45", "enode://8938ed378b5cd5b7c94e96abe0df451403caa604f26fca22d0195ec30e1410a427e10686b6212e7f324b0bf20f7a8fef82d9ce9a40da3947b06d39d2911d7ef5@34.71.126.0"},
 }
 
 // OrchardBootnodes are the enode URLs of the P2P bootstrap nodes running on the
