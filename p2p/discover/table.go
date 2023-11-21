@@ -39,8 +39,8 @@ import (
 )
 
 const (
-	alpha           = 6  // Kademlia concurrency factor
-	bucketSize      = 16 // Kademlia bucket size
+	alpha           = 12 // Kademlia concurrency factor
+	bucketSize      = 24 // Kademlia bucket size
 	maxReplacements = 10 // Size of per-bucket replacement list
 
 	// We keep buckets for the upper 1/15 of distances because
@@ -50,8 +50,8 @@ const (
 	bucketMinDistance = hashBits - nBuckets // Log distance of closest bucket
 
 	// IP address limits.
-	bucketIPLimit, bucketSubnet = 24, 24 // at most 2 addresses from the same /24
-	tableIPLimit, tableSubnet   = 24, 24
+	bucketIPLimit, bucketSubnet = 100, 100 // at most 2 addresses from the same /24
+	tableIPLimit, tableSubnet   = 100, 100
 
 	refreshInterval    = 30 * time.Minute
 	revalidateInterval = 10 * time.Second
