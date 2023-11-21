@@ -30,7 +30,7 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
-	QUAI1 = 106
+	QUAI1 = 107
 )
 
 // ProtocolName is the official short name of the `quai` protocol used during
