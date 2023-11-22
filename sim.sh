@@ -4,7 +4,7 @@
 THRESHOLD=100
 NUMBER_OF_SIMULATIONS=100
 NUMBER_OF_MACHINES_RUNNING=37
-EXPECTED_PEERS="0x22"
+EXPECTED_PEERS="0x20"
 SLEEP_BEFORE_MINING=60
 TIME_BETWEEN_TESTS=100
 CHECK_INTERVAL=0.2
@@ -63,7 +63,6 @@ cp -r quai ~/.quai
 
 # start go-quai
 make run
-sleep $SLEEP_BEFORE_MINING
 
 # Retry until we get enough peers before starting to mine
 while true; do
@@ -85,6 +84,9 @@ while true; do
     fi
 done
 
+
+sleep $SLEEP_BEFORE_MINING
+
 cd $MINER_PATH && make run-mine-background region=0 zone=0
 cd $GOQUAI_PATH
 
@@ -99,6 +101,7 @@ for i in {1..$NUMBER_OF_SIMULATIONS}; do
             # Call the APIs and store the block number
             BLOCK_NUMBER=$(getBlockNumber)
 	        TOTAL_ENTROPY=$(getBlockByNumber $BLOCK_NUMBER)
+	        K6BLOCK=$(getBlockByNumber $BLOCK_NUMBER-6)
 
             BLOCK_ONE="0x1"
 	        FIRST_BLOCK_TIME=$(($(getBlockTime $BLOCK_ONE)))
