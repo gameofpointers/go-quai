@@ -2,12 +2,13 @@
 
 # Set the threshold for the line count
 THRESHOLD=100
+MINING_START_THRESHOLD=1
 NUMBER_OF_SIMULATIONS=100
 NUMBER_OF_MACHINES_RUNNING=37
 EXPECTED_PEERS="0x20"
-SLEEP_BEFORE_MINING=60
-TIME_BETWEEN_TESTS=100
-CHECK_INTERVAL=0.2
+SLEEP_BEFORE_MINING=30
+TIME_BETWEEN_TESTS=30
+CHECK_INTERVAL=0.1
 GOQUAI_PATH=~/go-quai
 MINER_PATH=~/quai-cpu-miner
 
@@ -64,27 +65,6 @@ cp -r quai ~/.quai
 # start go-quai
 make run
 
-# Retry until we get enough peers before starting to mine
-while true; do
-    # Send the request and capture the response
-    response=$(curl --silent --location 'http://localhost:8610/' \
-    --header 'Content-Type: application/json' \
-    --data '{
-      "jsonrpc": "2.0",
-      "method": "net_peerCount",
-      "params": [],
-      "id": 1
-    }' | jq -r '.result')
-
-    if [[ $(("$response")) -ge $(($EXPECTED_PEERS)) ]]; then
-        echo "Got expected number of peers"
-        break
-    else
-        sleep 1 # Wait for 1 second before retrying
-    fi
-done
-
-
 sleep $SLEEP_BEFORE_MINING
 
 cd $MINER_PATH && make run-mine-background region=0 zone=0
@@ -119,6 +99,9 @@ for i in {1..$NUMBER_OF_SIMULATIONS}; do
 	        # stop the miner
 	        cd $MINER_PATH && make stop
 	        echo "Miner stopped"
+
+	        sleep 5
+
 	        # stop the node
 	        echo "Stop the Node"
 	        cd $GOQUAI_PATH 
@@ -137,32 +120,9 @@ for i in {1..$NUMBER_OF_SIMULATIONS}; do
             sleep $TIME_BETWEEN_TESTS
 
 	        echo "Start Node"
-                make run
+            make run
 
-	        echo "Sleep for $SLEEP_BEFORE_MINING before starting the miner"
-	        # Take a break before mining
             sleep $SLEEP_BEFORE_MINING
-
-            # Retry until we get enough peers before starting to mine
-            while true; do
-                # Send the request and capture the response
-                response=$(curl --silent --location 'http://localhost:8610/' \
-                --header 'Content-Type: application/json' \
-                --data '{
-                  "jsonrpc": "2.0",
-                  "method": "net_peerCount",
-                  "params": [],
-                  "id": 1
-                }' | jq -r '.result')
-
-                # Check if the response is "12"
-                if [[ $(("$response")) -ge $(($EXPECTED_PEERS)) ]]; then
-                    echo "Got expected number of peers"
-                    break
-                else
-                    sleep 1 # Wait for 1 second before retrying
-                fi
-            done
 
 	        echo "Starting the Miner on 0-0"
 	        cd $MINER_PATH && make run-mine-background region=0 zone=0
