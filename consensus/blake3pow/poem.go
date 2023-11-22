@@ -21,8 +21,19 @@ func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, erro
 	}
 
 	// Get entropy reduction of this header
-	intrinsicS := blake3pow.IntrinsicLogS(header.Hash())
+	intrinsicS := blake3pow.IntrinsicExtraLogS(header.Hash(), header.Difficulty())
 	return intrinsicS, common.ZONE_CTX, nil
+}
+
+// IntrinsicLogS returns the logarithm of the intrinsic entropy reduction of a PoW hash
+func (blake3pow *Blake3pow) IntrinsicExtraLogS(powHash common.Hash, difficulty *big.Int) *big.Int {
+	x := new(big.Int).SetBytes(powHash.Bytes())
+	target := new(big.Int).Div(big2e256, difficulty)
+	d := new(big.Int).Div(target, x)
+	c, m := mathutil.BinaryLog(d, mantBits)
+	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
+	bigBits = new(big.Int).Add(bigBits, m)
+	return bigBits
 }
 
 // IntrinsicLogS returns the logarithm of the intrinsic entropy reduction of a PoW hash
