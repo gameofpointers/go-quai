@@ -485,6 +485,7 @@ func (w *worker) GeneratePendingHeader(block *types.Block, fill bool) (*types.He
 	}
 	coinbase = w.coinbase // Use the preset address as the fee recipient
 
+	timestamp = int64(time.Now().UnixMilli())
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,

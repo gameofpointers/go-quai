@@ -236,12 +236,6 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 	if uint64(len(header.Extra())) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra()), params.MaximumExtraDataSize)
 	}
-	// Verify the header's timestamp
-	if !uncle {
-		if header.Time() > uint64(unixNow+allowedFutureBlockTimeSeconds) {
-			return consensus.ErrFutureBlock
-		}
-	}
 	if header.Time() < parent.Time() {
 		return errOlderBlockTime
 	}

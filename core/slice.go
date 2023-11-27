@@ -345,7 +345,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		"root", block.Root(),
 		"order", order,
 		"location", block.Header().Location(),
-		"elapsed", common.PrettyDuration(time.Since(start)))
+		"elapsed", common.PrettyDuration(time.Since(start)), "time", time.Now().UnixMilli())
 
 	if nodeCtx == common.ZONE_CTX {
 		if updateDom {

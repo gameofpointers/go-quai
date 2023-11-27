@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Set the threshold for the line count
-THRESHOLD=100
+THRESHOLD=101
 MINING_START_THRESHOLD=1
 NUMBER_OF_SIMULATIONS=100
 NUMBER_OF_MACHINES_RUNNING=37
-EXPECTED_PEERS="0x20"
-SLEEP_BEFORE_MINING=30
+SLEEP_BEFORE_MINING=20
 TIME_BETWEEN_TESTS=30
 CHECK_INTERVAL=0.1
 GOQUAI_PATH=~/go-quai
@@ -25,7 +24,6 @@ getBlockNumber() {
     echo $RESPONSE | jq -r '.result'
 }
 
-# Function to call the second API with the block number from the first API
 getBlockByNumber() {
     BLOCK_NUMBER=$1
     RESPONSE=$(curl -s --location 'http://localhost:8610/' \
@@ -36,23 +34,9 @@ getBlockByNumber() {
         \"params\": [\"$BLOCK_NUMBER\", true],
         \"id\": 1
 	}")
-    # echo $RESPONSE | grep -o '"totalEntropy":.*' | awk -F'"' '{print $4}'
-    echo $RESPONSE | jq -r '.result.totalEntropy'
+    echo $RESPONSE | jq -r '.result'
 }
 
-getBlockTime() {
-    BLOCK_NUMBER=$1
-    RESPONSE=$(curl -s --location 'http://localhost:8610/' \
-    --header 'Content-Type: application/json' \
-    --data "{
-        \"jsonrpc\": \"2.0\",
-        \"method\": \"quai_getBlockByNumber\",
-        \"params\": [\"$BLOCK_NUMBER\", true],
-        \"id\": 1
-	}")
-    # echo $RESPONSE | grep -o '"totalEntropy":.*' | awk -F'"' '{print $4}'
-    echo $RESPONSE | jq -r '.result.timestamp'
-}
 # Clean the database and nodelogs before starting the Simulation
 # clean the db and nodelogs
 echo "Removing the Database and the nodelogs"
@@ -70,28 +54,30 @@ sleep $SLEEP_BEFORE_MINING
 cd $MINER_PATH && make run-mine-background region=0 zone=0
 cd $GOQUAI_PATH
 
+start=1
+end=$NUMBER_OF_SIMULATIONS
 # Main loop to run the experiment 100 times
-for i in {1..$NUMBER_OF_SIMULATIONS}; do
+for i in $(seq $start $end); do
+    > simulations/$i.csv
     while true; do
-        # Count the number of "Appended" lines in the log file
-        COUNT=$(cat nodelogs/zone-0-0.log | grep Appended | wc -l)
-
+        blockNumber=$(($(getBlockNumber)))
         # Check if the count has reached the threshold
-        if [ "$COUNT" -ge "$THRESHOLD" ]; then
+        if [ "$blockNumber" -ge "$THRESHOLD" ]; then
             # Call the APIs and store the block number
-            BLOCK_NUMBER=$(getBlockNumber)
-	        TOTAL_ENTROPY=$(getBlockByNumber $BLOCK_NUMBER)
-	        K6BLOCK=$(getBlockByNumber $BLOCK_NUMBER-6)
+            echo "Simulation, $i, Num of Nodes, $NUMBER_OF_MACHINES_RUNNING" >> simulations/$i.csv
+	        echo "Block Height, Block Hash, Time Stamp, Received Time Stamp, Extra Bits"  >> simulations/$i.csv
 
-            BLOCK_ONE="0x1"
-	        FIRST_BLOCK_TIME=$(($(getBlockTime $BLOCK_ONE)))
-	        LAST_BLOCK_TIME=$(($(getBlockTime $BLOCK_NUMBER)))
-
-	        g=$(echo "scale=2; ($LAST_BLOCK_TIME - $FIRST_BLOCK_TIME) / $THRESHOLD" | bc)
-
-	        echo "Simulation Iteration :$i, Block Height: $BLOCK_NUMBER, Total Entropy: $TOTAL_ENTROPY, G: $g, Num of Nodes: $NUMBER_OF_MACHINES_RUNNING, Delta: 100ms" 
-
-	        # TODO: need to store this information
+            start=1
+            end=$THRESHOLD
+	        for j in $(seq $start $end); do 
+                index_hex=$(printf "0x%x" $j)
+                block_j=$(getBlockByNumber "$index_hex")
+                timestamp=$(($(echo $block_j | jq -r '.timestamp')))
+                hash=$(echo $block_j | jq -r '.hash')
+                entropy=$(echo $block_j | jq -r '.extraBits')
+                receivedtime=$(cat nodelogs/zone-0-0.log | grep 'Appended' | grep $hash | awk '{print $21}' | awk -F= '{print $2}')
+                echo $j, $hash, $timestamp, $receivedtime, $entropy >> simulations/$i.csv
+	        done
 
             ###### Stop, clear data, and restart the process #####
 	        
@@ -129,6 +115,7 @@ for i in {1..$NUMBER_OF_SIMULATIONS}; do
 	        
 	        echo "Going back to go-quai"
 	        cd $GOQUAI_PATH
+	        break
         else
             sleep $CHECK_INTERVAL
         fi

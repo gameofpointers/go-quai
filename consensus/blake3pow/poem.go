@@ -28,12 +28,16 @@ func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, erro
 // IntrinsicLogS returns the logarithm of the intrinsic entropy reduction of a PoW hash
 func (blake3pow *Blake3pow) IntrinsicExtraLogS(powHash common.Hash, difficulty *big.Int) *big.Int {
 	x := new(big.Int).SetBytes(powHash.Bytes())
-	target := new(big.Int).Div(big2e256, difficulty)
-	d := new(big.Int).Div(target, x)
-	c, m := mathutil.BinaryLog(d, mantBits)
-	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
-	bigBits = new(big.Int).Add(bigBits, m)
-	return bigBits
+	dx, dm := mathutil.BinaryLog(x, mantBits)
+	bigBitsx := new(big.Int).Mul(big.NewInt(int64(dx)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
+	bigBitsx = new(big.Int).Add(bigBitsx, dm)
+
+	t := new(big.Int).Div(big2e256, difficulty)
+	tx, tm := mathutil.BinaryLog(t, mantBits)
+	bigBitst := new(big.Int).Mul(big.NewInt(int64(tx)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
+	bigBitst = new(big.Int).Add(bigBitst, tm)
+
+	return new(big.Int).Sub(bigBitst, bigBitsx)
 }
 
 // IntrinsicLogS returns the logarithm of the intrinsic entropy reduction of a PoW hash
