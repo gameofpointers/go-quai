@@ -136,6 +136,7 @@ search:
 			break search
 
 		default:
+			start := time.Now()
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			attempts++
 			if (attempts % (1 << 15)) == 0 {
@@ -159,6 +160,10 @@ search:
 				break search
 			}
 			nonce++
+			stop := time.Since(start)
+			if stop < time.Millisecond {
+				time.Sleep(time.Millisecond - stop)
+			}
 		}
 	}
 }
