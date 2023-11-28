@@ -17,7 +17,6 @@
 package common
 
 import (
-	"fmt"
 	"math/big"
 	"modernc.org/mathutil"
 )
@@ -35,7 +34,6 @@ var (
 )
 
 func BigBitsToBits(original *big.Int) *big.Float {
-	fmt.Println("original", original)
 	e2e64 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(64), nil)
 	return big.NewFloat(0).Quo(new(big.Float).SetInt(original), new(big.Float).SetInt(e2e64))
 }
