@@ -139,7 +139,7 @@ search:
 			start := time.Now()
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			attempts++
-			if (attempts % (1 << 15)) == 0 {
+			if (attempts % (1 << 10)) == 0 {
 				blake3pow.hashrate.Mark(attempts)
 				attempts = 0
 			}
