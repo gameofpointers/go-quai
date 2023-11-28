@@ -67,6 +67,18 @@ for i in $(seq $start $end); do
             echo "Simulation, $i, Num of Nodes, $NUMBER_OF_MACHINES_RUNNING" >> simulations/$i.csv
 	        echo "Block Height, Block Hash, Time Stamp, Received Time Stamp, Extra Bits"  >> simulations/$i.csv
 
+
+            ###### Stop, clear data, and restart the process #####
+	        
+	        echo "Stop the Miner"
+	        # stop the miner
+	        cd $MINER_PATH && make stop
+	        echo "Miner stopped"
+
+	        # stop the node
+	        echo "Stop the Node"
+	        cd $GOQUAI_PATH 
+
             start=1
             end=$THRESHOLD
 	        for j in $(seq $start $end); do 
@@ -79,18 +91,7 @@ for i in $(seq $start $end); do
                 echo $j, $hash, $timestamp, $receivedtime, $entropy >> simulations/$i.csv
 	        done
 
-            ###### Stop, clear data, and restart the process #####
-	        
-	        echo "Stop the Miner"
-	        # stop the miner
-	        cd $MINER_PATH && make stop
-	        echo "Miner stopped"
-
 	        sleep 5
-
-	        # stop the node
-	        echo "Stop the Node"
-	        cd $GOQUAI_PATH 
 	        make stop
 	        echo "Node stopped"
 
