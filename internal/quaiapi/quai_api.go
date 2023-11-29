@@ -525,7 +525,7 @@ func (s *PublicBlockChainQuaiAPI) rpcMarshalBlock(ctx context.Context, b *types.
 	fields["order"] = order
 	fields["totalEntropy"] = (*hexutil.Big)(s.b.TotalLogS(b.Header()))
 	intrinsicExtraS, _, _ := s.b.CalcOrder(b.Header())
-	fields["extraBits"] = fmt.Sprintf("%s", common.BigBitsToBits(intrinsicExtraS).Text('f', 10))
+	fields["extraBits"] = (*hexutil.Big)(intrinsicExtraS)
 	fmt.Println("extra bits", fields["extraBits"])
 	return fields, err
 }

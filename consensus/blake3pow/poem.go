@@ -22,7 +22,7 @@ func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, erro
 
 	// Get entropy reduction of this header
 	// intrinsicS := blake3pow.IntrinsicExtraLogS(header.Hash(), header.Difficulty())
-	intrinsicS := blake3pow.IntrinsicLogS(header.Hash())
+	intrinsicS := header.Difficulty()
 	return intrinsicS, common.ZONE_CTX, nil
 }
 
