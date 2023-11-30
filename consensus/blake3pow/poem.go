@@ -38,7 +38,9 @@ func (blake3pow *Blake3pow) IntrinsicExtraLogS(powHash common.Hash, difficulty *
 	bigBitst := new(big.Int).Mul(big.NewInt(int64(tx)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
 	bigBitst = new(big.Int).Add(bigBitst, tm)
 
-	return new(big.Int).Sub(bigBitst, bigBitsx)
+	bigBitsc := new(big.Int).Mul(big.NewInt(int64(6)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
+	last := new(big.Int).Sub(bigBitst, bigBitsx)
+	return new(big.Int).Add(last, bigBitsc)
 }
 
 // IntrinsicLogS returns the logarithm of the intrinsic entropy reduction of a PoW hash
