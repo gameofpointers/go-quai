@@ -679,7 +679,7 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.Header, domTerminus commo
 // POEM compares externS to the currentHead S and returns true if externS is greater
 func (sl *Slice) poem(externS *big.Int, currentS *big.Int) bool {
 	log.Debug("POEM:", "currentS:", common.BigBitsToBits(currentS), "externS:", common.BigBitsToBits(externS))
-	reorg := currentS.Cmp(externS) <= 0
+	reorg := currentS.Cmp(externS) < 0
 	return reorg
 }
 
