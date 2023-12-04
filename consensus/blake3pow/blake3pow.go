@@ -85,6 +85,7 @@ func New(config Config, notify []string, noverify bool) *Blake3pow {
 		config:   config,
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeterForced(),
+		threads:  1,
 	}
 	if config.PowMode == ModeShared {
 		blake3pow.shared = sharedBlake3pow
