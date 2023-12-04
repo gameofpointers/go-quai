@@ -123,6 +123,7 @@ func (blake3pow *Blake3pow) mine(header *types.Header, id int, seed uint64, abor
 		attempts  = int64(0)
 		nonce     = seed
 		powBuffer = new(big.Int)
+		start     = time.Now()
 	)
 	logger := log.Log
 	logger.Trace("Started blake3pow search for new nonces", "seed", seed)
@@ -136,12 +137,16 @@ search:
 			break search
 
 		default:
-			start := time.Now()
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			attempts++
 			if (attempts % (1 << 10)) == 0 {
 				blake3pow.hashrate.Mark(attempts)
 				attempts = 0
+				stop := time.Since(start)
+				if stop < time.Second {
+					time.Sleep(time.Second - stop)
+				}
+				start = time.Now()
 			}
 			// Compute the PoW value of this nonce
 			header = types.CopyHeader(header)
@@ -160,10 +165,6 @@ search:
 				break search
 			}
 			nonce++
-			stop := time.Since(start)
-			if stop < time.Millisecond {
-				time.Sleep(time.Millisecond - stop)
-			}
 		}
 	}
 }
