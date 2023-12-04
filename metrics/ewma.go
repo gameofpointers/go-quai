@@ -23,7 +23,7 @@ func NewEWMA(alpha float64) EWMA {
 
 // NewEWMA1 constructs a new EWMA for a one-minute moving average.
 func NewEWMA1() EWMA {
-	return NewEWMA(1 - math.Exp(-5.0/60.0/1))
+	return NewEWMA(1 - math.Exp(-5.0*1000/3.0/1))
 }
 
 // NewEWMA5 constructs a new EWMA for a five-minute moving average.
