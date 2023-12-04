@@ -206,7 +206,7 @@ func (blake3pow *Blake3pow) SetThreads(threads int) {
 func (blake3pow *Blake3pow) Hashrate() float64 {
 	// Short circuit if we are run the blake3pow in normal/test mode.
 	if blake3pow.config.PowMode != ModeNormal && blake3pow.config.PowMode != ModeTest {
-		return blake3pow.hashrate.Rate1()
+		return blake3pow.hashrate.RateMean()
 	}
 	var res = make(chan uint64, 1)
 
@@ -214,11 +214,11 @@ func (blake3pow *Blake3pow) Hashrate() float64 {
 	case blake3pow.remote.fetchRateCh <- res:
 	case <-blake3pow.remote.exitCh:
 		// Return local hashrate only if blake3pow is stopped.
-		return blake3pow.hashrate.Rate1()
+		return blake3pow.hashrate.RateMean()
 	}
 
 	// Gather total submitted hash rate of remote sealers.
-	return blake3pow.hashrate.Rate1() + float64(<-res)
+	return blake3pow.hashrate.RateMean() + float64(<-res)
 }
 
 // SubmitHashrate can be used for remote miners to submit their hash rate.
