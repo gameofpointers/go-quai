@@ -23,7 +23,7 @@ func NewEWMA(alpha float64) EWMA {
 
 // NewEWMA1 constructs a new EWMA for a one-minute moving average.
 func NewEWMA1() EWMA {
-	return NewEWMA(1 - math.Exp(-5.0/60.0/1))
+	return NewEWMA(1)
 }
 
 // NewEWMA5 constructs a new EWMA for a five-minute moving average.
@@ -99,15 +99,10 @@ func (a *StandardEWMA) Snapshot() EWMA {
 func (a *StandardEWMA) Tick() {
 	count := atomic.LoadInt64(&a.uncounted)
 	atomic.AddInt64(&a.uncounted, -count)
-	instantRate := float64(count) / float64(5*time.Second)
+	instantRate := float64(count) / float64(time.Second)
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	if a.init {
-		a.rate += a.alpha * (instantRate - a.rate)
-	} else {
-		a.init = true
-		a.rate = instantRate
-	}
+	a.rate = instantRate
 }
 
 // Update adds n uncounted events.

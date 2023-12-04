@@ -131,13 +131,17 @@ search:
 		select {
 		case <-abort:
 			// Mining terminated, update stats and abort
-			logger.Trace("Blake3pow nonce search aborted", "attempts", nonce-seed)
 			blake3pow.hashrate.Mark(attempts)
+			logger.Trace("Blake3pow nonce search aborted", "attempts", nonce-seed)
 			break search
 
 		default:
+			attempts++
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
-			blake3pow.hashrate.Mark(1)
+			if (attempts % (1 << 8)) == 0 {
+				blake3pow.hashrate.Mark(attempts)
+				attempts = 0
+			}
 			// Compute the PoW value of this nonce
 			header = types.CopyHeader(header)
 			header.SetNonce(types.EncodeNonce(nonce))
@@ -158,7 +162,7 @@ search:
 
 			rand := rand.Float64()
 			if rand < sleep {
-				time.Sleep(time.Millisecond)
+				time.Sleep(2 * time.Millisecond)
 			}
 		}
 	}
