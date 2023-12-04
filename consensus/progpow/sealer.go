@@ -32,7 +32,7 @@ var (
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the header's difficulty requirements.
-func (progpow *Progpow) Seal(header *types.Header, results chan<- *types.Header, stop <-chan struct{}) error {
+func (progpow *Progpow) Seal(header *types.Header, results chan<- *types.Header, sleep float64, stop <-chan struct{}) error {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if progpow.config.PowMode == ModeFake || progpow.config.PowMode == ModeFullFake {
 		header.SetNonce(types.BlockNonce{})
@@ -45,7 +45,7 @@ func (progpow *Progpow) Seal(header *types.Header, results chan<- *types.Header,
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if progpow.shared != nil {
-		return progpow.shared.Seal(header, results, stop)
+		return progpow.shared.Seal(header, results, sleep, stop)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -100,7 +100,7 @@ func (progpow *Progpow) Seal(header *types.Header, results chan<- *types.Header,
 		case <-progpow.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := progpow.Seal(header, results, stop); err != nil {
+			if err := progpow.Seal(header, results, sleep, stop); err != nil {
 				progpow.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}

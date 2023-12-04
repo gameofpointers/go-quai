@@ -33,7 +33,7 @@ var (
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the header's difficulty requirements.
-func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Header, stop <-chan struct{}) error {
+func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Header, sleep float64, stop <-chan struct{}) error {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if blake3pow.config.PowMode == ModeFake || blake3pow.config.PowMode == ModeFullFake {
 		header.SetNonce(types.BlockNonce{})
@@ -46,7 +46,7 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if blake3pow.shared != nil {
-		return blake3pow.shared.Seal(header, results, stop)
+		return blake3pow.shared.Seal(header, results, sleep, stop)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -80,7 +80,7 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			blake3pow.mine(header, id, nonce, abort, locals)
+			blake3pow.mine(header, id, nonce, sleep, abort, locals)
 		}(i, uint64(blake3pow.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
@@ -101,7 +101,7 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 		case <-blake3pow.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := blake3pow.Seal(header, results, stop); err != nil {
+			if err := blake3pow.Seal(header, results, sleep, stop); err != nil {
 				blake3pow.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}
@@ -113,7 +113,7 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final header difficulty.
-func (blake3pow *Blake3pow) mine(header *types.Header, id int, seed uint64, abort chan struct{}, found chan *types.Header) {
+func (blake3pow *Blake3pow) mine(header *types.Header, id int, seed uint64, sleep float64, abort chan struct{}, found chan *types.Header) {
 	// Extract some data from the header
 	var (
 		target = new(big.Int).Div(big2e256, header.Difficulty())
@@ -155,6 +155,11 @@ search:
 				break search
 			}
 			nonce++
+
+			rand := rand.Float64()
+			if rand < sleep {
+				time.Sleep(time.Millisecond)
+			}
 		}
 	}
 }
