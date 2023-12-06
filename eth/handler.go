@@ -381,7 +381,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
 
-	// Sleep for 300 ms before broadcasting to all peers
+	// Sleep for 900 ms before broadcasting to all peers
 	time.Sleep(150 * time.Millisecond)
 
 	// If propagation is requested, send to a subset of the peer
