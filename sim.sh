@@ -123,3 +123,11 @@ for i in $(seq $start $end); do
     done
 done
 
+cd $MINER_PATH
+make stop
+
+cd $GOQUAI_PATH
+make stop
+
+pkill -f ./sim.sh
+
