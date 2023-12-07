@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dominant-strategies/go-quai/cmd/options"
+	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common/constants"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,7 +23,7 @@ func testXDGConfigLoading(t *testing.T) {
 	defer os.RemoveAll(mockConfigPath)
 
 	// write LOG_LEVEL config to mock config.yaml file
-	_, err := tempFile.WriteString(options.LOG_LEVEL + " : " + "debug\n")
+	_, err := tempFile.WriteString(utils.LogLevelFlag.Name + " : " + "debug\n")
 	require.NoError(t, err)
 
 	// Clear viper instance to simulate a fresh start
@@ -34,7 +34,7 @@ func testXDGConfigLoading(t *testing.T) {
 	InitConfig()
 
 	// Assert log level is set to "debug" as per the mock config file
-	assert.Equal(t, "debug", viper.GetString(options.LOG_LEVEL))
+	assert.Equal(t, "debug", viper.GetString(utils.LogLevelFlag.Name))
 }
 
 // Verifies that the config file is saved or updated with the current config parameters.
@@ -45,7 +45,7 @@ func TestUpdateConfigFile(t *testing.T) {
 	defer tempFile.Close()
 	defer os.RemoveAll(mockConfigPath)
 	// write LOG_LEVEL config to mock config.yaml file
-	_, err := tempFile.WriteString(options.LOG_LEVEL + " : " + "debug\n")
+	_, err := tempFile.WriteString(utils.LogLevelFlag.Name + " : " + "debug\n")
 	require.NoError(t, err)
 	// Clear viper instance to simulate a fresh start
 	viper.Reset()
@@ -64,7 +64,7 @@ func TestUpdateConfigFile(t *testing.T) {
 	// Load config from mock file into viper and assert that the new config parameters were saved
 	err = viper.ReadInConfig()
 	require.NoError(t, err)
-	assert.Equal(t, "8080", viper.GetString(options.PORT))
+	assert.Equal(t, "8080", viper.GetString(utils.P2PPortFlag.Name))
 	// Assert a .bak config file was created
 	backupFile, err := os.Stat(mockConfigPath + constants.CONFIG_FILE_NAME + ".bak")
 	assert.False(t, os.IsNotExist(err))
@@ -84,7 +84,7 @@ func testEnvironmentVariableConfigLoading(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert log level is set to "error" from the environment variable
-	assert.Equal(t, "error", viper.GetString(options.LOG_LEVEL))
+	assert.Equal(t, "error", viper.GetString(utils.LogLevelFlag.Name))
 }
 
 // TestCobraFlagConfigLoading tests the loading of the config file from the XDG config home,
@@ -94,25 +94,25 @@ func TestCobraFlagConfigLoading(t *testing.T) {
 	// Load XDG config
 	testXDGConfigLoading(t)
 	// Assert log level is set to "debug" from the mock config file
-	assert.Equal(t, "debug", viper.GetString(options.LOG_LEVEL))
+	assert.Equal(t, "debug", viper.GetString(utils.LogLevelFlag.Name))
 
 	// Load environment variable config
 	testEnvironmentVariableConfigLoading(t)
 
 	// Assert log level is set to "error" from the environment variable
-	assert.Equal(t, "error", viper.GetString(options.LOG_LEVEL))
+	assert.Equal(t, "error", viper.GetString(utils.LogLevelFlag.Name))
 
 	// Simulate a Cobra flag being set
 	rootCmd := &cobra.Command{}
-	rootCmd.PersistentFlags().StringP(options.LOG_LEVEL, "l", "warn", "log level (trace, debug, info, warn, error, fatal, panic")
+	rootCmd.PersistentFlags().StringP(utils.LogLevelFlag.Name, "l", "warn", "log level (trace, debug, info, warn, error, fatal, panic")
 
 	// Set cmd flag to override config file
-	err := rootCmd.PersistentFlags().Set(options.LOG_LEVEL, "trace")
+	err := rootCmd.PersistentFlags().Set(utils.LogLevelFlag.Name, "trace")
 	require.NoError(t, err)
 	viper.BindPFlags(rootCmd.PersistentFlags())
 
 	// assert log level is set to "trace" from the cobra flag
-	assert.Equal(t, "trace", viper.GetString(options.LOG_LEVEL))
+	assert.Equal(t, "trace", viper.GetString(utils.LogLevelFlag.Name))
 
 	// Clear environment variable
 	err = os.Unsetenv("GO_QUAI_LOG_LEVEL")

@@ -3,13 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
-	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/dominant-strategies/go-quai/cmd/options"
+	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/constants"
 	"github.com/dominant-strategies/go-quai/log"
@@ -29,26 +27,28 @@ func Execute() error {
 
 func init() {
 	// Location for default config directory
-	defaultConfigDir := xdg.ConfigHome + "/" + constants.APP_NAME + "/"
-	rootCmd.PersistentFlags().StringP(options.CONFIG_DIR, "c", defaultConfigDir, "config directory"+generateEnvDoc(options.CONFIG_DIR))
+	rootCmd.PersistentFlags().StringP(utils.ConfigDirFlag.Name, utils.ConfigDirFlag.Abbreviation, utils.ConfigDirFlag.DefaultValue, utils.ConfigDirFlag.Usage)
+	viper.BindPFlag(utils.ConfigDirFlag.Name, rootCmd.PersistentFlags().Lookup(utils.ConfigDirFlag.Name))
 
 	// Location for default runtime data directory
-	defaultDataDir := xdg.DataHome + "/" + constants.APP_NAME + "/"
-	rootCmd.PersistentFlags().StringP(options.DATA_DIR, "d", defaultDataDir, "data directory"+generateEnvDoc(options.DATA_DIR))
+	rootCmd.PersistentFlags().StringP(utils.DataDirFlag.Name, utils.DataDirFlag.Abbreviation, utils.DataDirFlag.DefaultValue, utils.DataDirFlag.Usage)
+	viper.BindPFlag(utils.DataDirFlag.Name, rootCmd.PersistentFlags().Lookup(utils.DataDirFlag.Name))
 
 	// Log level to use (trace, debug, info, warn, error, fatal, panic)
-	rootCmd.PersistentFlags().StringP(options.LOG_LEVEL, "l", "info", "log level (trace, debug, info, warn, error, fatal, panic)"+generateEnvDoc(options.LOG_LEVEL))
+	rootCmd.PersistentFlags().StringP(utils.LogLevelFlag.Name, utils.LogLevelFlag.Abbreviation, utils.LogLevelFlag.DefaultValue, utils.LogLevelFlag.Usage)
+	viper.BindPFlag(utils.LogLevelFlag.Name, rootCmd.PersistentFlags().Lookup(utils.LogLevelFlag.Name))
 
 	// When set to true saves or updates the config file with the current config parameters
-	rootCmd.PersistentFlags().BoolP(options.SAVE_CONFIG_FILE, "S", false, "save/update config file with current config parameters"+generateEnvDoc(options.SAVE_CONFIG_FILE))
+	rootCmd.PersistentFlags().BoolP(utils.SaveConfigFlag.Name, utils.SaveConfigFlag.Abbreviation, utils.SaveConfigFlag.DefaultValue, utils.SaveConfigFlag.Usage)
+	viper.BindPFlag(utils.SaveConfigFlag.Name, rootCmd.PersistentFlags().Lookup(utils.SaveConfigFlag.Name))
 }
 
 func rootCmdPreRun(cmd *cobra.Command, args []string) error {
 	// set logger inmediately after parsing cobra flags
-	logLevel := cmd.Flag(options.LOG_LEVEL).Value.String()
+	logLevel := cmd.Flag(utils.LogLevelFlag.Name).Value.String()
 	log.ConfigureLogger(log.WithLevel(logLevel))
 	// set config path to read config file
-	configDir := cmd.Flag(options.CONFIG_DIR).Value.String()
+	configDir := cmd.Flag(utils.ConfigDirFlag.Name).Value.String()
 	viper.SetConfigFile(configDir + constants.CONFIG_FILE_NAME)
 	viper.SetConfigType("yaml")
 	// load config from file and environment variables
@@ -67,7 +67,7 @@ func rootCmdPreRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// save config file if SAVE_CONFIG_FILE flag is set to true
-	saveConfigFile := viper.GetBool(options.SAVE_CONFIG_FILE)
+	saveConfigFile := viper.GetBool(utils.SaveConfigFlag.Name)
 	if saveConfigFile {
 		err := common.SaveConfig()
 		if err != nil {
@@ -79,11 +79,4 @@ func rootCmdPreRun(cmd *cobra.Command, args []string) error {
 
 	log.Tracef("config options loaded: %+v", viper.AllSettings())
 	return nil
-}
-
-// helper function that given a cobra flag name, returns the corresponding
-// help legend for the equivalent environment variable
-func generateEnvDoc(flag string) string {
-	envVar := constants.ENV_PREFIX + "_" + strings.ReplaceAll(strings.ToUpper(flag), "-", "_")
-	return fmt.Sprintf(" [%s]", envVar)
 }

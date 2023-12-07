@@ -2,10 +2,11 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 
-	"github.com/dominant-strategies/go-quai/cmd/options"
+	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common/constants"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/spf13/viper"
@@ -30,6 +31,21 @@ func InitConfig() {
 			panic(err)
 		}
 	}
+
+	log.Info("Printing all flags and their values")
+	fmt.Println("IP Address:", viper.GetString("ipaddr"))
+	fmt.Println("P2P Port:", viper.GetString("port"))
+	fmt.Println("Bootnode:", viper.GetBool("bootnode"))
+	fmt.Println("Bootpeers:", viper.GetStringSlice("bootpeers"))
+	fmt.Println("Portmap:", viper.GetBool("portmap"))
+	fmt.Println("Private Key File:", viper.GetString("private.key"))
+	fmt.Println("Minimum Peers:", viper.GetString("min-peers"))
+	fmt.Println("Maximum Peers:", viper.GetString("max-peers"))
+	fmt.Println("Location:", viper.GetString("location"))
+	fmt.Println("Config Directory:", viper.GetString("config-dir"))
+	fmt.Println("Data Directory:", viper.GetString("data-dir"))
+	fmt.Println("Log Level:", viper.GetString("log-level"))
+	fmt.Println("Save Config:", viper.GetBool("save-config"))
 
 	log.Infof("Loading config from environment variables with prefix: '%s_'", constants.ENV_PREFIX)
 	viper.SetEnvPrefix(constants.ENV_PREFIX)
@@ -56,7 +72,7 @@ func SaveConfig() error {
 	} else if os.IsNotExist(err) {
 		// config file does not exist, create directory if it does not exist
 		if _, err := os.Stat(configFile); os.IsNotExist(err) {
-			configDir := viper.GetString(options.CONFIG_DIR)
+			configDir := viper.GetString(utils.ConfigDirFlag.Name)
 			if err := os.MkdirAll(configDir, 0755); err != nil {
 				return err
 			}

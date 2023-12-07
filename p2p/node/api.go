@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
-	"github.com/dominant-strategies/go-quai/cmd/options"
+	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/types"
 	"github.com/dominant-strategies/go-quai/log"
@@ -41,7 +41,7 @@ func (p *P2PNode) Start() error {
 	log.Infof("starting P2P node...")
 
 	// Is this node expected to have bootstrap peers to dial?
-	if !viper.GetBool(options.BOOTNODE) && len(p.bootpeers) == 0 {
+	if !viper.GetBool(utils.BootNodeFlag.Name) && len(p.bootpeers) == 0 {
 		log.Warnf("no bootpeers provided. Unable to join network.")
 	}
 
