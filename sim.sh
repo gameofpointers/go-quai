@@ -65,7 +65,7 @@ for i in $(seq $start $end); do
         if [ "$blockNumber" -ge "$THRESHOLD" ]; then
             # Call the APIs and store the block number
             echo "Simulation, $i, Num of Nodes, $NUMBER_OF_MACHINES_RUNNING" >> simulations/$i.csv
-	        echo "Block Height, Block Hash, Time Stamp, Received Time Stamp, Extra Bits"  >> simulations/$i.csv
+	        echo "Block Height, Block Hash, Time Stamp, Received Time Stamp, Append Time, Extra Bits"  >> simulations/$i.csv
 
 
             ###### Stop, clear data, and restart the process #####
@@ -88,7 +88,8 @@ for i in $(seq $start $end); do
                 hash=$(echo $block_j | jq -r '.hash')
                 entropy=$(echo $block_j | jq -r '.extraBits')
                 receivedtime=$(cat nodelogs/zone-0-0.log | grep 'Appended' | grep $hash | awk '{print $21}' | awk -F= '{print $2}')
-                echo $j, $hash, $timestamp, $receivedtime, $entropy >> simulations/$i.csv
+                appendtime=$(cat nodelogs/zone-0-0.log | grep 'Appended' | grep $hash | awk '{print $20}' | awk -F= '{print $2}')
+                echo $j, $hash, $timestamp, $receivedtime, $appendtime, $entropy >> simulations/$i.csv
 	        done
 
 	        sleep 5
