@@ -186,7 +186,7 @@ func (cs *chainSyncer) handlePeerEvent(peer *eth.Peer) bool {
 
 // loop runs in its own goroutine and launches the sync when necessary.
 func (cs *chainSyncer) loop() {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := cs.handler.core.NodeCtx()
 	defer cs.handler.wg.Done()
 
 	cs.handler.blockFetcher.Start()
@@ -269,7 +269,7 @@ func (cs *chainSyncer) startSync(op *chainSyncOp) {
 // doSync synchronizes the local blockchain with a remote peer.
 func (h *handler) doSync(op *chainSyncOp) error {
 	// Stopping the downloader here temporarily for Region and Zones
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := h.core.NodeCtx()
 	if nodeCtx == common.PRIME_CTX {
 		// Run the sync cycle, and disable fast sync if we're past the pivot block
 		err := h.downloader.Synchronise(op.peer.ID(), op.head, op.entropy, op.mode)
@@ -284,7 +284,7 @@ func (h *handler) doSync(op *chainSyncOp) error {
 			log.Warn("doSync: head is nil", "hash", h.core.CurrentHeader().Hash(), "number", h.core.CurrentHeader().NumberArray())
 			return nil
 		}
-		if head.NumberU64() > 0 {
+		if head.NumberU64(nodeCtx) > 0 {
 			// We've completed a sync cycle, notify all peers of new state. This path is
 			// essential in star-topology networks where a gateway node needs to notify
 			// all its out-of-date peers of the availability of a new block. This failure

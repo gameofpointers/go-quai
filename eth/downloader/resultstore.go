@@ -77,19 +77,19 @@ func (r *resultStore) SetThrottleThreshold(threshold uint64) uint64 {
 //	throttled - if true, the store is at capacity, this particular header is not prio now
 //	item      - the result to store data into
 //	err       - any error that occurred
-func (r *resultStore) AddFetch(header *types.Header) (stale, throttled bool, item *fetchResult, err error) {
+func (r *resultStore) AddFetch(header *types.Header, nodeCtx int) (stale, throttled bool, item *fetchResult, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	var index int
-	item, index, stale, throttled, err = r.getFetchResult(header.Number().Uint64())
+	item, index, stale, throttled, err = r.getFetchResult(header.NumberU64(nodeCtx), nodeCtx)
 	if err != nil || stale || throttled {
 		return stale, throttled, item, err
 	}
 	// If item is nil, it means that there was no entry for the given header number in the
 	// result store.
 	if item == nil {
-		item = newFetchResult(header)
+		item = newFetchResult(header, nodeCtx)
 		r.items[index] = item
 	}
 	return stale, throttled, item, err
@@ -99,18 +99,17 @@ func (r *resultStore) AddFetch(header *types.Header) (stale, throttled bool, ite
 // is true, that means the header has already been delivered 'upstream'. This method
 // does not bubble up the 'throttle' flag, since it's moot at the point in time when
 // the item is downloaded and ready for delivery
-func (r *resultStore) GetDeliverySlot(headerNumber uint64) (*fetchResult, bool, error) {
+func (r *resultStore) GetDeliverySlot(headerNumber uint64, nodeCtx int) (*fetchResult, bool, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	res, _, stale, _, err := r.getFetchResult(headerNumber)
+	res, _, stale, _, err := r.getFetchResult(headerNumber, nodeCtx)
 	return res, stale, err
 }
 
 // getFetchResult returns the fetchResult corresponding to the given item, and
 // the index where the result is stored.
-func (r *resultStore) getFetchResult(headerNumber uint64) (item *fetchResult, index int, stale, throttle bool, err error) {
-	nodeCtx := common.NodeLocation.Context()
+func (r *resultStore) getFetchResult(headerNumber uint64, nodeCtx int) (item *fetchResult, index int, stale, throttle bool, err error) {
 	if nodeCtx != common.PRIME_CTX {
 		index = int(int64(headerNumber)-int64(r.resultOffset)) - 1
 	} else {

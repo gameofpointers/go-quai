@@ -59,5 +59,5 @@ func (eth *Quai) startEthEntryUpdate(ln *enode.LocalNode) {
 
 func (eth *Quai) currentEthEntry() *ethEntry {
 	return &ethEntry{ForkID: forkid.NewID(eth.core.Config(), eth.core.Genesis().Hash(),
-		eth.core.CurrentHeader().Number().Uint64())}
+		eth.core.CurrentHeader().NumberU64(eth.core.NodeCtx()))}
 }

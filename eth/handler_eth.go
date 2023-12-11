@@ -112,16 +112,17 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 		p.syncDrop.Stop()
 		p.syncDrop = nil
 	}
+	nodeCtx := -h.Core().NodeCtx()
 	// Filter out any explicitly requested headers, deliver the rest to the downloader
 	filter := len(headers) == 1
 	if filter {
 		// Otherwise if it's a whitelisted block, validate against the set
-		if want, ok := h.whitelist[headers[0].Number().Uint64()]; ok {
+		if want, ok := h.whitelist[headers[0].NumberU64(nodeCtx)]; ok {
 			if hash := headers[0].Hash(); want != hash {
-				peer.Log().Info("Whitelist mismatch, dropping peer", "number", headers[0].Number().Uint64(), "hash", hash, "want", want)
+				peer.Log().Info("Whitelist mismatch, dropping peer", "number", headers[0].NumberU64(nodeCtx), "hash", hash, "want", want)
 				return errors.New("whitelist block mismatch")
 			}
-			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number().Uint64(), "hash", want)
+			peer.Log().Debug("Whitelist block verified", "number", headers[0].NumberU64(nodeCtx), "hash", want)
 		}
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
 		headers = h.blockFetcher.FilterHeaders(peer.ID(), headers, time.Now())
@@ -188,14 +189,15 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, en
 		return nil
 	}
 
+	nodeCtx := h.Core().NodeCtx()
 	syncEntropy, threshold := h.core.SyncTargetEntropy()
 	window := new(big.Int).Mul(threshold, big.NewInt(5))
-	syncThreshold := new(big.Int).Add(block.ParentEntropy(), window)
+	syncThreshold := new(big.Int).Add(block.ParentEntropy(nodeCtx), window)
 	requestBlock := h.subSyncQueue.Contains(block.Hash())
 	beyondSyncPoint := syncEntropy.Cmp(syncThreshold) < 0
 	looseSyncEntropyDelta := new(big.Int).Div(syncEntropy, big.NewInt(100))
 	looseSyncEntropy := new(big.Int).Sub(syncEntropy, looseSyncEntropyDelta)
-	atFray := looseSyncEntropy.Cmp(h.core.CurrentHeader().ParentEntropy()) < 0
+	atFray := looseSyncEntropy.Cmp(h.core.CurrentHeader().ParentEntropy(nodeCtx)) < 0
 
 	// If block is greater than sync entropy, or its manifest cache, handle it
 	// If block if its in manifest cache, relay is set to true, set relay to false and handle
@@ -205,7 +207,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, en
 		if !beyondSyncPoint {
 			if !requestBlock {
 				// drop peer
-				if common.NodeLocation.Context() != common.PRIME_CTX {
+				if h.Core().NodeCtx() != common.PRIME_CTX {
 					log.Info("Peer broadcasting block not in requestQueue or beyond sync target, dropping peer")
 					h.downloader.DropPeer(peer)
 				}
@@ -226,9 +228,9 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, en
 	_, _, peerEntropy, _ := peer.Head()
 	if entropy != nil && peerEntropy != nil {
 		if peerEntropy.Cmp(entropy) < 0 {
-			peer.SetHead(block.Hash(), block.Number(), entropy, block.ReceivedAt)
+			peer.SetHead(block.Hash(), block.Number(nodeCtx), entropy, block.ReceivedAt)
 			// Only start the downloader in Prime
-			if common.NodeLocation.Context() == common.PRIME_CTX {
+			if nodeCtx == common.PRIME_CTX {
 				h.chainSync.handlePeerEvent(peer)
 			}
 		}

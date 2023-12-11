@@ -130,7 +130,8 @@ type dialScheduler struct {
 type dialSetupFunc func(net.Conn, connFlag, *enode.Node) error
 
 type dialConfig struct {
-	self           enode.ID         // our own ID
+	self           enode.ID // our own ID
+	nodeLocation   common.Location
 	maxDialPeers   int              // maximum number of dialed peers
 	maxActiveDials int              // maximum number of active dials
 	netRestrict    *netutil.Netlist // IP netrestrict list, disabled if nil
@@ -337,9 +338,6 @@ func (d *dialScheduler) logStats() {
 	}
 	if d.dialPeers < dialStatsPeerLimit && d.dialPeers < d.maxDialPeers {
 		d.log.Info("Looking for peers", "peercount", len(d.peers), "tried", d.doneSinceLastLog, "static", len(d.static))
-		if common.NodeLocation.Context() == common.PRIME_CTX && len(d.peers) < 3 {
-			d.log.Info("Prime chain needs at least 3 peers to start the sync, it may take up to 30 mins in some cases to meet the requirement")
-		}
 	} else {
 		d.log.Info("Peer info", "peers", len(d.peers), "tried", d.doneSinceLastLog, "static", len(d.static))
 	}

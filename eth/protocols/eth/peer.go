@@ -73,6 +73,7 @@ type Peer struct {
 	rw            p2p.MsgReadWriter // Input/output streams for snap
 	version       uint              // Protocol version negotiated
 	slicesRunning []common.Location // Slices run by the node
+	nodeLocation  common.Location
 
 	head           common.Hash // Latest advertised head block hash
 	number         *big.Int    // Latest advertised head block number
@@ -94,7 +95,7 @@ type Peer struct {
 
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
-func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
+func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool, nodeLocation common.Location) *Peer {
 	peer := &Peer{
 		id:              p.ID().String(),
 		Peer:            p,
@@ -108,6 +109,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		txAnnounce:      make(chan []common.Hash),
 		txpool:          txpool,
 		term:            make(chan struct{}),
+		nodeLocation:    nodeLocation,
 	}
 	// Start up all the broadcasters
 	go peer.broadcastBlocks()
@@ -325,7 +327,7 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 		}
 		p.knownBlocks.Add(block.Hash())
 	default:
-		p.Log().Debug("Dropping block announcement", "number", block.NumberU64(), "hash", block.Hash())
+		p.Log().Debug("Dropping block announcement", "number", block.NumberU64(p.nodeLocation.Context()), "hash", block.Hash())
 	}
 }
 
@@ -354,7 +356,7 @@ func (p *Peer) AsyncSendNewBlock(block *types.Block, entropy *big.Int) {
 		}
 		p.knownBlocks.Add(block.Hash())
 	default:
-		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(p.nodeLocation.Context()), "hash", block.Hash())
 	}
 }
 

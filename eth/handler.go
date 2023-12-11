@@ -144,7 +144,7 @@ type handler struct {
 
 // newHandler returns a handler for all Quai chain management protocol.
 func newHandler(config *handlerConfig) (*handler, error) {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := config.Core.NodeCtx()
 	// Create the protocol manager with the base fields
 	if config.EventMux == nil {
 		config.EventMux = new(event.TypeMux) // Nicety initialization for tests
@@ -180,7 +180,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return h.core.Engine().VerifySeal(header)
 	}
 	heighter := func() uint64 {
-		return h.core.CurrentHeader().NumberU64()
+		return h.core.CurrentHeader().NumberU64(h.core.NodeCtx())
 	}
 	currentThresholdS := func() *big.Int {
 		return h.core.Engine().IntrinsicLogS(h.core.CurrentHeader().Hash())
@@ -195,14 +195,14 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 	// writeBlock writes the block to the DB
 	writeBlock := func(block *types.Block) {
-		if nodeCtx == common.ZONE_CTX && block.NumberU64()-1 == h.core.CurrentHeader().NumberU64() && h.core.ProcessingState() {
+		if nodeCtx == common.ZONE_CTX && block.NumberU64(h.core.NodeCtx())-1 == h.core.CurrentHeader().NumberU64(h.core.NodeCtx()) && h.core.ProcessingState() {
 			if atomic.LoadUint32(&h.acceptTxs) != 1 {
 				atomic.StoreUint32(&h.acceptTxs, 1)
 			}
 		}
 		h.core.WriteBlock(block)
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(h.core.GetBlockOrCandidateByHash, writeBlock, validator, verifySeal, h.BroadcastBlock, heighter, currentThresholdS, currentS, currentDifficulty, h.removePeer, h.core.IsBlockHashABadHash)
+	h.blockFetcher = fetcher.NewBlockFetcher(h.core.GetBlockOrCandidateByHash, h.core.NodeLocation, writeBlock, validator, verifySeal, h.BroadcastBlock, heighter, currentThresholdS, currentS, currentDifficulty, h.removePeer, h.core.IsBlockHashABadHash)
 
 	// Only initialize the Tx fetcher in zone
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
@@ -222,7 +222,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 // runEthPeer registers an eth peer into the joint eth peerset, adds it to
 // various subsystems and starts handling messages.
 func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := h.core.NodeCtx()
 	if !h.chainSync.handlePeerEvent(peer) {
 		return p2p.DiscQuitting
 	}
@@ -236,7 +236,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		hash    = head.Hash()
 		entropy = h.core.CurrentLogEntropy()
 	)
-	forkID := forkid.NewID(h.core.Config(), h.core.Genesis().Hash(), h.core.CurrentHeader().Number().Uint64())
+	forkID := forkid.NewID(h.core.Config(), h.core.Genesis().Hash(), h.core.CurrentHeader().NumberU64(nodeCtx))
 	if err := peer.Handshake(h.networkID, h.slicesRunning, entropy, hash, genesis.Hash(), forkID, h.forkFilter); err != nil {
 		peer.Log().Debug("Quai handshake failed", "err", err)
 		return err
@@ -311,7 +311,7 @@ func (h *handler) unregisterPeer(id string) {
 	}
 
 	h.downloader.UnregisterPeer(id)
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := h.core.NodeCtx()
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
 		h.txFetcher.Drop(id)
 	}
@@ -324,7 +324,7 @@ func (h *handler) unregisterPeer(id string) {
 func (h *handler) Start(maxPeers int) {
 	h.maxPeers = maxPeers
 
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := h.core.NodeCtx()
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
 		// broadcast transactions
 		h.wg.Add(1)
@@ -353,7 +353,7 @@ func (h *handler) Start(maxPeers int) {
 }
 
 func (h *handler) Stop() {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := h.core.NodeCtx()
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
 		h.txsSub.Unsubscribe() // quits txBroadcastLoop
 	}
@@ -404,7 +404,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 		return
 	}
 	// Otherwise if the block is indeed in out own chain, announce it
-	if h.core.HasBlock(hash, block.NumberU64()) {
+	if h.core.HasBlock(hash, block.NumberU64(h.core.NodeCtx())) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
 		}

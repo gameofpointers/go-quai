@@ -196,7 +196,7 @@ const dnsPrefix = "enrtree://ALE24Z2TEZV2XK46RXVB6IIN5HB5WTI4F4SMAVLYCAQIUPU53RS
 
 // KnownDNSNetwork returns the address of a public DNS-based node list for the given
 // genesis hash and protocol.
-func KnownDNSNetwork(genesis common.Hash, protocol string) string {
+func KnownDNSNetwork(genesis common.Hash, protocol string, nodeLocation common.Location) string {
 	var net string
 	switch genesis {
 	case ProgpowColosseumGenesisHash:
@@ -218,5 +218,5 @@ func KnownDNSNetwork(genesis common.Hash, protocol string) string {
 	default:
 		return ""
 	}
-	return dnsPrefix + common.NodeLocation.Name() + "." + net + ".quainodes.io"
+	return dnsPrefix + nodeLocation.Name() + "." + net + ".quainodes.io"
 }

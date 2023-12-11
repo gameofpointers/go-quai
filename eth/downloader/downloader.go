@@ -164,16 +164,19 @@ type Core interface {
 
 	// IsBlockHashABadHash returns true if block hash exists in the bad hashes list
 	IsBlockHashABadHash(hash common.Hash) bool
+
+	// NodeCtx is the context of the given node
+	NodeCtx() int
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 func New(mux *event.TypeMux, core Core, dropPeer peerDropFn) *Downloader {
 	dl := &Downloader{
 		mux:          mux,
-		queue:        newQueue(blockCacheMaxItems, blockCacheInitialItems),
+		queue:        newQueue(blockCacheMaxItems, blockCacheInitialItems, core.NodeCtx()),
 		peers:        newPeerSet(),
 		core:         core,
-		headNumber:   core.CurrentHeader().NumberU64(),
+		headNumber:   core.CurrentHeader().NumberU64(core.NodeCtx()),
 		headEntropy:  core.CurrentLogEntropy(),
 		dropPeer:     dropPeer,
 		headerCh:     make(chan dataPack, 1),
@@ -202,7 +205,7 @@ func (d *Downloader) Progress() quai.SyncProgress {
 	mode := d.getMode()
 	switch {
 	case d.core != nil && mode == FullSync:
-		current = d.core.CurrentHeader().NumberU64()
+		current = d.core.CurrentHeader().NumberU64(d.core.NodeCtx())
 	default:
 		log.Error("Unknown downloader chain/mode combo", "light", "full", d.core != nil, "mode", mode)
 	}
@@ -390,7 +393,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, entropy *
 	}
 
 	// Height of the peer
-	peerHeight := latest.Number().Uint64()
+	peerHeight := latest.NumberU64(d.core.NodeCtx())
 	origin := peerHeight
 
 	// TODO: display the correct sync stats
@@ -516,7 +519,7 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, err error
 			// and request.
 			head := headers[0]
 			if len(headers) == 1 {
-				p.log.Debug("Remote head identified", "number", head.Number(), "hash", head.Hash())
+				p.log.Debug("Remote head identified", "number", head.Number(d.core.NodeCtx()), "hash", head.Hash())
 				return head, nil
 			}
 			return head, nil
@@ -552,7 +555,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 
 	// peer height
 	peerHeight := from
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := d.core.NodeCtx()
 
 	localHeight := d.headNumber
 
@@ -640,14 +643,14 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 				// Only fill the skeleton between the headers we don't know about.
 				for i := 0; i < len(headers); i++ {
 					skeletonHeaders = append(skeletonHeaders, headers[i])
-					commonAncestor := d.core.HasBlock(headers[i].Hash(), headers[i].NumberU64()) && (d.core.GetTerminiByHash(headers[i].Hash()) != nil)
+					commonAncestor := d.core.HasBlock(headers[i].Hash(), headers[i].NumberU64(nodeCtx)) && (d.core.GetTerminiByHash(headers[i].Hash()) != nil)
 					if commonAncestor {
 						break
 					}
 				}
 			}
 
-			if len(skeletonHeaders) > 0 && skeletonHeaders[len(skeletonHeaders)-1].NumberU64() < 8 {
+			if len(skeletonHeaders) > 0 && skeletonHeaders[len(skeletonHeaders)-1].NumberU64(nodeCtx) < 8 {
 				genesisBlock := d.core.GetBlockByNumber(0)
 				skeletonHeaders = append(skeletonHeaders, genesisBlock.Header())
 			}
@@ -659,7 +662,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 			// Prepare the resultStore to fill the skeleton.
 			// first bool is used to only set the offset on the first skeleton fetch.
 			if len(skeletonHeaders) > 0 && first {
-				d.queue.Prepare(skeletonHeaders[len(skeletonHeaders)-1].NumberU64(), FullSync)
+				d.queue.Prepare(skeletonHeaders[len(skeletonHeaders)-1].NumberU64(nodeCtx), FullSync)
 				first = false
 			}
 
@@ -669,7 +672,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 			if skeleton && len(skeletonHeaders) == 1 {
 				skeleton = false
 				// get the headers directly from peer height
-				getHeaders(peerHeight, skeletonHeaders[0].NumberU64())
+				getHeaders(peerHeight, skeletonHeaders[0].NumberU64(nodeCtx))
 				continue
 			}
 
@@ -683,7 +686,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
 					return fmt.Errorf("%w: %v", errInvalidChain, err)
 				}
 				headers = filled[proced:]
-				localHeight = skeletonHeaders[0].NumberU64()
+				localHeight = skeletonHeaders[0].NumberU64(nodeCtx)
 
 				progressed = proced > 0
 				updateFetchPoint()
@@ -769,7 +772,7 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 			return d.queue.ReserveHeaders(p, count), false, false
 		}
 		fetch = func(p *peerConnection, req *fetchRequest) error {
-			return p.FetchHeaders(req.From, int(req.From-req.To))
+			return p.FetchHeaders(req.From, int(req.From-req.To), d.core.NodeCtx())
 		}
 		capacity = func(p *peerConnection) int { return p.HeaderCapacity(d.peers.rates.TargetRoundTrip()) }
 		setIdle  = func(p *peerConnection, accepted int, deliveryTime time.Time) {
@@ -983,7 +986,7 @@ func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack)
 					peer.log.Trace("Requesting new batch of data", "type", kind, "from", request.From)
 				} else {
 					if len(request.Headers) != 0 {
-						peer.log.Trace("Requesting new batch of data", "type", kind, "count", len(request.Headers), "from", request.Headers[0].Number())
+						peer.log.Trace("Requesting new batch of data", "type", kind, "count", len(request.Headers), "from", request.Headers[0].Number(d.core.NodeCtx()))
 					}
 				}
 				// Fetch the chunk and make sure any errors return the hashes to the queue
@@ -1021,7 +1024,7 @@ func (d *Downloader) processHeaders(origin uint64) error {
 	)
 	defer func() {
 		if rollback > 0 {
-			curBlock := d.core.CurrentHeader().NumberU64()
+			curBlock := d.core.CurrentHeader().NumberU64(d.core.NodeCtx())
 			log.Warn("Rolled back chain segment",
 				"block", fmt.Sprintf("%d->%d", curBlock), "reason", rollbackErr)
 		}
@@ -1149,11 +1152,12 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 		return errCancelContentProcessing
 	default:
 	}
+	nodeCtx := d.core.NodeCtx()
 	// Retrieve the a batch of results to import
 	first, last := results[0].Header, results[len(results)-1].Header
 	log.Info("Inserting downloaded chain", "items", len(results),
-		"firstnum", first.Number(), "firsthash", first.Hash(),
-		"lastnum", last.Number(), "lasthash", last.Hash(),
+		"firstnum", first.Number(nodeCtx), "firsthash", first.Hash(),
+		"lastnum", last.Number(nodeCtx), "lasthash", last.Hash(),
 	)
 
 	for _, result := range results {
@@ -1161,7 +1165,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 		if d.core.IsBlockHashABadHash(block.Hash()) {
 			return errBadBlockFound
 		}
-		d.headNumber = block.NumberU64()
+		d.headNumber = block.NumberU64(nodeCtx)
 		d.headEntropy = d.core.TotalLogS(block.Header())
 		d.core.WriteBlock(block)
 	}

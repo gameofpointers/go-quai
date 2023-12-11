@@ -71,6 +71,9 @@ var errTerminated = errors.New("terminated")
 // blockRetrievalFn is a callback type for retrieving a block from the local chain.
 type blockRetrievalFn func(common.Hash) *types.Block
 
+// nodeLocationFn is a callback type for retreving the nodeLocation of the chain
+type nodeLocationFn func() common.Location
+
 // blockWriteFn is a callback type for retrieving a block from the local chain.
 type blockWriteFn func(*types.Block)
 
@@ -147,14 +150,6 @@ type blockOrHeaderInject struct {
 	block  *types.Block  // Used for normal mode fetcher which imports full block.
 }
 
-// number returns the block number of the injected object.
-func (inject *blockOrHeaderInject) number() uint64 {
-	if inject.header != nil {
-		return inject.header.Number().Uint64()
-	}
-	return inject.block.NumberU64()
-}
-
 // number returns the block hash of the injected object.
 func (inject *blockOrHeaderInject) hash() common.Hash {
 	if inject.header != nil {
@@ -189,6 +184,7 @@ type BlockFetcher struct {
 
 	// Callbacks
 	getBlock            blockRetrievalFn    // Retrieves a block from the local chain
+	nodeLocation        nodeLocationFn      // Retrieves the node location of the chain
 	writeBlock          blockWriteFn        // Writes the block to the DB
 	verifyHeader        headerVerifierFn    // Checks if a block's headers have a valid proof of work
 	verifySeal          verifySealFn        // Checks if blocks PoWHash meets the difficulty requirement
@@ -209,7 +205,7 @@ type BlockFetcher struct {
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(getBlock blockRetrievalFn, writeBlock blockWriteFn, verifyHeader headerVerifierFn, verifySeal verifySealFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, currentIntrinsicS currentIntrinsicSFn, currentS currentSFn, currentDifficulty currentDifficultyFn, dropPeer peerDropFn, isBlockHashABadHash badHashCheckFn) *BlockFetcher {
+func NewBlockFetcher(getBlock blockRetrievalFn, nodeLocation nodeLocationFn, writeBlock blockWriteFn, verifyHeader headerVerifierFn, verifySeal verifySealFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, currentIntrinsicS currentIntrinsicSFn, currentS currentSFn, currentDifficulty currentDifficultyFn, dropPeer peerDropFn, isBlockHashABadHash badHashCheckFn) *BlockFetcher {
 	return &BlockFetcher{
 		notify:              make(chan *blockAnnounce),
 		inject:              make(chan *blockOrHeaderInject),
@@ -225,6 +221,7 @@ func NewBlockFetcher(getBlock blockRetrievalFn, writeBlock blockWriteFn, verifyH
 		queue:               prque.New(nil),
 		queued:              make(map[common.Hash]*blockOrHeaderInject),
 		getBlock:            getBlock,
+		nodeLocation:        nodeLocation,
 		writeBlock:          writeBlock,
 		verifyHeader:        verifyHeader,
 		verifySeal:          verifySeal,
@@ -333,6 +330,7 @@ func (f *BlockFetcher) loop() {
 	var (
 		fetchTimer    = time.NewTimer(0)
 		completeTimer = time.NewTimer(0)
+		nodeCtx       = f.nodeLocation().Context()
 	)
 	<-fetchTimer.C // clear out the channel
 	<-completeTimer.C
@@ -501,8 +499,8 @@ func (f *BlockFetcher) loop() {
 				// Filter fetcher-requested headers from other synchronisation algorithms
 				if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
 					// If the delivered header does not match the promised number, drop the announcer
-					if header.Number().Uint64() != announce.number {
-						log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number())
+					if header.Number(nodeCtx).Uint64() != announce.number {
+						log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number(nodeCtx))
 						f.dropPeer(announce.origin)
 						f.forgetHash(hash)
 						continue
@@ -513,8 +511,8 @@ func (f *BlockFetcher) loop() {
 						announce.time = task.time
 
 						// If the block is empty (header only), short circuit into the final import queue
-						if header.TxHash() == types.EmptyRootHash && header.UncleHash() == types.EmptyUncleHash && header.EtxHash() == types.EmptyRootHash && header.ManifestHash() == types.EmptyRootHash {
-							log.Trace("Block empty, skipping body retrieval", "peer", announce.origin, "number", header.Number(), "hash", header.Hash())
+						if header.TxHash() == types.EmptyRootHash && header.UncleHash() == types.EmptyUncleHash && header.EtxHash() == types.EmptyRootHash && header.ManifestHash(nodeCtx) == types.EmptyRootHash {
+							log.Trace("Block empty, skipping body retrieval", "peer", announce.origin, "number", header.Number(nodeCtx), "hash", header.Hash())
 
 							block := types.NewBlockWithHeader(header)
 							block.ReceivedAt = task.time
@@ -526,7 +524,7 @@ func (f *BlockFetcher) loop() {
 						// Otherwise add to the list of blocks needing completion
 						incomplete = append(incomplete, announce)
 					} else {
-						log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number(), "hash", header.Hash())
+						log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number(nodeCtx), "hash", header.Hash())
 						f.forgetHash(hash)
 					}
 				} else {
@@ -608,7 +606,7 @@ func (f *BlockFetcher) loop() {
 						if manifestHash == (common.Hash{}) {
 							manifestHash = types.DeriveSha(task.subManifest[i], trie.NewStackTrie(nil))
 						}
-						if manifestHash != announce.header.ManifestHash() {
+						if manifestHash != announce.header.ManifestHash(nodeCtx) {
 							continue
 						}
 						// Mark the body matched, reassemble if still unknown
@@ -688,9 +686,9 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		number uint64
 	)
 	if header != nil {
-		hash, number = header.Hash(), header.Number().Uint64()
+		hash, number = header.Hash(), header.NumberU64(f.nodeLocation().Context())
 	} else {
-		hash, number = block.Hash(), block.NumberU64()
+		hash, number = block.Hash(), block.NumberU64(f.nodeLocation().Context())
 	}
 
 	// Schedule the block for future importing
@@ -715,7 +713,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 // the phase states accordingly.
 func (f *BlockFetcher) ImportBlocks(peer string, block *types.Block, relay bool) {
 	hash := block.Hash()
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := f.nodeLocation().Context()
 
 	powhash, err := f.verifySeal(block.Header())
 	if err != nil {
@@ -733,7 +731,7 @@ func (f *BlockFetcher) ImportBlocks(peer string, block *types.Block, relay bool)
 	looseMaxAllowableEntropy := new(big.Int).Div(MaxAllowableEntropyDist, big.NewInt(100))
 	looseSyncEntropyDist := new(big.Int).Add(MaxAllowableEntropyDist, looseMaxAllowableEntropy)
 
-	broadCastEntropy := block.ParentEntropy()
+	broadCastEntropy := block.ParentEntropy(nodeCtx)
 
 	// If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS dont broadcast
 	if relay && f.currentS().Cmp(new(big.Int).Add(broadCastEntropy, MaxAllowableEntropyDist)) > 0 {
@@ -748,7 +746,7 @@ func (f *BlockFetcher) ImportBlocks(peer string, block *types.Block, relay bool)
 	}
 
 	// Run the import on a new thread
-	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
+	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(nodeCtx), "hash", hash)
 	go func() {
 		defer func() { f.done <- hash }()
 
@@ -776,7 +774,7 @@ func (f *BlockFetcher) ImportBlocks(peer string, block *types.Block, relay bool)
 			// Weird future block, don't fail, but neither propagate
 		} else {
 			// Something went very wrong, drop the peer
-			log.Debug("Propagated block verification failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
+			log.Debug("Propagated block verification failed", "peer", peer, "number", block.Number(nodeCtx), "hash", hash, "err", err)
 			f.dropPeer(peer)
 			return
 		}

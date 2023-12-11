@@ -45,7 +45,7 @@ func (p *Peer) Handshake(network uint64, slices []common.Location, entropy *big.
 			ProtocolVersion: uint32(p.version),
 			NetworkID:       network,
 			SlicesRunning:   slices,
-			Location:        common.NodeLocation.Name(),
+			Location:        p.nodeLocation.Name(),
 			Entropy:         entropy,
 			Head:            head,
 			Genesis:         genesis,
@@ -95,8 +95,8 @@ func (p *Peer) readStatus(network uint64, status *StatusPacket, genesis common.H
 	if uint(status.ProtocolVersion) != p.version {
 		return fmt.Errorf("%w: %d (!= %d)", errProtocolVersionMismatch, status.ProtocolVersion, p.version)
 	}
-	if status.Location != common.NodeLocation.Name() {
-		return fmt.Errorf("%w: %s (!= %s)", errLocationMismatch, status.Location, common.NodeLocation.Name())
+	if status.Location != p.nodeLocation.Name() {
+		return fmt.Errorf("%w: %s (!= %s)", errLocationMismatch, status.Location, p.nodeLocation.Name())
 	}
 	if status.Genesis != genesis {
 		return fmt.Errorf("%w: %x (!= %x)", errGenesisMismatch, status.Genesis, genesis)

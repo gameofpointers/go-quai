@@ -259,7 +259,7 @@ func traverseState(ctx *cli.Context) error {
 		log.Info("Start traversing the state", "root", root)
 	} else {
 		root = headBlock.Root()
-		log.Info("Start traversing the state", "root", root, "number", headBlock.NumberU64())
+		log.Info("Start traversing the state", "root", root, "number", headBlock.NumberU64(stack.Config().NodeLocation.Context()))
 	}
 	triedb := trie.NewDatabase(chaindb)
 	t, err := trie.NewSecure(root, triedb)
@@ -349,7 +349,7 @@ func traverseRawState(ctx *cli.Context) error {
 		log.Info("Start traversing the state", "root", root)
 	} else {
 		root = headBlock.Root()
-		log.Info("Start traversing the state", "root", root, "number", headBlock.NumberU64())
+		log.Info("Start traversing the state", "root", root, "number", headBlock.NumberU64(stack.Config().NodeLocation.Context()))
 	}
 	triedb := trie.NewDatabase(chaindb)
 	t, err := trie.NewSecure(root, triedb)

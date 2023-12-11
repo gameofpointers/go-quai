@@ -670,49 +670,10 @@ func init() {
 	}
 }
 
-// MakeDataDir retrieves the currently requested data directory, terminating
-// if none (or the empty string) is specified. If the node is starting a testnet,
-// then a subdirectory of the specified datadir will be used.
-func MakeDataDir(ctx *cli.Context) string {
-	if path := ctx.GlobalString(DataDirFlag.Name); path != "" {
-		if ctx.GlobalBool(GardenFlag.Name) {
-			// Maintain compatibility with older Quai configurations storing the
-			// Garden database in `testnet` instead of `garden`.
-			path = filepath.Join(path, "garden")
-		}
-		if ctx.GlobalBool(OrchardFlag.Name) {
-			path = filepath.Join(path, "orchard")
-		}
-		if ctx.GlobalBool(LocalFlag.Name) {
-			// Maintain compatibility with older Quai configurations storing the
-			// Local database in `local` instead of `testnet`.
-			path = filepath.Join(path, "local")
-		}
-		if ctx.GlobalBool(LighthouseFlag.Name) {
-			path = filepath.Join(path, "lighthouse")
-		}
-		// Set specific directory for node location within the hierarchy
-		switch common.NodeLocation.Context() {
-		case common.PRIME_CTX:
-			path = filepath.Join(path, "prime")
-		case common.REGION_CTX:
-			regionNum := strconv.Itoa(common.NodeLocation.Region())
-			path = filepath.Join(path, "region-"+regionNum)
-		case common.ZONE_CTX:
-			regionNum := strconv.Itoa(common.NodeLocation.Region())
-			zoneNum := strconv.Itoa(common.NodeLocation.Zone())
-			path = filepath.Join(path, "zone-"+regionNum+"-"+zoneNum)
-		}
-		return path
-	}
-	Fatalf("Cannot determine default data directory, please set manually (--datadir)")
-	return ""
-}
-
 // setNodeKey creates a node key from set command line flags, either loading it
 // from a file or as a specified hex value. If neither flags were provided, this
 // method returns nil and an emphemeral key is to be generated.
-func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
+func setNodeKey(ctx *cli.Context, cfg *p2p.Config, nodeLocation common.Location) {
 	var (
 		hex  = ctx.GlobalString(NodeKeyHexFlag.Name)
 		file = ctx.GlobalString(NodeKeyFileFlag.Name)
@@ -731,7 +692,7 @@ func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 		}
 		pkey := big.NewInt(0).Mod(key.D, order)
 		// Tweak the private key to be unique for each location
-		locationTweak := big.NewInt(0).SetBytes(crypto.Keccak256([]byte(common.NodeLocation.Name())))
+		locationTweak := big.NewInt(0).SetBytes(crypto.Keccak256([]byte(nodeLocation.Name())))
 		locationTweak.Mod(locationTweak, order)
 		tweakedKey := pkey.Mul(pkey, locationTweak)
 		tweakedKey.Mod(tweakedKey, order)
@@ -758,8 +719,8 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 
 // setBootstrapNodes creates a list of bootstrap nodes from the pre-configured
 // ones if none have been specified.
-func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
-	urls := params.ColosseumBootnodes[common.NodeLocation.Name()]
+func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config, nodeLocation common.Location) {
+	urls := params.ColosseumBootnodes[nodeLocation.Name()]
 	//TODO: fix bootnode parsing for other networks
 
 	cfg.BootstrapNodes = make([]*enode.Node, 0, len(urls))
@@ -1016,10 +977,10 @@ func MakeDatabaseHandles() int {
 
 // HexAddress converts an account specified directly as a hex encoded string or
 // a key index in the key store to an internal account representation.
-func HexAddress(account string) (common.Address, error) {
+func HexAddress(account string, nodeLocation common.Location) (common.Address, error) {
 	// If the specified account is a valid address, return it
 	if common.IsHexAddress(account) {
-		return common.HexToAddress(account), nil
+		return common.HexToAddress(account, nodeLocation), nil
 	}
 	return common.Address{}, errors.New("invalid account address")
 }
@@ -1034,7 +995,7 @@ func setEtherbase(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 	// Convert the etherbase into an address and configure it
 	if etherbase != "" {
-		account, err := HexAddress(etherbase)
+		account, err := HexAddress(etherbase, cfg.NodeLocation)
 		if err != nil {
 			Fatalf("Invalid miner etherbase: %v", err)
 		}
@@ -1060,11 +1021,11 @@ func MakePasswordList(ctx *cli.Context) []string {
 	return lines
 }
 
-func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
-	setNodeKey(ctx, cfg)
+func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config, nodeLocation common.Location) {
+	setNodeKey(ctx, cfg, nodeLocation)
 	setNAT(ctx, cfg)
 	setListenAddress(ctx, cfg)
-	setBootstrapNodes(ctx, cfg)
+	setBootstrapNodes(ctx, cfg, nodeLocation)
 	setBootstrapNodesV5(ctx, cfg)
 
 	if ctx.GlobalIsSet(MaxPeersFlag.Name) {
@@ -1108,7 +1069,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
-	SetP2PConfig(ctx, &cfg.P2P)
+	SetP2PConfig(ctx, &cfg.P2P, cfg.NodeLocation)
 	setHTTP(ctx, cfg)
 	setWS(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
@@ -1159,15 +1120,15 @@ func setDataDir(ctx *cli.Context, cfg *node.Config) {
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "local")
 	}
 	// Set specific directory for node location within the hierarchy
-	switch common.NodeLocation.Context() {
+	switch cfg.NodeLocation.Context() {
 	case common.PRIME_CTX:
 		cfg.DataDir = filepath.Join(cfg.DataDir, "prime")
 	case common.REGION_CTX:
-		regionNum := strconv.Itoa(common.NodeLocation.Region())
+		regionNum := strconv.Itoa(cfg.NodeLocation.Region())
 		cfg.DataDir = filepath.Join(cfg.DataDir, "region-"+regionNum)
 	case common.ZONE_CTX:
-		regionNum := strconv.Itoa(common.NodeLocation.Region())
-		zoneNum := strconv.Itoa(common.NodeLocation.Zone())
+		regionNum := strconv.Itoa(cfg.NodeLocation.Region())
+		zoneNum := strconv.Itoa(cfg.NodeLocation.Zone())
 		cfg.DataDir = filepath.Join(cfg.DataDir, "zone-"+regionNum+"-"+zoneNum)
 	}
 }
@@ -1192,14 +1153,14 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config, light bool) {
 	}
 }
 
-func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
+func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig, nodeLocation common.Location) {
 	if ctx.GlobalIsSet(TxPoolLocalsFlag.Name) {
 		locals := strings.Split(ctx.GlobalString(TxPoolLocalsFlag.Name), ",")
 		for _, account := range locals {
 			if trimmed := strings.TrimSpace(account); !common.IsHexAddress(trimmed) {
 				Fatalf("Invalid account in --txpool.locals: %s", trimmed)
 			} else {
-				internal, err := common.HexToAddress(account).InternalAddress()
+				internal, err := common.HexToAddress(account, nodeLocation).InternalAddress()
 				if err != nil {
 					Fatalf("Invalid account in --txpool.locals: %s", account)
 				}
@@ -1374,23 +1335,25 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 	}
 }
 
-func SetGlobalVars(ctx *cli.Context) {
+func GetNodeLocation(ctx *cli.Context) common.Location {
 	// Configure global NodeLocation
 	if !ctx.GlobalIsSet(RegionFlag.Name) && ctx.GlobalIsSet(ZoneFlag.Name) {
 		log.Fatal("zone idx given, but missing region idx!")
 	}
+	nodeLocation := common.Location{}
 	if ctx.GlobalIsSet(RegionFlag.Name) {
 		region := ctx.GlobalInt(RegionFlag.Name)
-		common.NodeLocation = append(common.NodeLocation, byte(region))
+		nodeLocation = append(nodeLocation, byte(region))
 	}
 	if ctx.GlobalIsSet(ZoneFlag.Name) {
 		zone := ctx.GlobalInt(ZoneFlag.Name)
-		common.NodeLocation = append(common.NodeLocation, byte(zone))
+		nodeLocation = append(nodeLocation, byte(zone))
 	}
+	return nodeLocation
 }
 
 // SetEthConfig applies eth-related command line flags to the config.
-func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
+func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config, nodeLocation common.Location) {
 	// Avoid conflicting network flags
 	CheckExclusive(ctx, ColosseumFlag, DeveloperFlag, GardenFlag, OrchardFlag, LocalFlag, LighthouseFlag)
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
@@ -1400,12 +1363,13 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		log.Warn("Disable transaction unindexing for archive node")
 	}
 
+	cfg.NodeLocation = nodeLocation
 	// only set etherbase if its a zone chain
 	if ctx.GlobalIsSet(RegionFlag.Name) && ctx.GlobalIsSet(ZoneFlag.Name) {
 		setEtherbase(ctx, cfg)
 	}
 	setGPO(ctx, &cfg.GPO, ctx.GlobalString(SyncModeFlag.Name) == "light")
-	setTxPool(ctx, &cfg.TxPool)
+	setTxPool(ctx, &cfg.TxPool, nodeLocation)
 
 	// If blake3 consensus engine is specifically asked use the blake3 engine
 	if ctx.GlobalString(ConsensusEngineFlag.Name) == "blake3" {
@@ -1608,7 +1572,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		cfg.Genesis.Nonce = ctx.GlobalUint64(GenesisNonceFlag.Name)
 	}
 
-	cfg.Genesis.Config.SetLocation(common.NodeLocation)
+	cfg.Genesis.Config.SetLocation(cfg.NodeLocation)
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if
@@ -1618,7 +1582,7 @@ func SetDNSDiscoveryDefaults(cfg *ethconfig.Config, genesis common.Hash) {
 		return // already set through flags/config
 	}
 	protocol := "all"
-	if url := params.KnownDNSNetwork(genesis, protocol); url != "" {
+	if url := params.KnownDNSNetwork(genesis, protocol, cfg.NodeLocation); url != "" {
 		cfg.EthDiscoveryURLs = []string{url}
 		cfg.SnapDiscoveryURLs = cfg.EthDiscoveryURLs
 	}
@@ -1627,8 +1591,8 @@ func SetDNSDiscoveryDefaults(cfg *ethconfig.Config, genesis common.Hash) {
 // RegisterEthService adds a Quai client to the stack.
 // The second return value is the full node instance, which may be nil if the
 // node is running as a light client.
-func RegisterEthService(stack *node.Node, cfg *ethconfig.Config) (quaiapi.Backend, *eth.Quai) {
-	backend, err := eth.New(stack, cfg)
+func RegisterEthService(stack *node.Node, cfg *ethconfig.Config, nodeCtx int) (quaiapi.Backend, *eth.Quai) {
+	backend, err := eth.New(stack, cfg, nodeCtx)
 	if err != nil {
 		Fatalf("Failed to register the Quai service: %v", err)
 	}
@@ -1728,7 +1692,7 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 func MakeChain(ctx *cli.Context, stack *node.Node) (*core.Core, ethdb.Database) {
 	var err error
 	chainDb := MakeChainDatabase(ctx, stack, false) // TODO(rjl493456442) support read-only database
-	config, _, err := core.SetupGenesisBlock(chainDb, MakeGenesis(ctx))
+	config, _, err := core.SetupGenesisBlock(chainDb, MakeGenesis(ctx), stack.Config().NodeLocation)
 	if err != nil {
 		Fatalf("%v", err)
 	}

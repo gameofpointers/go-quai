@@ -60,6 +60,6 @@ func StartENRUpdater(chain *core.Core, ln *enode.LocalNode) {
 // currentENREntry constructs an `eth` ENR entry based on the current state of the chain.
 func currentENREntry(chain *core.Core) *enrEntry {
 	return &enrEntry{
-		ForkID: forkid.NewID(chain.Config(), chain.Genesis().Hash(), chain.CurrentHeader().Number().Uint64()),
+		ForkID: forkid.NewID(chain.Config(), chain.Genesis().Hash(), chain.CurrentHeader().NumberU64(chain.NodeCtx())),
 	}
 }

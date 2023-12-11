@@ -40,6 +40,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, peer *Peer) []*types.Header {
+	nodeCtx := backend.Core().NodeCtx()
 	hashMode := query.Origin.Hash != (common.Hash{})
 	first := true
 	maxNonCanonical := uint64(100)
@@ -59,7 +60,7 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 				first = false
 				origin = backend.Core().GetHeaderOrCandidateByHash(query.Origin.Hash)
 				if origin != nil {
-					query.Origin.Number = origin.NumberU64()
+					query.Origin.Number = origin.NumberU64(nodeCtx)
 				}
 			} else {
 				origin = backend.Core().GetHeaderOrCandidate(query.Origin.Hash, query.Origin.Number)
@@ -173,7 +174,7 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := backend.Core().NodeCtx()
 	// Retrieve and decode the propagated block
 	ann := new(NewBlockPacket)
 	if err := msg.Decode(ann); err != nil {
@@ -208,7 +209,7 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 		}
 		// Dom nodes need to validate the subordinate manifest against the subordinate's manifesthash
 		if hash := types.DeriveSha(ann.Block.SubManifest(), trie.NewStackTrie(nil)); hash != ann.Block.ManifestHash(nodeCtx+1) {
-			log.Warn("Propagated block has invalid subordinate manifest", "peer", peer.id, "block hash", ann.Block.Hash(), "have", hash, "exp", ann.Block.ManifestHash())
+			log.Warn("Propagated block has invalid subordinate manifest", "peer", peer.id, "block hash", ann.Block.Hash(), "have", hash, "exp", ann.Block.ManifestHash(nodeCtx))
 			return nil
 		}
 	}
@@ -244,7 +245,7 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) error {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := backend.Core().NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
 		return errors.New("transactions are only handled in zone")
 	}
@@ -306,7 +307,7 @@ func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPac
 }
 
 func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := backend.Core().NodeCtx()
 	// Transactions arrived, make sure we have a valid and fresh chain to handle them
 	if nodeCtx != common.ZONE_CTX {
 		return errors.New("transactions are only handled in zone")
@@ -333,7 +334,7 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
-	nodeCtx := common.NodeLocation.Context()
+	nodeCtx := backend.Core().NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
 		return errors.New("transactions are only handled in zone")
 	}

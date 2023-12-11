@@ -115,7 +115,7 @@ func (p *peerConnection) Peer() Peer {
 }
 
 // FetchHeaders sends a header retrieval request to the remote peer.
-func (p *peerConnection) FetchHeaders(from uint64, count int) error {
+func (p *peerConnection) FetchHeaders(from uint64, count int, nodeCtx int) error {
 	// Short circuit if the peer is already fetching
 	if !atomic.CompareAndSwapInt32(&p.headerIdle, 0, 1) {
 		return errAlreadyFetching
@@ -124,7 +124,7 @@ func (p *peerConnection) FetchHeaders(from uint64, count int) error {
 
 	// In the case of prime the required amount is the PrimeSKeletonDist which is the
 	// distance between the skeleton headers.
-	if common.NodeLocation.Context() == common.PRIME_CTX {
+	if nodeCtx == common.PRIME_CTX {
 		// Issue the header retrieval request (absolute upwards without gaps)
 		go p.peer.RequestHeadersByNumber(from, PrimeSkeletonDist, 1, 0, false, true)
 	} else {

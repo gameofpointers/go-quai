@@ -291,6 +291,8 @@ func startNode(ctx *cli.Context, stack *node.Node, backend quaiapi.Backend) {
 	// Start up the node itself
 	utils.StartNode(ctx, stack)
 
+	nodeCtx := backend.NodeCtx()
+
 	// Spawn a standalone goroutine for status synchronization monitoring,
 	// close the node when synchronization is complete if user required.
 	if ctx.GlobalBool(utils.ExitWhenSyncedFlag.Name) {
@@ -307,7 +309,7 @@ func startNode(ctx *cli.Context, stack *node.Node, backend quaiapi.Backend) {
 					continue
 				}
 				if timestamp := time.Unix(int64(done.Latest.Time()), 0); time.Since(timestamp) < 10*time.Minute {
-					log.Info("Synchronisation completed", "latestnum", done.Latest.Number(), "latesthash", done.Latest.Hash(),
+					log.Info("Synchronisation completed", "latestnum", done.Latest.Number(nodeCtx), "latesthash", done.Latest.Hash(),
 						"age", common.PrettyAge(timestamp))
 					stack.Close()
 				}
@@ -323,7 +325,6 @@ func startNode(ctx *cli.Context, stack *node.Node, backend quaiapi.Backend) {
 		if !ok {
 			utils.Fatalf("Quai service not running: %v", err)
 		}
-		nodeCtx := common.NodeLocation.Context()
 		if nodeCtx == common.ZONE_CTX {
 			// Set the gas price to the limits from the CLI and start mining
 			gasprice := utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)

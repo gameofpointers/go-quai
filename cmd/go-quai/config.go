@@ -118,7 +118,6 @@ func defaultNodeConfig(ctx *cli.Context) node.Config {
 
 // makeConfigNode loads quai configuration and creates a blank node instance.
 func makeConfigNode(ctx *cli.Context) (*node.Node, quaiConfig) {
-	nodeCtx := common.NodeLocation.Context()
 	// Load defaults.
 	cfg := quaiConfig{
 		Eth:     ethconfig.Defaults,
@@ -134,20 +133,24 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, quaiConfig) {
 	}
 
 	// Apply flags.
-	utils.SetGlobalVars(ctx)
+	nodeLocation := utils.GetNodeLocation(ctx)
+	// set the node location
+	cfg.Node.NodeLocation = nodeLocation
+
 	utils.SetNodeConfig(ctx, &cfg.Node)
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
 	}
-	utils.SetEthConfig(ctx, stack, &cfg.Eth)
+	utils.SetEthConfig(ctx, stack, &cfg.Eth, nodeLocation)
 	if ctx.GlobalIsSet(utils.QuaiStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.GlobalString(utils.QuaiStatsURLFlag.Name)
 	}
 	applyMetricConfig(ctx, &cfg)
+	nodeCtx := nodeLocation.Context()
 	// Onlt initialize the precompile for the zone chain
 	if nodeCtx == common.ZONE_CTX {
-		vm.InitializePrecompiles()
+		vm.InitializePrecompiles(nodeLocation)
 	}
 	return stack, cfg
 }
@@ -155,7 +158,7 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, quaiConfig) {
 // makeFullNode loads quai configuration and creates the Quai backend.
 func makeFullNode(ctx *cli.Context) (*node.Node, quaiapi.Backend) {
 	stack, cfg := makeConfigNode(ctx)
-	backend, _ := utils.RegisterEthService(stack, &cfg.Eth)
+	backend, _ := utils.RegisterEthService(stack, &cfg.Eth, cfg.Node.NodeLocation.Context())
 	sendfullstats := ctx.Bool(utils.SendFullStatsFlag.Name)
 
 	// Add the Quai Stats daemon if requested.
