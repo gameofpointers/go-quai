@@ -65,6 +65,9 @@ func startCmdPreRun(cmd *cobra.Command, args []string) error {
 
 func runStart(cmd *cobra.Command, args []string) error {
 	log.Infof("Starting go-quai")
+	if err := utils.ParseCoinbaseAddresses(); err != nil {
+		log.Fatalf("error parsing coinbase addresses: %s", err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -31,6 +33,7 @@ var NodeFlags = []Flag{
 	MaxPeersFlag,
 	LocationFlag,
 	SoloFlag,
+	CoinbaseAddressFlag,
 	DBEngineFlag,
 	KeystoreDirFlag,
 	NoUSBFlag,
@@ -83,7 +86,6 @@ var NodeFlags = []Flag{
 	CachePreimagesFlag,
 	ConsensusEngineFlag,
 	MinerGasPriceFlag,
-	MinerEtherbaseFlag,
 	UnlockedAccountFlag,
 	PasswordFileFlag,
 	ExternalSignerFlag,
@@ -544,11 +546,6 @@ var (
 		Value: newBigIntValue(EthConfigDefaults.Miner.GasPrice),
 		Usage: "Minimum gas price for mining a transaction" + generateEnvDoc("miner.gasprice"),
 	}
-	MinerEtherbaseFlag = Flag{
-		Name:  "miner.etherbase",
-		Value: "0",
-		Usage: "Public address for block mining rewards (default = first account)" + generateEnvDoc("miner.etherbase"),
-	}
 	// Account settings
 	UnlockedAccountFlag = Flag{
 		Name:  "unlock",
@@ -849,7 +846,47 @@ var (
 		Value: EthConfigDefaults.DomUrl,
 		Usage: "Subordinate chain websocket urls" + generateEnvDoc("sub.urls"),
 	}
+	CoinbaseAddressFlag = Flag{
+		Name:  "coinbase",
+		Value: "./coinbases.json",
+		Usage: "Coinbase addresses" + generateEnvDoc("coinbase"),
+	}
 )
+
+func ParseCoinbaseAddresses() error {
+	coinbaseInput := viper.GetString("coinbase")
+	coinbaseMap := make(map[string]string)
+
+	// Try to parse the input as JSON
+	if err := json.Unmarshal([]byte(coinbaseInput), &coinbaseMap); err != nil {
+		// If JSON parsing fails, treat it as a file path
+		fileContent, fileErr := os.ReadFile(coinbaseInput)
+		if fileErr != nil {
+			log.Fatalf("Failed to parse input as JSON and failed to read file: %s", fileErr)
+			return fileErr
+		}
+
+		// Try to unmarshal the file content
+		if err := json.Unmarshal(fileContent, &coinbaseMap); err != nil {
+			log.Fatalf("Invalid JSON in file: %s", err)
+			return err
+		}
+	}
+
+	// Fill in missing addresses with defaults
+	for i := 0; i < Width; i++ {
+		for j := 0; j < Width; j++ {
+			hexKey := fmt.Sprintf("%X%X", i, j)
+			if _, exists := coinbaseMap[hexKey]; !exists {
+				coinbaseMap[hexKey] = DefaultCoinbaseMap[hexKey]
+			}
+		}
+	}
+
+	log.Infof("Coinbase Addresses: %v", coinbaseMap)
+
+	return nil
+}
 
 func CreateAndBindFlag(flag Flag, cmd *cobra.Command) {
 	switch val := flag.Value.(type) {
