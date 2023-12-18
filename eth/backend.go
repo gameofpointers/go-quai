@@ -286,6 +286,11 @@ func (s *Quai) APIs() []rpc.API {
 			Service:   filters.NewPublicFilterAPI(s.APIBackend, false, 5*time.Minute),
 			Public:    true,
 		}, {
+			Namespace: "quai",
+			Version:   "1.0",
+			Service:   filters.NewPublicFilterAPI(s.APIBackend, false, 5*time.Minute),
+			Public:    true,
+		}, {
 			Namespace: "admin",
 			Version:   "1.0",
 			Service:   NewPrivateAdminAPI(s),
