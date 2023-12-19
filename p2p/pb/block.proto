@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package block;
+option go_package = "github.com/dominant-strategies/go-quai/p2p/pb";
+
+// Block structure
+message Block {
+  Header header = 1;
+  Transactions txs = 2;
+  Headers uncles = 3;
+  Transactions etxs = 4;
+  Manifest manifest = 5;
+}
+
+message Header {
+  repeated bytes parent_hash = 1;
+  bytes uncle_hash = 2;
+  bytes coinbase = 3;
+  bytes root = 4;
+  bytes tx_hash = 5;
+  bytes etx_hash = 6;
+  bytes etx_rollup_hash = 7;
+  repeated bytes manifest_hash = 8;
+  bytes receipt_hash = 9;
+  bytes difficulty = 10;
+  repeated bytes parent_entropy = 11;
+  repeated bytes parent_delta_s = 12;
+  repeated bytes number = 13;
+  uint64 gas_limit = 14;
+  uint64 gas_used = 15;
+  bytes base_fee = 16;
+  bytes location = 17;
+  uint64 time = 18;
+  bytes extra = 19;
+  bytes mix_hash = 20;
+  bytes nonce = 21;
+}
+
+// Transaction structure
+message Transaction {
+  bytes hash = 1;
+  uint64 type = 2;
+  string from = 3;
+  string to = 4;
+  uint64 nonce = 5;
+  bytes value = 6;
+  string gas_price = 7;
+  uint64 gas = 8;
+  bytes input = 9;
+  bytes chain_id = 10;
+  bytes max_priority_gasfee = 11;
+  bytes max_fee_per_gas = 12;
+  // TODO: Accesslist
+  uint64 etx_gas_limit = 13;
+  bytes etx_gas_price = 14;
+  bytes etx_gas_tip = 15;
+  bytes etx_data = 16;
+  // TODO: Etx Accesslist
+  bytes v = 17;
+  bytes r = 18;
+  bytes s = 19;
+}
+
+// Transactions structure
+message Transactions { repeated Transaction transactions = 1; }
+
+// Headers structure
+message Headers { repeated Header headers = 1; }
+
+// Manifest structure
+message Manifest { repeated bytes manifest = 1; }
