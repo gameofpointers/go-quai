@@ -32,4 +32,9 @@ protogen:
 ## build the go-quai binary
 build:
 	@echo "Building go-quai"
-	@go build -o go-quai ./cmd/go-quai/main.go
+	@go build -o build/bin/go-quai main.go
+
+run:
+	@echo "Running go-quai"
+	build/bin/go-quai start
+
