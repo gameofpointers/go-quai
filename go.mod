@@ -48,6 +48,7 @@ require (
 	go.uber.org/mock v0.3.0
 	golang.org/x/crypto v0.38.0
 	google.golang.org/protobuf v1.36.6
+	gopkg.in/olebedev/go-duktape.v3 v3.0.0-20210326210528-650f7c854440
 	gopkg.in/yaml.v3 v3.0.1
 	lukechampine.com/blake3 v1.2.1
 	modernc.org/mathutil v1.6.0
