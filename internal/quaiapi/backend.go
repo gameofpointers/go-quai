@@ -64,6 +64,7 @@ type Backend interface {
 	BlockByHash(ctx context.Context, hash common.Hash) (*types.WorkObject, error)
 	BlockOrCandidateByHash(hash common.Hash) *types.WorkObject
 	BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.WorkObject, error)
+	GetHeaderOrCandidateByHash(hash common.Hash) *types.WorkObject
 	StateAndHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*state.StateDB, *types.WorkObject, error)
 	StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.WorkObject, error)
 	AddressOutpoints(ctx context.Context, address common.Address) ([]*types.OutpointAndDenomination, error)
@@ -136,9 +137,12 @@ type Backend interface {
 	Config() *params.ChainConfig
 	GetTerminiByHash(hash common.Hash) *types.Termini
 	GetHeaderByHash(hash common.Hash) *types.WorkObject
-	IsGenesisHash(hash common.Hash) bool
 	GetQuaiHeaderForDonorHash(donorHash common.Hash) *types.WorkObjectHeader
 	GetBlockForWorkShareHash(workshareHash common.Hash) *types.WorkObject
+	CheckIfEtxIsEligible(hash common.Hash, location common.Location) bool
+	IsGenesisHash(hash common.Hash) bool
+	StateAtBlock(context.Context, *types.WorkObject, uint64, *state.StateDB, bool) (*state.StateDB, error)
+	StateAtTransaction(context.Context, *types.WorkObject, int, uint64) (core.Message, vm.BlockContext, *state.StateDB, error)
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool
