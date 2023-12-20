@@ -43,12 +43,12 @@ var (
 
 // **********************************
 // **                			   **
-// ** 	Eth Config Defaults		   **
+// ** 	Quai Config Defaults		   **
 // **	  & Empty Structs		   **
 // **							   **
 // **********************************
 
-var EthConfigDefaults = EthConfig{
+var QuaiConfigDefaults = EthConfig{
 	SyncMode:                0,
 	Progpow:                 ProgpowConfig{},
 	NetworkId:               1,

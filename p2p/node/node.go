@@ -118,7 +118,7 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 						return bootpeers
 					}),
 					kaddht.ProtocolPrefix("/quai"),
-					kaddht.RoutingTableRefreshPeriod(1 * time.Minute),
+					kaddht.RoutingTableRefreshPeriod(1*time.Minute),
 				),
 			)
 			return dht, err
