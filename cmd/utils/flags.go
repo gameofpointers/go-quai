@@ -2,21 +2,35 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"os"
+	"path/filepath"
+	godebug "runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/constants"
+	"github.com/dominant-strategies/go-quai/common/fdlimit"
+	"github.com/dominant-strategies/go-quai/core"
+	"github.com/dominant-strategies/go-quai/core/rawdb"
+	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/node"
+	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/quai/gasprice"
+	"github.com/dominant-strategies/go-quai/quai/quaiconfig"
+	gopsutil "github.com/shirou/gopsutil/mem"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var GlobalFlags = []Flag{
-	ConfigDirFlag,
-	DataDirFlag,
+var GlobalFlags = []Flag{ConfigDirFlag, DataDirFlag,
 	AncientDirFlag,
 	LogLevelFlag,
 	SaveConfigFlag,
@@ -131,22 +145,10 @@ var RPCFlags = []Flag{
 	WSPathPrefixFlag,
 	ExecFlag,
 	PreloadJSFlag,
+	RPCGlobalTxFeeCapFlag,
 	RPCGlobalGasCapFlag,
 	QuaiStatsURLFlag,
 	SendFullStatsFlag,
-}
-
-var MetricsFlags = []Flag{
-	MetricsEnabledFlag,
-	MetricsEnabledExpensiveFlag,
-	MetricsHTTPFlag,
-	MetricsPortFlag,
-	MetricsEnableInfluxDBFlag,
-	MetricsInfluxDBEndpointFlag,
-	MetricsInfluxDBDatabaseFlag,
-	MetricsInfluxDBUsernameFlag,
-	MetricsInfluxDBPasswordFlag,
-	MetricsInfluxDBTagsFlag,
 }
 
 var (
@@ -392,7 +394,7 @@ var (
 		Value: 0,
 		Usage: "Max number of elements (0 = no limit)" + generateEnvDoc("limit"),
 	}
-	defaultSyncMode = EthConfigDefaults.SyncMode
+	defaultSyncMode = QuaiConfigDefaults.SyncMode
 	SyncModeFlag    = Flag{
 		Name:  "syncmode",
 		Value: NewTextMarshalerValue(&defaultSyncMode),
@@ -412,7 +414,7 @@ var (
 
 	TxLookupLimitFlag = Flag{
 		Name:  "txlookuplimit",
-		Value: EthConfigDefaults.TxLookupLimit,
+		Value: QuaiConfigDefaults.TxLookupLimit,
 		Usage: "Number of recent blocks to maintain transactions index for (default = about one year, 0 = entire chain)" + generateEnvDoc("txlookuplimit"),
 	}
 
@@ -456,37 +458,37 @@ var (
 	}
 	TxPoolPriceLimitFlag = Flag{
 		Name:  "txpool.pricelimit",
-		Value: EthConfigDefaults.TxPool.PriceLimit,
+		Value: QuaiConfigDefaults.TxPool.PriceLimit,
 		Usage: "Minimum gas price limit to enforce for acceptance into the pool" + generateEnvDoc("txpool.pricelimit"),
 	}
 	TxPoolPriceBumpFlag = Flag{
 		Name:  "txpool.pricebump",
-		Value: EthConfigDefaults.TxPool.PriceBump,
+		Value: QuaiConfigDefaults.TxPool.PriceBump,
 		Usage: "Price bump percentage to replace an already existing transaction" + generateEnvDoc("txpool.pricebump"),
 	}
 	TxPoolAccountSlotsFlag = Flag{
 		Name:  "txpool.accountslots",
-		Value: EthConfigDefaults.TxPool.AccountSlots,
+		Value: QuaiConfigDefaults.TxPool.AccountSlots,
 		Usage: "Minimum number of executable transaction slots guaranteed per account" + generateEnvDoc("txpool.accountslots"),
 	}
 	TxPoolGlobalSlotsFlag = Flag{
 		Name:  "txpool.globalslots",
-		Value: EthConfigDefaults.TxPool.GlobalSlots,
+		Value: QuaiConfigDefaults.TxPool.GlobalSlots,
 		Usage: "Maximum number of executable transaction slots for all accounts" + generateEnvDoc("txpool.globalslots"),
 	}
 	TxPoolAccountQueueFlag = Flag{
 		Name:  "txpool.accountqueue",
-		Value: EthConfigDefaults.TxPool.AccountQueue,
+		Value: QuaiConfigDefaults.TxPool.AccountQueue,
 		Usage: "Maximum number of non-executable transaction slots permitted per account" + generateEnvDoc("txpool.accountqueue"),
 	}
 	TxPoolGlobalQueueFlag = Flag{
 		Name:  "txpool.globalqueue",
-		Value: EthConfigDefaults.TxPool.GlobalQueue,
+		Value: QuaiConfigDefaults.TxPool.GlobalQueue,
 		Usage: "Maximum number of non-executable transaction slots for all accounts" + generateEnvDoc("txpool.globalqueue"),
 	}
 	TxPoolLifetimeFlag = Flag{
 		Name:  "txpool.lifetime",
-		Value: EthConfigDefaults.TxPool.Lifetime,
+		Value: QuaiConfigDefaults.TxPool.Lifetime,
 		Usage: "Maximum amount of time non-executable transaction are queued" + generateEnvDoc("txpool.lifetime"),
 	}
 	CacheFlag = Flag{
@@ -506,12 +508,12 @@ var (
 	}
 	CacheTrieJournalFlag = Flag{
 		Name:  "cache.trie.journal",
-		Value: EthConfigDefaults.TrieCleanCacheJournal,
+		Value: QuaiConfigDefaults.TrieCleanCacheJournal,
 		Usage: "Disk journal directory for trie cache to survive node restarts" + generateEnvDoc("cache.trie.journal"),
 	}
 	CacheTrieRejournalFlag = Flag{
 		Name:  "cache.trie.rejournal",
-		Value: EthConfigDefaults.TrieCleanCacheRejournal,
+		Value: QuaiConfigDefaults.TrieCleanCacheRejournal,
 		Usage: "Time interval to regenerate the trie cache journal" + generateEnvDoc("cache.trie.rejournal"),
 	}
 	CacheGCFlag = Flag{
@@ -543,7 +545,7 @@ var (
 	// Miner settings
 	MinerGasPriceFlag = Flag{
 		Name:  "miner.gasprice",
-		Value: newBigIntValue(EthConfigDefaults.Miner.GasPrice),
+		Value: newBigIntValue(QuaiConfigDefaults.Miner.GasPrice),
 		Usage: "Minimum gas price for mining a transaction" + generateEnvDoc("miner.gasprice"),
 	}
 	// Account settings
@@ -559,6 +561,11 @@ var (
 		Usage: "Password file to use for non-interactive password input" + generateEnvDoc("password"),
 	}
 
+	KeyStoreDirFlag = Flag{
+		Name:  "keystore",
+		Value: "",
+		Usage: "Directory for the keystore (default = inside the datadir)",
+	}
 	ExternalSignerFlag = Flag{
 		Name:  "signer",
 		Value: "",
@@ -575,9 +582,14 @@ var (
 		Value: false,
 		Usage: "Allow insecure account unlocking when account-related RPCs are exposed by http" + generateEnvDoc("allow-insecure-unlock"),
 	}
+	RPCGlobalTxFeeCapFlag = Flag{
+		Name:  "rpc.txfeecap",
+		Usage: "Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap)",
+		Value: QuaiConfigDefaults.RPCTxFeeCap,
+	}
 	RPCGlobalGasCapFlag = Flag{
 		Name:  "rpc.gascap",
-		Value: EthConfigDefaults.RPCGasCap,
+		Value: QuaiConfigDefaults.RPCGasCap,
 		Usage: "Sets a cap on gas that can be used in eth_call/estimateGas (0=infinite)" + generateEnvDoc("vmdebug"),
 	}
 	QuaiStatsURLFlag = Flag{
@@ -736,73 +748,23 @@ var (
 	// Gas price oracle settings
 	GpoBlocksFlag = Flag{
 		Name:  "gpo.blocks",
-		Value: EthConfigDefaults.GPO.Blocks,
+		Value: QuaiConfigDefaults.GPO.Blocks,
 		Usage: "Number of recent blocks to check for gas prices" + generateEnvDoc("gpo.blocks"),
 	}
 	GpoPercentileFlag = Flag{
 		Name:  "gpo.percentile",
-		Value: EthConfigDefaults.GPO.Percentile,
+		Value: QuaiConfigDefaults.GPO.Percentile,
 		Usage: "Suggested gas price is the given percentile of a set of recent transaction gas prices" + generateEnvDoc("gpo.percentile"),
 	}
 	GpoMaxGasPriceFlag = Flag{
 		Name:  "gpo.maxprice",
-		Value: EthConfigDefaults.GPO.MaxPrice.Int64(),
+		Value: QuaiConfigDefaults.GPO.MaxPrice.Int64(),
 		Usage: "Maximum gas price will be recommended by gpo" + generateEnvDoc("gpo.maxprice"),
 	}
 	GpoIgnoreGasPriceFlag = Flag{
 		Name:  "gpo.ignoreprice",
-		Value: EthConfigDefaults.GPO.IgnorePrice.Int64(),
+		Value: QuaiConfigDefaults.GPO.IgnorePrice.Int64(),
 		Usage: "Gas price below which gpo will ignore transactions" + generateEnvDoc("gpo.ignoreprice"),
-	}
-
-	MetricsEnabledFlag = Flag{
-		Name:  "metrics",
-		Value: false,
-		Usage: "Enable metrics collection and reporting" + generateEnvDoc("metrics"),
-	}
-	MetricsEnabledExpensiveFlag = Flag{
-		Name:  "metrics.expensive",
-		Value: false,
-		Usage: "Enable expensive metrics collection and reporting" + generateEnvDoc("metrics.expensive"),
-	}
-	// MetricsHTTPFlag defines the endpoint for a stand-alone metrics HTTP endpoint.
-	// Since the pprof service enables sensitive/vulnerable behavior, this allows a user
-	// to enable a public-OK metrics endpoint without having to worry about ALSO exposing
-	// other profiling behavior or information.
-	MetricsHTTPFlag = Flag{
-		Name:  "metrics.addr",
-		Value: DefaultMetricsConfig.HTTP,
-		Usage: "Enable stand-alone metrics HTTP server listening interface" + generateEnvDoc("metrics.addr"),
-	}
-	MetricsPortFlag = Flag{
-		Name:  "metrics.port",
-		Value: DefaultMetricsConfig.Port,
-		Usage: "Metrics HTTP server listening port" + generateEnvDoc("metrics.port"),
-	}
-	MetricsEnableInfluxDBFlag = Flag{
-		Name:  "metrics.influxdb",
-		Value: false,
-		Usage: "Enable metrics export/push to an external InfluxDB database" + generateEnvDoc("metrics.influxdb"),
-	}
-	MetricsInfluxDBEndpointFlag = Flag{
-		Name:  "metrics.influxdb.endpoint",
-		Value: DefaultMetricsConfig.InfluxDBEndpoint,
-		Usage: "InfluxDB API endpoint to report metrics to" + generateEnvDoc("metrics.influxdb.endpoint"),
-	}
-	MetricsInfluxDBDatabaseFlag = Flag{
-		Name:  "metrics.influxdb.database",
-		Value: DefaultMetricsConfig.InfluxDBDatabase,
-		Usage: "InfluxDB database name to push reported metrics to" + generateEnvDoc("metrics.influxdb.database"),
-	}
-	MetricsInfluxDBUsernameFlag = Flag{
-		Name:  "metrics.influxdb.username",
-		Value: DefaultMetricsConfig.InfluxDBUsername,
-		Usage: "Username to authorize access to the database" + generateEnvDoc("metrics.influxdb.username"),
-	}
-	MetricsInfluxDBPasswordFlag = Flag{
-		Name:  "metrics.influxdb.password",
-		Value: DefaultMetricsConfig.InfluxDBPassword,
-		Usage: "Password to authorize access to the database" + generateEnvDoc("metrics.influxdb.password"),
 	}
 
 	ShowColorsFlag = Flag{
@@ -816,34 +778,24 @@ var (
 		Value: false,
 		Usage: "Write log messages to stdout" + generateEnvDoc("logtostdout"),
 	}
-	// Tags are part of every measurement sent to InfluxDB. Queries on tags are faster in InfluxDB.
-	// For example `host` tag could be used so that we can group all nodes and average a measurement
-	// across all of them, but also so that we can select a specific node and inspect its measurements.
-	// https://docs.influxdata.com/influxdb/v1.4/concepts/key_concepts/#tag-key
-	MetricsInfluxDBTagsFlag = Flag{
-		Name:  "metrics.influxdb.tags",
-		Value: DefaultMetricsConfig.InfluxDBTags,
-		Usage: "Comma-separated InfluxDB tags (key/values) attached to all measurements" + generateEnvDoc("metrics.influxdb.tags"),
-	}
-
 	RegionFlag = Flag{
 		Name:  "region",
-		Value: EthConfigDefaults.Region,
+		Value: QuaiConfigDefaults.Region,
 		Usage: "Quai Region flag" + generateEnvDoc("region"),
 	}
 	ZoneFlag = Flag{
 		Name:  "zone",
-		Value: EthConfigDefaults.Zone,
+		Value: QuaiConfigDefaults.Zone,
 		Usage: "Quai Zone flag" + generateEnvDoc("zone"),
 	}
 	DomUrl = Flag{
 		Name:  "dom.url",
-		Value: EthConfigDefaults.DomUrl,
+		Value: QuaiConfigDefaults.DomUrl,
 		Usage: "Dominant chain websocket url" + generateEnvDoc("dom.url"),
 	}
 	SubUrls = Flag{
 		Name:  "sub.urls",
-		Value: EthConfigDefaults.DomUrl,
+		Value: QuaiConfigDefaults.DomUrl,
 		Usage: "Subordinate chain websocket urls" + generateEnvDoc("sub.urls"),
 	}
 	CoinbaseAddressFlag = Flag{
@@ -853,8 +805,8 @@ var (
 	}
 )
 
-func ParseCoinbaseAddresses() error {
-	coinbaseInput := viper.GetString("coinbase")
+func ParseCoinbaseAddresses() (map[string]string, error) {
+	coinbaseInput := viper.GetString(CoinbaseAddressFlag.Name)
 	coinbaseMap := make(map[string]string)
 
 	// Try to parse the input as JSON
@@ -863,13 +815,13 @@ func ParseCoinbaseAddresses() error {
 		fileContent, fileErr := os.ReadFile(coinbaseInput)
 		if fileErr != nil {
 			log.Fatalf("Failed to parse input as JSON and failed to read file: %s", fileErr)
-			return fileErr
+			return nil, fileErr
 		}
 
 		// Try to unmarshal the file content
 		if err := json.Unmarshal(fileContent, &coinbaseMap); err != nil {
 			log.Fatalf("Invalid JSON in file: %s", err)
-			return err
+			return nil, err
 		}
 	}
 
@@ -885,7 +837,7 @@ func ParseCoinbaseAddresses() error {
 
 	log.Infof("Coinbase Addresses: %v", coinbaseMap)
 
-	return nil
+	return coinbaseMap, nil
 }
 
 func CreateAndBindFlag(flag Flag, cmd *cobra.Command) {
@@ -919,4 +871,777 @@ func CreateAndBindFlag(flag Flag, cmd *cobra.Command) {
 func generateEnvDoc(flag string) string {
 	envVar := constants.ENV_PREFIX + "_" + strings.ReplaceAll(strings.ToUpper(flag), "-", "_")
 	return fmt.Sprintf(" [%s]", envVar)
+}
+
+// setNodeUserIdent creates the user identifier from CLI flags.
+func setNodeUserIdent(cfg *node.Config) {
+	if identity := viper.GetString(IdentityFlag.Name); len(identity) > 0 {
+		cfg.UserIdent = identity
+	}
+}
+
+// SplitAndTrim splits input separated by a comma
+// and trims excessive white space from the substrings.
+func SplitAndTrim(input string) (ret []string) {
+	l := strings.Split(input, ",")
+	for _, r := range l {
+		if r = strings.TrimSpace(r); r != "" {
+			ret = append(ret, r)
+		}
+	}
+	return ret
+}
+
+// setHTTP creates the HTTP RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setHTTP(cfg *node.Config) {
+	if viper.GetBool(HTTPEnabledFlag.Name) && cfg.HTTPHost == "" {
+		cfg.HTTPHost = "127.0.0.1"
+		if viper.IsSet(HTTPListenAddrFlag.Name) {
+			cfg.HTTPHost = viper.GetString(HTTPListenAddrFlag.Name)
+		}
+	}
+
+	if viper.IsSet(HTTPPortFlag.Name) {
+		cfg.HTTPPort = viper.GetInt(HTTPPortFlag.Name)
+	}
+
+	if viper.IsSet(HTTPCORSDomainFlag.Name) {
+		cfg.HTTPCors = SplitAndTrim(viper.GetString(HTTPCORSDomainFlag.Name))
+	}
+
+	if viper.IsSet(HTTPApiFlag.Name) {
+		cfg.HTTPModules = SplitAndTrim(viper.GetString(HTTPApiFlag.Name))
+	}
+
+	if viper.IsSet(HTTPVirtualHostsFlag.Name) {
+		cfg.HTTPVirtualHosts = SplitAndTrim(viper.GetString(HTTPVirtualHostsFlag.Name))
+	}
+
+	if viper.IsSet(HTTPPathPrefixFlag.Name) {
+		cfg.HTTPPathPrefix = viper.GetString(HTTPPathPrefixFlag.Name)
+	}
+}
+
+// setWS creates the WebSocket RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setWS(cfg *node.Config) {
+	if viper.GetBool(WSEnabledFlag.Name) && cfg.WSHost == "" {
+		cfg.WSHost = "127.0.0.1"
+		if viper.IsSet(WSListenAddrFlag.Name) {
+			cfg.WSHost = viper.GetString(WSListenAddrFlag.Name)
+		}
+	}
+	if viper.IsSet(WSPortFlag.Name) {
+		cfg.WSPort = viper.GetInt(WSPortFlag.Name)
+	}
+
+	if viper.IsSet(WSAllowedOriginsFlag.Name) {
+		cfg.WSOrigins = SplitAndTrim(viper.GetString(WSAllowedOriginsFlag.Name))
+	}
+
+	if viper.IsSet(WSApiFlag.Name) {
+		cfg.WSModules = SplitAndTrim(viper.GetString(WSApiFlag.Name))
+	}
+
+	if viper.IsSet(WSPathPrefixFlag.Name) {
+		cfg.WSPathPrefix = viper.GetString(WSPathPrefixFlag.Name)
+	}
+}
+
+// setDomUrl sets the dominant chain websocket url.
+func setDomUrl(cfg *quaiconfig.Config) {
+	// only set the dom url if the node is not prime
+	if viper.IsSet(RegionFlag.Name) || viper.IsSet(ZoneFlag.Name) {
+		// Extract the domurl
+		var domurl string
+		if viper.IsSet(DomUrl.Name) {
+			domurl = viper.GetString(DomUrl.Name)
+		}
+		// do not start the node if the domurl is not configured
+		if domurl == "" {
+			Fatalf("No dom.url configured")
+		}
+		cfg.DomUrl = domurl
+	}
+}
+
+// setSubUrls sets the subordinate chain urls
+func setSubUrls(cfg *quaiconfig.Config) {
+	// only set the sub urls if its not the zone
+	if !viper.IsSet(ZoneFlag.Name) {
+		// Extract the suburls
+		suburls := strings.Split(viper.GetString(SubUrls.Name), ",")
+
+		// check if all the suburls are nil
+		subNilCount := 0
+		for _, url := range suburls {
+			if url == "" {
+				subNilCount++
+			}
+		}
+		// some sanity checks
+		if subNilCount == common.HierarchyDepth {
+			Fatalf("All the suburls are nil")
+		}
+		if len(suburls) > common.HierarchyDepth {
+			Fatalf("More than 3 sub urls specified")
+		}
+		if len(suburls) == 0 {
+			Fatalf("No sub url is specified")
+		}
+		cfg.SubUrls = suburls
+	}
+}
+
+// setGasLimitCeil sets the gas limit ceils based on the network that is
+// running
+func setGasLimitCeil(cfg *quaiconfig.Config) {
+	switch {
+	case viper.GetBool(ColosseumFlag.Name):
+		cfg.Miner.GasCeil = params.ColosseumGasCeil
+	case viper.GetBool(GardenFlag.Name):
+		cfg.Miner.GasCeil = params.GardenGasCeil
+	case viper.GetBool(OrchardFlag.Name):
+		cfg.Miner.GasCeil = params.OrchardGasCeil
+	case viper.GetBool(LighthouseFlag.Name):
+		cfg.Miner.GasCeil = params.LighthouseGasCeil
+	case viper.GetBool(LocalFlag.Name):
+		cfg.Miner.GasCeil = params.LocalGasCeil
+	case viper.GetBool(DeveloperFlag.Name):
+		cfg.Miner.GasCeil = params.LocalGasCeil
+	default:
+		cfg.Miner.GasCeil = params.ColosseumGasCeil
+	}
+}
+
+// makeSubUrls returns the subordinate chain urls
+func makeSubUrls() []string {
+	return strings.Split(viper.GetString(SubUrls.Name), ",")
+}
+
+// setSlicesRunning sets the slices running flag
+func setSlicesRunning(cfg *quaiconfig.Config) {
+	slices := strings.Split(viper.GetString(SlicesRunningFlag.Name), ",")
+
+	// Sanity checks
+	if len(slices) == 0 {
+		Fatalf("no slices are specified")
+	}
+	if len(slices) > common.NumRegionsInPrime*common.NumZonesInRegion {
+		Fatalf("number of slices exceed the current ontology")
+	}
+	slicesRunning := []common.Location{}
+	for _, slice := range slices {
+		slicesRunning = append(slicesRunning, common.Location{slice[1] - 48, slice[3] - 48})
+	}
+	cfg.SlicesRunning = slicesRunning
+}
+
+// MakeDatabaseHandles raises out the number of allowed file handles per process
+// for Quai and returns half of the allowance to assign to the database.
+func MakeDatabaseHandles() int {
+	limit, err := fdlimit.Maximum()
+	if err != nil {
+		Fatalf("Failed to retrieve file descriptor allowance: %v", err)
+	}
+	raised, err := fdlimit.Raise(uint64(limit))
+	if err != nil {
+		Fatalf("Failed to raise file descriptor allowance: %v", err)
+	}
+	return int(raised / 2) // Leave half for networking and other stuff
+}
+
+// HexAddress converts an account specified directly as a hex encoded string or
+// a key index in the key store to an internal account representation.
+func HexAddress(account string, nodeLocation common.Location) (common.Address, error) {
+	// If the specified account is a valid address, return it
+	if common.IsHexAddress(account) {
+		return common.HexToAddress(account, nodeLocation), nil
+	}
+	return common.Address{}, errors.New("invalid account address")
+}
+
+// setEtherbase retrieves the etherbase either from the directly specified
+// command line flags or from the keystore if CLI indexed.
+func setEtherbase(cfg *quaiconfig.Config) {
+	coinbaseMap, err := ParseCoinbaseAddresses()
+	if err != nil {
+		log.Fatalf("error parsing coinbase addresses: %s", err)
+	}
+	// TODO: Have to handle more shards in the future
+	etherbase := coinbaseMap["00"]
+	// Convert the etherbase into an address and configure it
+	if etherbase != "" {
+		account, err := HexAddress(etherbase, cfg.NodeLocation)
+		if err != nil {
+			Fatalf("Invalid miner etherbase: %v", err)
+		}
+		cfg.Miner.Etherbase = account
+	}
+}
+
+// MakePasswordList reads password lines from the file specified by the global --password flag.
+func MakePasswordList() []string {
+	path := viper.GetString(PasswordFileFlag.Name)
+	if path == "" {
+		return nil
+	}
+	text, err := os.ReadFile(path)
+	if err != nil {
+		Fatalf("Failed to read password file: %v", err)
+	}
+	lines := strings.Split(string(text), "\n")
+	// Sanitise DOS line endings.
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
+	return lines
+}
+
+// SetNodeConfig applies node-related command line flags to the config.
+func SetNodeConfig(cfg *node.Config) {
+	setHTTP(cfg)
+	setWS(cfg)
+	setNodeUserIdent(cfg)
+	setDataDir(cfg)
+
+	if viper.IsSet(ExternalSignerFlag.Name) {
+		cfg.ExternalSigner = viper.GetString(ExternalSignerFlag.Name)
+	}
+
+	if viper.IsSet(KeyStoreDirFlag.Name) {
+		cfg.KeyStoreDir = viper.GetString(KeyStoreDirFlag.Name)
+	}
+	if viper.IsSet(DeveloperFlag.Name) {
+		cfg.UseLightweightKDF = true
+	}
+	if viper.IsSet(NoUSBFlag.Name) || cfg.NoUSB {
+		log.Warn("Option nousb is deprecated and USB is deactivated by default. Use --usb to enable")
+	}
+	if viper.IsSet(USBFlag.Name) {
+		cfg.USB = viper.GetBool(USBFlag.Name)
+	}
+	if viper.IsSet(InsecureUnlockAllowedFlag.Name) {
+		cfg.InsecureUnlockAllowed = viper.GetBool(InsecureUnlockAllowedFlag.Name)
+	}
+	if viper.IsSet(DBEngineFlag.Name) {
+		dbEngine := viper.GetString(DBEngineFlag.Name)
+		if dbEngine != "leveldb" && dbEngine != "pebble" {
+			Fatalf("Invalid choice for db.engine '%s', allowed 'leveldb' or 'pebble'", dbEngine)
+		}
+		log.Info(fmt.Sprintf("Using %s as db engine", dbEngine))
+		cfg.DBEngine = dbEngine
+	}
+}
+
+func setDataDir(cfg *node.Config) {
+	switch {
+	case viper.IsSet(DataDirFlag.Name):
+		cfg.DataDir = viper.GetString(DataDirFlag.Name)
+	case viper.GetBool(DeveloperFlag.Name):
+		cfg.DataDir = "" // unless explicitly requested, use memory databases
+	case viper.GetBool(GardenFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "garden")
+	case viper.GetBool(OrchardFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "orchard")
+	case viper.GetBool(LighthouseFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "lighthouse")
+	case viper.GetBool(LocalFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "local")
+	}
+	// Set specific directory for node location within the hierarchy
+	switch cfg.NodeLocation.Context() {
+	case common.PRIME_CTX:
+		cfg.DataDir = filepath.Join(cfg.DataDir, "prime")
+	case common.REGION_CTX:
+		regionNum := strconv.Itoa(cfg.NodeLocation.Region())
+		cfg.DataDir = filepath.Join(cfg.DataDir, "region-"+regionNum)
+	case common.ZONE_CTX:
+		regionNum := strconv.Itoa(cfg.NodeLocation.Region())
+		zoneNum := strconv.Itoa(cfg.NodeLocation.Zone())
+		cfg.DataDir = filepath.Join(cfg.DataDir, "zone-"+regionNum+"-"+zoneNum)
+	}
+}
+
+func setGPO(cfg *gasprice.Config) {
+	if viper.IsSet(GpoBlocksFlag.Name) {
+		cfg.Blocks = viper.GetInt(GpoBlocksFlag.Name)
+	}
+	if viper.IsSet(GpoPercentileFlag.Name) {
+		cfg.Percentile = viper.GetInt(GpoPercentileFlag.Name)
+	}
+	if viper.IsSet(GpoMaxGasPriceFlag.Name) {
+		cfg.MaxPrice = big.NewInt(viper.GetInt64(GpoMaxGasPriceFlag.Name))
+	}
+	if viper.IsSet(GpoIgnoreGasPriceFlag.Name) {
+		cfg.IgnorePrice = big.NewInt(viper.GetInt64(GpoIgnoreGasPriceFlag.Name))
+	}
+}
+
+func setTxPool(cfg *core.TxPoolConfig, nodeLocation common.Location) {
+	if viper.IsSet(TxPoolLocalsFlag.Name) {
+		locals := strings.Split(viper.GetString(TxPoolLocalsFlag.Name), ",")
+		for _, account := range locals {
+			if trimmed := strings.TrimSpace(account); !common.IsHexAddress(trimmed) {
+				Fatalf("Invalid account in --txpool.locals: %s", trimmed)
+			} else {
+				internal, err := common.HexToAddress(account, nodeLocation).InternalAddress()
+				if err != nil {
+					Fatalf("Invalid account in --txpool.locals: %s", account)
+				}
+				cfg.Locals = append(cfg.Locals, internal)
+			}
+		}
+	}
+	if viper.IsSet(TxPoolNoLocalsFlag.Name) {
+		cfg.NoLocals = viper.GetBool(TxPoolNoLocalsFlag.Name)
+	}
+	if viper.IsSet(TxPoolJournalFlag.Name) {
+		cfg.Journal = viper.GetString(TxPoolJournalFlag.Name)
+	}
+	if viper.IsSet(TxPoolRejournalFlag.Name) {
+		cfg.Rejournal = viper.GetDuration(TxPoolRejournalFlag.Name)
+	}
+	if viper.IsSet(TxPoolPriceLimitFlag.Name) {
+		cfg.PriceLimit = viper.GetUint64(TxPoolPriceLimitFlag.Name)
+	}
+	if viper.IsSet(TxPoolPriceBumpFlag.Name) {
+		cfg.PriceBump = viper.GetUint64(TxPoolPriceBumpFlag.Name)
+	}
+	if viper.IsSet(TxPoolAccountSlotsFlag.Name) {
+		cfg.AccountSlots = viper.GetUint64(TxPoolAccountSlotsFlag.Name)
+	}
+	if viper.IsSet(TxPoolGlobalSlotsFlag.Name) {
+		cfg.GlobalSlots = viper.GetUint64(TxPoolGlobalSlotsFlag.Name)
+	}
+	if viper.IsSet(TxPoolAccountQueueFlag.Name) {
+		cfg.AccountQueue = viper.GetUint64(TxPoolAccountQueueFlag.Name)
+	}
+	if viper.IsSet(TxPoolGlobalQueueFlag.Name) {
+		cfg.GlobalQueue = viper.GetUint64(TxPoolGlobalQueueFlag.Name)
+	}
+	if viper.IsSet(TxPoolLifetimeFlag.Name) {
+		cfg.Lifetime = viper.GetDuration(TxPoolLifetimeFlag.Name)
+	}
+}
+
+func setConsensusEngineConfig(cfg *quaiconfig.Config) {
+	if cfg.ConsensusEngine == "blake3" {
+		// Override any default configs for hard coded networks.
+		switch {
+		case viper.GetBool(ColosseumFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.DurationLimit
+			cfg.Blake3Pow.GasCeil = params.ColosseumGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(GardenFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.GardenDurationLimit
+			cfg.Blake3Pow.GasCeil = params.GardenGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(OrchardFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.OrchardDurationLimit
+			cfg.Blake3Pow.GasCeil = params.OrchardGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(LighthouseFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.LighthouseDurationLimit
+			cfg.Blake3Pow.GasCeil = params.LighthouseGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(LocalFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.LocalDurationLimit
+			cfg.Blake3Pow.GasCeil = params.LocalGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(DeveloperFlag.Name):
+			cfg.Blake3Pow.DurationLimit = params.DurationLimit
+			cfg.Blake3Pow.GasCeil = params.LocalGasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		default:
+			cfg.Blake3Pow.DurationLimit = params.DurationLimit
+			cfg.Blake3Pow.GasCeil = params.GasCeil
+			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+
+		}
+	} else {
+		// Override any default configs for hard coded networks.
+		switch {
+		case viper.GetBool(ColosseumFlag.Name):
+			cfg.Progpow.DurationLimit = params.DurationLimit
+			cfg.Progpow.GasCeil = params.ColosseumGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(GardenFlag.Name):
+			cfg.Progpow.DurationLimit = params.GardenDurationLimit
+			cfg.Progpow.GasCeil = params.GardenGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(OrchardFlag.Name):
+			cfg.Progpow.DurationLimit = params.OrchardDurationLimit
+			cfg.Progpow.GasCeil = params.OrchardGasCeil
+			cfg.Progpow.GasCeil = params.ColosseumGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(LighthouseFlag.Name):
+			cfg.Progpow.DurationLimit = params.LighthouseDurationLimit
+			cfg.Progpow.GasCeil = params.LighthouseGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(LocalFlag.Name):
+			cfg.Progpow.DurationLimit = params.LocalDurationLimit
+			cfg.Progpow.GasCeil = params.LocalGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		case viper.GetBool(DeveloperFlag.Name):
+			cfg.Progpow.DurationLimit = params.DurationLimit
+			cfg.Progpow.GasCeil = params.LocalGasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+		default:
+			cfg.Progpow.DurationLimit = params.DurationLimit
+			cfg.Progpow.GasCeil = params.GasCeil
+			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine).Difficulty, common.Big2)
+
+		}
+	}
+}
+
+func setWhitelist(cfg *quaiconfig.Config) {
+	whitelist := viper.GetString(WhitelistFlag.Name)
+	if whitelist == "" {
+		return
+	}
+	cfg.Whitelist = make(map[uint64]common.Hash)
+	for _, entry := range strings.Split(whitelist, ",") {
+		parts := strings.Split(entry, "=")
+		if len(parts) != 2 {
+			Fatalf("Invalid whitelist entry: %s", entry)
+		}
+		number, err := strconv.ParseUint(parts[0], 0, 64)
+		if err != nil {
+			Fatalf("Invalid whitelist block number %s: %v", parts[0], err)
+		}
+		var hash common.Hash
+		if err = hash.UnmarshalText([]byte(parts[1])); err != nil {
+			Fatalf("Invalid whitelist hash %s: %v", parts[1], err)
+		}
+		cfg.Whitelist[number] = hash
+	}
+}
+
+// CheckExclusive verifies that only a single instance of the provided flags was
+// set by the user. Each flag might optionally be followed by a string type to
+// specialize it further.
+func CheckExclusive(args ...interface{}) {
+	// TODO: need a way in viper to check if a flag is exclusive
+}
+
+func GetNodeLocation() common.Location {
+	// Configure global NodeLocation
+	if !viper.IsSet(RegionFlag.Name) && viper.IsSet(ZoneFlag.Name) {
+		log.Fatal("zone idx given, but missing region idx!")
+	}
+	nodeLocation := common.Location{}
+	if viper.IsSet(RegionFlag.Name) {
+		region := viper.GetInt(RegionFlag.Name)
+		nodeLocation = append(nodeLocation, byte(region))
+	}
+	if viper.IsSet(ZoneFlag.Name) {
+		zone := viper.GetInt(ZoneFlag.Name)
+		nodeLocation = append(nodeLocation, byte(zone))
+	}
+	return nodeLocation
+}
+
+// SetQuaiConfig applies eth-related command line flags to the config.
+func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common.Location) {
+	// Avoid conflicting network flags
+	// CheckExclusive(ColosseumFlag, DeveloperFlag, GardenFlag, OrchardFlag, LocalFlag, LighthouseFlag)
+	// CheckExclusive(DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
+
+	if viper.GetString(GCModeFlag.Name) == "archive" && viper.GetUint64(TxLookupLimitFlag.Name) != 0 {
+		// TODO: see what this is supposed to do
+		viper.IsSet(TxLookupLimitFlag.Name)
+		log.Warn("Disable transaction unindexing for archive node")
+	}
+
+	cfg.NodeLocation = nodeLocation
+	// only set etherbase if its a zone chain
+	if viper.IsSet(RegionFlag.Name) && viper.IsSet(ZoneFlag.Name) {
+		setEtherbase(cfg)
+	}
+	setGPO(&cfg.GPO)
+	setTxPool(&cfg.TxPool, nodeLocation)
+
+	// If blake3 consensus engine is specifically asked use the blake3 engine
+	if viper.GetString(ConsensusEngineFlag.Name) == "blake3" {
+		cfg.ConsensusEngine = "blake3"
+	} else {
+		cfg.ConsensusEngine = "progpow"
+	}
+	setConsensusEngineConfig(cfg)
+
+	setWhitelist(cfg)
+
+	// set the dominant chain websocket url
+	setDomUrl(cfg)
+
+	// set the subordinate chain websocket urls
+	setSubUrls(cfg)
+
+	// set the gas limit ceil
+	setGasLimitCeil(cfg)
+
+	// set the slices that the node is running
+	setSlicesRunning(cfg)
+
+	// Cap the cache allowance and tune the garbage collector
+	mem, err := gopsutil.VirtualMemory()
+	if err == nil {
+		if 32<<(^uintptr(0)>>63) == 32 && mem.Total > 2*1024*1024*1024 {
+			log.Warn("Lowering memory allowance on 32bit arch", "available", mem.Total/1024/1024, "addressable", 2*1024)
+			mem.Total = 2 * 1024 * 1024 * 1024
+		}
+		allowance := int(mem.Total / 1024 / 1024 / 3)
+		if cache := viper.GetInt(CacheFlag.Name); cache > allowance {
+			log.Warn("Sanitizing cache to Go's GC limits", "provided", cache, "updated", allowance)
+			viper.GetViper().Set(CacheFlag.Name, strconv.Itoa(allowance))
+		}
+	}
+	// Ensure Go's GC ignores the database cache for trigger percentage
+	cache := viper.GetInt(CacheFlag.Name)
+	gogc := math.Max(20, math.Min(100, 100/(float64(cache)/1024)))
+
+	log.Debug("Sanitizing Go's GC trigger", "percent", int(gogc))
+	godebug.SetGCPercent(int(gogc))
+
+	if viper.IsSet(NetworkIdFlag.Name) {
+		cfg.NetworkId = viper.GetUint64(NetworkIdFlag.Name)
+	}
+	if viper.IsSet(CacheFlag.Name) || viper.IsSet(CacheDatabaseFlag.Name) {
+		cfg.DatabaseCache = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheDatabaseFlag.Name) / 100
+	}
+	cfg.DatabaseHandles = MakeDatabaseHandles()
+	if viper.IsSet(AncientDirFlag.Name) {
+		cfg.DatabaseFreezer = viper.GetString(AncientDirFlag.Name)
+	}
+
+	if gcmode := viper.GetString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
+		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
+	}
+	if viper.IsSet(GCModeFlag.Name) {
+		cfg.NoPruning = viper.GetString(GCModeFlag.Name) == "archive"
+	}
+	if viper.IsSet(CacheNoPrefetchFlag.Name) {
+		cfg.NoPrefetch = viper.GetBool(CacheNoPrefetchFlag.Name)
+	}
+	// Read the value from the flag no matter if it's set or not.
+	cfg.Preimages = viper.GetBool(CachePreimagesFlag.Name)
+	if cfg.NoPruning && !cfg.Preimages {
+		cfg.Preimages = true
+		log.Info("Enabling recording of key preimages since archive mode is used")
+	}
+	if viper.IsSet(TxLookupLimitFlag.Name) {
+		cfg.TxLookupLimit = viper.GetUint64(TxLookupLimitFlag.Name)
+	}
+	if viper.IsSet(CacheFlag.Name) || viper.IsSet(CacheTrieFlag.Name) {
+		cfg.TrieCleanCache = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheTrieFlag.Name) / 100
+	}
+	if viper.IsSet(CacheTrieJournalFlag.Name) {
+		cfg.TrieCleanCacheJournal = viper.GetString(CacheTrieJournalFlag.Name)
+	}
+	if viper.IsSet(CacheTrieRejournalFlag.Name) {
+		cfg.TrieCleanCacheRejournal = viper.GetDuration(CacheTrieRejournalFlag.Name)
+	}
+	if viper.IsSet(CacheFlag.Name) || viper.IsSet(CacheGCFlag.Name) {
+		cfg.TrieDirtyCache = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheGCFlag.Name) / 100
+	}
+	if viper.IsSet(CacheFlag.Name) || viper.IsSet(CacheSnapshotFlag.Name) {
+		cfg.SnapshotCache = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheSnapshotFlag.Name) / 100
+	}
+	if !viper.GetBool(SnapshotFlag.Name) {
+		cfg.TrieCleanCache += cfg.SnapshotCache
+		cfg.SnapshotCache = 0 // Disabled
+	}
+	if viper.IsSet(DocRootFlag.Name) {
+		cfg.DocRoot = viper.GetString(DocRootFlag.Name)
+	}
+	if viper.IsSet(VMEnableDebugFlag.Name) {
+		// TODO(fjl): force-enable this in --dev mode
+		cfg.EnablePreimageRecording = viper.GetBool(VMEnableDebugFlag.Name)
+	}
+
+	if viper.IsSet(RPCGlobalGasCapFlag.Name) {
+		cfg.RPCGasCap = viper.GetUint64(RPCGlobalGasCapFlag.Name)
+	}
+	if cfg.RPCGasCap != 0 {
+		log.Info("Set global gas cap", "cap", cfg.RPCGasCap)
+	} else {
+		log.Info("Global gas cap disabled")
+	}
+	if viper.IsSet(RPCGlobalTxFeeCapFlag.Name) {
+		cfg.RPCTxFeeCap = viper.GetFloat64(RPCGlobalTxFeeCapFlag.Name)
+	}
+	if viper.IsSet(NoDiscoverFlag.Name) {
+		cfg.EthDiscoveryURLs, cfg.SnapDiscoveryURLs = []string{}, []string{}
+	} else if viper.IsSet(DNSDiscoveryFlag.Name) {
+		urls := viper.GetString(DNSDiscoveryFlag.Name)
+		if urls == "" {
+			cfg.EthDiscoveryURLs = []string{}
+		} else {
+			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
+		}
+	}
+	// Override any default configs for hard coded networks.
+	switch {
+	case viper.GetBool(ColosseumFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 1
+		}
+		cfg.Genesis = core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "blake3" {
+			SetDNSDiscoveryDefaults(cfg, params.Blake3PowColosseumGenesisHash)
+		} else {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowColosseumGenesisHash)
+		}
+	case viper.GetBool(GardenFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 2
+		}
+		cfg.Genesis = core.DefaultGardenGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "blake3" {
+			SetDNSDiscoveryDefaults(cfg, params.Blake3PowGardenGenesisHash)
+		} else {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowGardenGenesisHash)
+		}
+	case viper.GetBool(OrchardFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 3
+		}
+		cfg.Genesis = core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "blake3" {
+			SetDNSDiscoveryDefaults(cfg, params.Blake3PowOrchardGenesisHash)
+		} else {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowOrchardGenesisHash)
+		}
+	case viper.GetBool(LocalFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 4
+		}
+		cfg.Genesis = core.DefaultLocalGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "blake3" {
+			SetDNSDiscoveryDefaults(cfg, params.Blake3PowLocalGenesisHash)
+		} else {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowLocalGenesisHash)
+		}
+	case viper.GetBool(LighthouseFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 5
+		}
+		cfg.Genesis = core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "blake3" {
+			SetDNSDiscoveryDefaults(cfg, params.Blake3PowLighthouseGenesisHash)
+		} else {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowLighthouseGenesisHash)
+		}
+	case viper.GetBool(DeveloperFlag.Name):
+		if !viper.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 1337
+		}
+
+		if viper.IsSet(DataDirFlag.Name) {
+			// Check if we have an already initialized chain and fall back to
+			// that if so. Otherwise we need to generate a new genesis spec.
+			chaindb := MakeChainDatabase(stack, false) // TODO (MariusVanDerWijden) make this read only
+			if rawdb.ReadCanonicalHash(chaindb, 0) != (common.Hash{}) {
+				cfg.Genesis = nil // fallback to db content
+			}
+			chaindb.Close()
+		}
+		if !viper.IsSet(MinerGasPriceFlag.Name) {
+			cfg.Miner.GasPrice = big.NewInt(1)
+		}
+	default:
+		if cfg.NetworkId == 1 {
+			SetDNSDiscoveryDefaults(cfg, params.ProgpowColosseumGenesisHash)
+		}
+	}
+	if !viper.GetBool(LocalFlag.Name) {
+		cfg.Genesis.Nonce = viper.GetUint64(GenesisNonceFlag.Name)
+	}
+
+	cfg.Genesis.Config.SetLocation(cfg.NodeLocation)
+}
+
+// SetDNSDiscoveryDefaults configures DNS discovery with the given URL if
+// no URLs are set.
+func SetDNSDiscoveryDefaults(cfg *quaiconfig.Config, genesis common.Hash) {
+	if cfg.EthDiscoveryURLs != nil && len(cfg.EthDiscoveryURLs) > 0 {
+		return // already set through flags/config
+	}
+	protocol := "all"
+	if url := params.KnownDNSNetwork(genesis, protocol, cfg.NodeLocation); url != "" {
+		cfg.EthDiscoveryURLs = []string{url}
+		cfg.SnapDiscoveryURLs = cfg.EthDiscoveryURLs
+	}
+}
+
+func SplitTagsFlag(tagsFlag string) map[string]string {
+	tags := strings.Split(tagsFlag, ",")
+	tagsMap := map[string]string{}
+
+	for _, t := range tags {
+		if t != "" {
+			kv := strings.Split(t, "=")
+
+			if len(kv) == 2 {
+				tagsMap[kv[0]] = kv[1]
+			}
+		}
+	}
+
+	return tagsMap
+}
+
+// MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.
+func MakeChainDatabase(stack *node.Node, readonly bool) ethdb.Database {
+	var (
+		cache   = viper.GetInt(CacheFlag.Name) * viper.GetInt(CacheDatabaseFlag.Name) / 100
+		handles = MakeDatabaseHandles()
+
+		err     error
+		chainDb ethdb.Database
+	)
+	name := "chaindata"
+	chainDb, err = stack.OpenDatabaseWithFreezer(name, cache, handles, viper.GetString(AncientDirFlag.Name), "", readonly)
+	if err != nil {
+		Fatalf("Could not open database: %v", err)
+	}
+	return chainDb
+}
+
+func MakeGenesis() *core.Genesis {
+	var genesis *core.Genesis
+	switch {
+	case viper.GetBool(ColosseumFlag.Name):
+		genesis = core.DefaultColosseumGenesisBlock(viper.GetString(ConsensusEngineFlag.Name))
+	case viper.GetBool(GardenFlag.Name):
+		genesis = core.DefaultGardenGenesisBlock(viper.GetString(ConsensusEngineFlag.Name))
+	case viper.GetBool(OrchardFlag.Name):
+		genesis = core.DefaultOrchardGenesisBlock(viper.GetString(ConsensusEngineFlag.Name))
+	case viper.GetBool(LighthouseFlag.Name):
+		genesis = core.DefaultLighthouseGenesisBlock(viper.GetString(ConsensusEngineFlag.Name))
+	case viper.GetBool(LocalFlag.Name):
+		genesis = core.DefaultLocalGenesisBlock(viper.GetString(ConsensusEngineFlag.Name))
+	case viper.GetBool(DeveloperFlag.Name):
+		Fatalf("Developer chains are ephemeral")
+	}
+	return genesis
+}
+
+// MakeConsolePreloads retrieves the absolute paths for the console JavaScript
+// scripts to preload before starting.
+func MakeConsolePreloads() []string {
+	// Skip preloading if there's nothing to preload
+	if viper.GetString(PreloadJSFlag.Name) == "" {
+		return nil
+	}
+	// Otherwise resolve absolute paths and return them
+	var preloads []string
+
+	for _, file := range strings.Split(viper.GetString(PreloadJSFlag.Name), ",") {
+		preloads = append(preloads, strings.TrimSpace(file))
+	}
+	return preloads
 }
