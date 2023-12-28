@@ -42,5 +42,5 @@ go-quai:
 
 run:
 	@echo "Running go-quai"
-	build/bin/go-quai start
+	build/bin/go-quai start --local --slices "[0 0]"
 

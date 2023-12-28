@@ -116,8 +116,6 @@ func NewCustom(file string, namespace string, customize func(options *opt.Option
 		quitChan: make(chan chan error),
 	}
 
-	// Start up the metrics gathering and return
-	go ldb.meter(metricsGatheringInterval)
 	return ldb, nil
 }
 
