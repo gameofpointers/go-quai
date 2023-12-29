@@ -291,7 +291,7 @@ func (t *freezerTable) repair() error {
 	if err := t.preopen(); err != nil {
 		return err
 	}
-	t.logger.Debug("Chain freezer table opened", "items", t.items, "size", common.StorageSize(t.headBytes))
+	log.Debug("Chain freezer table opened", "items", t.items, "size", common.StorageSize(t.headBytes))
 	return nil
 }
 
