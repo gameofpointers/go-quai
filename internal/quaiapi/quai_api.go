@@ -697,6 +697,7 @@ func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, r
 
 func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (map[string]interface{}, error) {
 	nodeCtx := s.b.NodeCtx()
+	log.Info("GetPendingHeader", "NodeCtx", nodeCtx)
 	if nodeCtx != common.ZONE_CTX {
 		return nil, errors.New("getPendingHeader can only be called in zone chain")
 	}

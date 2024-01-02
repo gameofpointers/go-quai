@@ -114,20 +114,20 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 	}
 
+	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
+	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
 	if config.ConsensusEngine == "blake3" {
 		blake3Config := config.Blake3Pow
 		blake3Config.NotifyFull = config.Miner.NotifyFull
-		blake3Config.NodeLocation = chainConfig.Location
-		quai.engine = quaiconfig.CreateBlake3ConsensusEngine(stack, chainConfig, &blake3Config, config.Miner.Notify, config.Miner.Noverify, chainDb)
+		blake3Config.NodeLocation = config.NodeLocation
+		quai.engine = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, chainDb)
 	} else {
 		// Transfer mining-related config to the progpow config.
 		progpowConfig := config.Progpow
-		progpowConfig.NodeLocation = chainConfig.Location
+		progpowConfig.NodeLocation = config.NodeLocation
 		progpowConfig.NotifyFull = config.Miner.NotifyFull
-		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, chainConfig, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb)
+		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb)
 	}
-	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
-	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)

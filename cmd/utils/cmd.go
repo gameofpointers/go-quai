@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"time"
 )
 
 type quaiConfig struct {
@@ -33,22 +34,29 @@ func StartQuaiBackend() (*QuaiBackend, error) {
 		log.Info("Starting Prime")
 		stackPrime, backendPrime := makeFullNode(nil)
 		defer stackPrime.Close()
+		log.Info("Calling Start Node in Prime")
 		startNode(stackPrime, backendPrime)
 		stackPrime.Wait()
 	}()
+
+	time.Sleep(2 * time.Second)
 
 	go func() {
 		log.Info("Starting Region")
 		stackRegion, backendRegion := makeFullNode(common.Location{0})
 		defer stackRegion.Close()
+		log.Info("Calling Start Node in Region")
 		startNode(stackRegion, backendRegion)
 		stackRegion.Wait()
 	}()
+
+	time.Sleep(2 * time.Second)
 
 	go func() {
 		log.Info("Starting Zone")
 		stackZone, backendZone := makeFullNode(common.Location{0, 0})
 		defer stackZone.Close()
+		log.Info("Calling Start Node in Zone")
 		startNode(stackZone, backendZone)
 		stackZone.Wait()
 	}()

@@ -25,6 +25,8 @@ const (
 type BodyDb struct {
 	chainConfig *params.ChainConfig // Chain & network configuration
 
+	nodeLocation common.Location
+
 	db ethdb.Database // Low level persistent database to store final content in
 
 	chainFeed     event.Feed
@@ -49,6 +51,7 @@ func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chai
 
 	bc := &BodyDb{
 		chainConfig:   chainConfig,
+		nodeLocation:  chainConfig.Location,
 		engine:        engine,
 		db:            db,
 		slicesRunning: slicesRunning,
@@ -180,11 +183,11 @@ func (bc *BodyDb) Processor() *StateProcessor {
 }
 
 func (bc *BodyDb) NodeLocation() common.Location {
-	return bc.chainConfig.Location
+	return bc.nodeLocation
 }
 
 func (bc *BodyDb) NodeCtx() int {
-	return bc.chainConfig.Location.Context()
+	return bc.nodeLocation.Context()
 }
 
 // Config retrieves the chain's fork configuration.

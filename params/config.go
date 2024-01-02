@@ -36,7 +36,7 @@ var (
 	Blake3PowColosseumGenesisHash  = common.HexToHash("0x40057f44be0809f939c7d70893d101abc74af1f1c535e406ec9909cfa2c20cbe")
 	Blake3PowGardenGenesisHash     = common.HexToHash("0x0a942bb7fa04b80d658a64d0ca49c62199503a796abc169f05a1863421a22098")
 	Blake3PowOrchardGenesisHash    = common.HexToHash("0x1f3743c323ec7a9a6a8150a33de81723abb70fa10ad49c35e365e48488430b56")
-	Blake3PowLocalGenesisHash      = common.HexToHash("0x31ac78ff6abcd99ad1fd8cd1b8ef54cfb28bdc72f7a38311e67a9e34fc2adb45")
+	Blake3PowLocalGenesisHash      = common.HexToHash("0x479184319884a4234f8604f4496e32dece505a743f7e98f7fc1f7d4456c08ba9")
 	Blake3PowLighthouseGenesisHash = common.HexToHash("0xaadedd7ed5a68a8885b54079e8193ae5be8f9b9bf4799ea9f1612bca835f33da")
 )
 
@@ -131,11 +131,6 @@ type ChainConfig struct {
 	Progpow         *ProgpowConfig   `json:"progpow,omitempty"`
 	GenesisHash     common.Hash
 	Location        common.Location
-}
-
-// SetLocation sets the location on the chain config
-func (cfg *ChainConfig) SetLocation(location common.Location) {
-	cfg.Location = location
 }
 
 // Blake3powConfig is the consensus engine configs for proof-of-work based sealing.

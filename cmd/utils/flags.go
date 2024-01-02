@@ -882,7 +882,7 @@ func SplitAndTrim(input string) (ret []string) {
 
 // setHTTP creates the HTTP RPC listener interface string from the set
 // command line flags, returning empty if the HTTP endpoint is disabled.
-func setHTTP(cfg *node.Config) {
+func setHTTP(cfg *node.Config, nodeLocation common.Location) {
 	if viper.GetBool(HTTPEnabledFlag.Name) && cfg.HTTPHost == "" {
 		cfg.HTTPHost = "127.0.0.1"
 		if viper.IsSet(HTTPListenAddrFlag.Name) {
@@ -890,8 +890,12 @@ func setHTTP(cfg *node.Config) {
 		}
 	}
 
-	if viper.IsSet(HTTPPortFlag.Name) {
-		cfg.HTTPPort = viper.GetInt(HTTPPortFlag.Name)
+	if nodeLocation == nil {
+		cfg.HTTPPort = 9001
+	} else if len(nodeLocation) == 1 {
+		cfg.HTTPPort = 9002
+	} else if len(nodeLocation) == 2 {
+		cfg.HTTPPort = 9003
 	}
 
 	if viper.IsSet(HTTPCORSDomainFlag.Name) {
@@ -1073,7 +1077,7 @@ func MakePasswordList() []string {
 
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(cfg *node.Config, nodeLocation common.Location) {
-	setHTTP(cfg)
+	setHTTP(cfg, nodeLocation)
 	setWS(cfg, nodeLocation)
 	setNodeUserIdent(cfg)
 	setDataDir(cfg)
