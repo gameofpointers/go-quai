@@ -496,6 +496,9 @@ func (s *StateDB) getStateObject(addr common.InternalAddress) *stateObject {
 // destructed object instead of wiping all knowledge about the state object.
 func (s *StateDB) getDeletedStateObject(addr common.InternalAddress) *stateObject {
 	// Prefer live objects if any is available
+	if s.stateObjects == nil {
+		log.Info("State objecct is nil")
+	}
 	if obj := s.stateObjects[addr]; obj != nil {
 		return obj
 	}

@@ -126,6 +126,8 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		progpowConfig.NotifyFull = config.Miner.NotifyFull
 		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, chainConfig, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb)
 	}
+	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
+	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -166,6 +168,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 
+	log.Info("Dom clietn", "url", quai.config.DomUrl)
 	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, config.Genesis)
 	if err != nil {
 		return nil, err

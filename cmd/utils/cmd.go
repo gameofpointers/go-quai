@@ -5,6 +5,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/node"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quai"
@@ -28,9 +29,29 @@ type QuaiBackend struct {
 func StartQuaiBackend() (*QuaiBackend, error) {
 
 	// Make full node
-	stack, backend := makeFullNode()
-	defer stack.Close()
-	startNode(stack, backend)
+	go func() {
+		log.Info("Starting Prime")
+		stackPrime, backendPrime := makeFullNode(nil)
+		defer stackPrime.Close()
+		startNode(stackPrime, backendPrime)
+		stackPrime.Wait()
+	}()
+
+	go func() {
+		log.Info("Starting Region")
+		stackRegion, backendRegion := makeFullNode(common.Location{0})
+		defer stackRegion.Close()
+		startNode(stackRegion, backendRegion)
+		stackRegion.Wait()
+	}()
+
+	go func() {
+		log.Info("Starting Zone")
+		stackZone, backendZone := makeFullNode(common.Location{0, 0})
+		defer stackZone.Close()
+		startNode(stackZone, backendZone)
+		stackZone.Wait()
+	}()
 
 	return &QuaiBackend{}, nil
 }
@@ -52,7 +73,7 @@ func StartNode(stack *node.Node) {
 }
 
 // makeConfigNode loads quai configuration and creates a blank node instance.
-func makeConfigNode() (*node.Node, quaiConfig) {
+func makeConfigNode(nodeLocation common.Location) (*node.Node, quaiConfig) {
 	// Load defaults.
 	cfg := quaiConfig{
 		Quai: quaiconfig.Defaults,
@@ -60,11 +81,11 @@ func makeConfigNode() (*node.Node, quaiConfig) {
 	}
 
 	// Apply flags.
-	nodeLocation := common.Location{0, 0}
 	// set the node location
+	log.Info("Node", "Location", nodeLocation)
 	cfg.Node.NodeLocation = nodeLocation
 
-	SetNodeConfig(&cfg.Node)
+	SetNodeConfig(&cfg.Node, nodeLocation)
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		Fatalf("Failed to create the protocol stack: %v", err)
@@ -92,8 +113,8 @@ func defaultNodeConfig() node.Config {
 }
 
 // makeFullNode loads quai configuration and creates the Quai backend.
-func makeFullNode() (*node.Node, quaiapi.Backend) {
-	stack, cfg := makeConfigNode()
+func makeFullNode(nodeLocation common.Location) (*node.Node, quaiapi.Backend) {
+	stack, cfg := makeConfigNode(nodeLocation)
 	backend, _ := RegisterQuaiService(stack, &cfg.Quai, cfg.Node.NodeLocation.Context())
 	// TODO: Start quai stats service
 	return stack, backend
