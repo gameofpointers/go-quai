@@ -123,8 +123,6 @@ var NodeFlags = []Flag{
 	GpoIgnoreGasPriceFlag,
 	FakePoWFlag,
 	NoCompactionFlag,
-	RegionFlag,
-	ZoneFlag,
 	DomUrl,
 	SubUrls,
 }
@@ -778,16 +776,6 @@ var (
 		Value: false,
 		Usage: "Write log messages to stdout" + generateEnvDoc("logtostdout"),
 	}
-	RegionFlag = Flag{
-		Name:  "region",
-		Value: QuaiConfigDefaults.Region,
-		Usage: "Quai Region flag" + generateEnvDoc("region"),
-	}
-	ZoneFlag = Flag{
-		Name:  "zone",
-		Value: QuaiConfigDefaults.Zone,
-		Usage: "Quai Zone flag" + generateEnvDoc("zone"),
-	}
 	DomUrl = Flag{
 		Name:  "dom.url",
 		Value: QuaiConfigDefaults.DomUrl,
@@ -925,15 +913,19 @@ func setHTTP(cfg *node.Config) {
 
 // setWS creates the WebSocket RPC listener interface string from the set
 // command line flags, returning empty if the HTTP endpoint is disabled.
-func setWS(cfg *node.Config) {
+func setWS(cfg *node.Config, nodeLocation common.Location) {
 	if viper.GetBool(WSEnabledFlag.Name) && cfg.WSHost == "" {
 		cfg.WSHost = "127.0.0.1"
 		if viper.IsSet(WSListenAddrFlag.Name) {
 			cfg.WSHost = viper.GetString(WSListenAddrFlag.Name)
 		}
 	}
-	if viper.IsSet(WSPortFlag.Name) {
-		cfg.WSPort = viper.GetInt(WSPortFlag.Name)
+	if nodeLocation == nil {
+		cfg.WSPort = 8001
+	} else if len(nodeLocation) == 1 {
+		cfg.WSPort = 8002
+	} else if len(nodeLocation) == 2 {
+		cfg.WSPort = 8003
 	}
 
 	if viper.IsSet(WSAllowedOriginsFlag.Name) {
@@ -950,47 +942,27 @@ func setWS(cfg *node.Config) {
 }
 
 // setDomUrl sets the dominant chain websocket url.
-func setDomUrl(cfg *quaiconfig.Config) {
+func setDomUrl(cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// only set the dom url if the node is not prime
-	if viper.IsSet(RegionFlag.Name) || viper.IsSet(ZoneFlag.Name) {
-		// Extract the domurl
-		var domurl string
-		if viper.IsSet(DomUrl.Name) {
-			domurl = viper.GetString(DomUrl.Name)
+	if nodeLocation != nil {
+		if len(nodeLocation) == 1 {
+			cfg.DomUrl = "ws://127.0.0.1:8001"
+		} else if len(nodeLocation) == 2 {
+			cfg.DomUrl = "ws://127.0.0.1:8002"
 		}
-		// do not start the node if the domurl is not configured
-		if domurl == "" {
-			Fatalf("No dom.url configured")
-		}
-		cfg.DomUrl = domurl
 	}
+	log.Info("Node", "Location", nodeLocation, "domurl", cfg.DomUrl)
 }
 
 // setSubUrls sets the subordinate chain urls
-func setSubUrls(cfg *quaiconfig.Config) {
+func setSubUrls(cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// only set the sub urls if its not the zone
-	if !viper.IsSet(ZoneFlag.Name) {
-		// Extract the suburls
-		suburls := strings.Split(viper.GetString(SubUrls.Name), ",")
-
-		// check if all the suburls are nil
-		subNilCount := 0
-		for _, url := range suburls {
-			if url == "" {
-				subNilCount++
-			}
+	if len(nodeLocation) != 2 {
+		if nodeLocation == nil {
+			cfg.SubUrls = "ws://127.0.0.1:8002"
+		} else if len(nodeLocation) == 1 {
+			cfg.SubUrls = "ws://127.0.0.1:8003"
 		}
-		// some sanity checks
-		if subNilCount == common.HierarchyDepth {
-			Fatalf("All the suburls are nil")
-		}
-		if len(suburls) > common.HierarchyDepth {
-			Fatalf("More than 3 sub urls specified")
-		}
-		if len(suburls) == 0 {
-			Fatalf("No sub url is specified")
-		}
-		cfg.SubUrls = suburls
 	}
 }
 
@@ -1100,9 +1072,9 @@ func MakePasswordList() []string {
 }
 
 // SetNodeConfig applies node-related command line flags to the config.
-func SetNodeConfig(cfg *node.Config) {
+func SetNodeConfig(cfg *node.Config, nodeLocation common.Location) {
 	setHTTP(cfg)
-	setWS(cfg)
+	setWS(cfg, nodeLocation)
 	setNodeUserIdent(cfg)
 	setDataDir(cfg)
 
@@ -1327,23 +1299,6 @@ func CheckExclusive(args ...interface{}) {
 	// TODO: need a way in viper to check if a flag is exclusive
 }
 
-func GetNodeLocation() common.Location {
-	// Configure global NodeLocation
-	if !viper.IsSet(RegionFlag.Name) && viper.IsSet(ZoneFlag.Name) {
-		log.Fatal("zone idx given, but missing region idx!")
-	}
-	nodeLocation := common.Location{}
-	if viper.IsSet(RegionFlag.Name) {
-		region := viper.GetInt(RegionFlag.Name)
-		nodeLocation = append(nodeLocation, byte(region))
-	}
-	if viper.IsSet(ZoneFlag.Name) {
-		zone := viper.GetInt(ZoneFlag.Name)
-		nodeLocation = append(nodeLocation, byte(zone))
-	}
-	return nodeLocation
-}
-
 // SetQuaiConfig applies eth-related command line flags to the config.
 func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// Avoid conflicting network flags
@@ -1358,7 +1313,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common
 
 	cfg.NodeLocation = nodeLocation
 	// only set etherbase if its a zone chain
-	if viper.IsSet(RegionFlag.Name) && viper.IsSet(ZoneFlag.Name) {
+	if len(nodeLocation) == 2 {
 		setEtherbase(cfg)
 	}
 	setGPO(&cfg.GPO)
@@ -1375,10 +1330,10 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common
 	setWhitelist(cfg)
 
 	// set the dominant chain websocket url
-	setDomUrl(cfg)
+	setDomUrl(cfg, nodeLocation)
 
 	// set the subordinate chain websocket urls
-	setSubUrls(cfg)
+	setSubUrls(cfg, nodeLocation)
 
 	// set the gas limit ceil
 	setGasLimitCeil(cfg)
@@ -1561,7 +1516,9 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common
 		cfg.Genesis.Nonce = viper.GetUint64(GenesisNonceFlag.Name)
 	}
 
-	cfg.Genesis.Config.SetLocation(cfg.NodeLocation)
+	log.Info("Setting genesis Location", "node", nodeLocation)
+	cfg.Genesis.Config.Location = nodeLocation
+	log.Info("Location after setting", "genesis", cfg.Genesis.Config.Location)
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if

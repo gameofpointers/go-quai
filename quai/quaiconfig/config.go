@@ -74,8 +74,6 @@ var Defaults = Config{
 	RPCGasCap:   50000000,
 	GPO:         FullNodeGPO,
 	RPCTxFeeCap: 1, // 1 ether
-	DomUrl:      "ws://127.0.0.1:8546",
-	SubUrls:     []string{"ws://127.0.0.1:8546", "ws://127.0.0.1:8546", "ws://127.0.0.1:8546"},
 }
 
 //go:generate gencodec -type Config -formats toml -out gen_config.go
@@ -147,17 +145,11 @@ type Config struct {
 	// send-transction variants. The unit is ether.
 	RPCTxFeeCap float64
 
-	// Region location options
-	Region int
-
-	// Zone location options
-	Zone int
-
 	// Dom node websocket url
 	DomUrl string
 
 	// Sub node websocket urls
-	SubUrls []string
+	SubUrls string
 
 	// Slices running on the node
 	SlicesRunning []common.Location

@@ -84,7 +84,7 @@ type Slice struct {
 	badHashesCache map[common.Hash]bool
 }
 
-func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.Header) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis) (*Slice, error) {
+func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.Header) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls string, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis) (*Slice, error) {
 	nodeCtx := chainConfig.Location.Context()
 	sl := &Slice{
 		config:         chainConfig,
@@ -118,12 +118,13 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	// only set the subClients if the chain is not Zone
 	sl.subClients = make([]*quaiclient.Client, 3)
 	if nodeCtx != common.ZONE_CTX {
-		sl.subClients = makeSubClients(subClientUrls)
+		sl.subClients = makeSubClients([]string{subClientUrls})
 	}
 
 	// only set domClient if the chain is not Prime.
 	if nodeCtx != common.PRIME_CTX {
 		go func() {
+			log.Info("Node", "Ctx", nodeCtx)
 			sl.domClient = makeDomClient(domClientUrl)
 		}()
 	}

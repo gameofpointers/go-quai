@@ -132,6 +132,7 @@ func (n *Node) Start() error {
 	n.state = runningState
 	// open networking and RPC endpoints
 	var err error
+	err = n.openEndpoints()
 	lifecycles := make([]Lifecycle, len(n.lifecycles))
 	copy(lifecycles, n.lifecycles)
 	n.lock.Unlock()
@@ -151,8 +152,20 @@ func (n *Node) Start() error {
 	}
 	// Check if any lifecycle failed to start.
 	if err != nil {
+
+		log.Info("Stopping")
 		n.stopServices(started)
 		n.doClose(nil)
+	}
+	return err
+}
+
+// openEndpoints starts all network and RPC endpoints.
+func (n *Node) openEndpoints() error {
+	// start RPC endpoints
+	err := n.startRPC()
+	if err != nil {
+		n.stopRPC()
 	}
 	return err
 }

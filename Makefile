@@ -22,7 +22,7 @@ help:
         { lastLine = $$0 }' $(MAKEFILE_LIST) | sort -u
 	@printf "\n"
 
-## generate mocks. 
+## generte mocks. 
 mocks:
 	@echo "Generating mocks"
 	@ mockgen -package mocks -destination p2p/protocol/mocks/mockedQuaiP2PNode.go -source=p2p/protocol/interface.go QuaiP2PNode
@@ -42,5 +42,5 @@ go-quai:
 
 run:
 	@echo "Running go-quai"
-	build/bin/go-quai start --local --slices "[0 0]"
+	build/bin/go-quai start --local --slices "[0 0]" --nonce 5926993  --http --http.vhosts=* --http.addr localhost --http.api quai --ws --ws.addr localhost --ws.api eth,quai  --db.engine leveldb --showcolors
 

@@ -116,10 +116,12 @@ func (h *httpServer) listenAddr() string {
 
 // start starts the HTTP server if it is enabled and not already running.
 func (h *httpServer) start() error {
+	log.Info("Starting web socket")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if h.endpoint == "" || h.listener != nil {
+		log.Info("Already running or not configured")
 		return nil // already running or not configured
 	}
 
@@ -149,14 +151,14 @@ func (h *httpServer) start() error {
 		if h.wsConfig.prefix != "" {
 			url += h.wsConfig.prefix
 		}
-		h.log.Info("WebSocket enabled", "url", url)
+		log.Info("WebSocket enabled", "url", url)
 	}
 	// if server is websocket only, return after logging
 	if !h.rpcAllowed() {
 		return nil
 	}
 	// Log http endpoint.
-	h.log.Info("HTTP server started",
+	log.Info("HTTP server started",
 		"endpoint", listener.Addr(),
 		"prefix", h.httpConfig.prefix,
 		"cors", strings.Join(h.httpConfig.CorsAllowedOrigins, ","),
