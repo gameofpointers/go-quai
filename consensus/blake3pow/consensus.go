@@ -339,7 +339,7 @@ func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, pa
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 
 	if nodeCtx != common.ZONE_CTX {
-		log.Error("Cannot CalcDifficulty for", "context", nodeCtx)
+		log.Error("Cannot CalcDifficulty for", "context", nodeCtx, "location", blake3pow.config.NodeLocation)
 		return nil
 	}
 

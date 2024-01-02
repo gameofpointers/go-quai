@@ -159,7 +159,7 @@ type Config struct {
 }
 
 // CreateProgpowConsensusEngine creates a progpow consensus engine for the given chain configuration.
-func CreateProgpowConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, config *progpow.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
+func CreateProgpowConsensusEngine(stack *node.Node, nodeLocation common.Location, config *progpow.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
 	// Otherwise assume proof-of-work
 	switch config.PowMode {
 	case progpow.ModeFake:
@@ -173,7 +173,7 @@ func CreateProgpowConsensusEngine(stack *node.Node, chainConfig *params.ChainCon
 		PowMode:       config.PowMode,
 		NotifyFull:    config.NotifyFull,
 		DurationLimit: config.DurationLimit,
-		NodeLocation:  chainConfig.Location,
+		NodeLocation:  nodeLocation,
 		GasCeil:       config.GasCeil,
 		MinDifficulty: config.MinDifficulty,
 	}, notify, noverify)
@@ -182,7 +182,7 @@ func CreateProgpowConsensusEngine(stack *node.Node, chainConfig *params.ChainCon
 }
 
 // CreateBlake3ConsensusEngine creates a progpow consensus engine for the given chain configuration.
-func CreateBlake3ConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, config *blake3pow.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
+func CreateBlake3ConsensusEngine(stack *node.Node, nodeLocation common.Location, config *blake3pow.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
 	// Otherwise assume proof-of-work
 	switch config.PowMode {
 	case blake3pow.ModeFake:
@@ -196,7 +196,7 @@ func CreateBlake3ConsensusEngine(stack *node.Node, chainConfig *params.ChainConf
 		PowMode:       config.PowMode,
 		NotifyFull:    config.NotifyFull,
 		DurationLimit: config.DurationLimit,
-		NodeLocation:  chainConfig.Location,
+		NodeLocation:  nodeLocation,
 		GasCeil:       config.GasCeil,
 		MinDifficulty: config.MinDifficulty,
 	}, notify, noverify)

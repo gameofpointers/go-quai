@@ -133,6 +133,7 @@ func (n *Node) Start() error {
 	// open networking and RPC endpoints
 	var err error
 	err = n.openEndpoints()
+	log.Warn("Error opening endpoints", "err", err)
 	lifecycles := make([]Lifecycle, len(n.lifecycles))
 	copy(lifecycles, n.lifecycles)
 	n.lock.Unlock()
