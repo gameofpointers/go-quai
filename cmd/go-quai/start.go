@@ -75,24 +75,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 		log.Fatalf("error creating consensus backend: %s", err)
 	}
 
-	// start the consensus backend
-	// consensus.SetP2PNode(node)
-	// if err := consensus.Start(); err != nil {
-	// 	log.Fatalf("error starting consensus backend: %s", err)
-	// }
-	//
-	// // start the p2p node
-	// node.SetConsensusBackend(consensus)
-	// if err := node.Start(); err != nil {
-	// 	log.Fatalf("error starting node: %s", err)
-	// }
-
 	// wait for a SIGINT or SIGTERM signal
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
 	log.Warnf("Received 'stop' signal, shutting down gracefully...")
 	cancel()
+	// TODO: Kill the consensus first
 	if err := node.Stop(); err != nil {
 		panic(err)
 	}

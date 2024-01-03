@@ -101,6 +101,8 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		return nil, genesisErr
 	}
 
+	log.Warn("Memory location of chainConfig", "location", &chainConfig)
+
 	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, stack.ResolvePath(config.TrieCleanCacheJournal)); err != nil {
 		log.Error("Failed to recover state", "error", err)
 	}
@@ -114,6 +116,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 	}
 
+	log.Info("Chain Config", config.NodeLocation)
 	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
 	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
 	if config.ConsensusEngine == "blake3" {

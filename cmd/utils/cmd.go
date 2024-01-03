@@ -123,7 +123,7 @@ func defaultNodeConfig() node.Config {
 // makeFullNode loads quai configuration and creates the Quai backend.
 func makeFullNode(nodeLocation common.Location) (*node.Node, quaiapi.Backend) {
 	stack, cfg := makeConfigNode(nodeLocation)
-	backend, _ := RegisterQuaiService(stack, &cfg.Quai, cfg.Node.NodeLocation.Context())
+	backend, _ := RegisterQuaiService(stack, cfg.Quai, cfg.Node.NodeLocation.Context())
 	// TODO: Start quai stats service
 	return stack, backend
 }
@@ -131,8 +131,8 @@ func makeFullNode(nodeLocation common.Location) (*node.Node, quaiapi.Backend) {
 // RegisterQuaiService adds a Quai client to the stack.
 // The second return value is the full node instance, which may be nil if the
 // node is running as a light client.
-func RegisterQuaiService(stack *node.Node, cfg *quaiconfig.Config, nodeCtx int) (quaiapi.Backend, *quai.Quai) {
-	backend, err := quai.New(stack, cfg, nodeCtx)
+func RegisterQuaiService(stack *node.Node, cfg quaiconfig.Config, nodeCtx int) (quaiapi.Backend, *quai.Quai) {
+	backend, err := quai.New(stack, &cfg, nodeCtx)
 	if err != nil {
 		Fatalf("Failed to register the Quai service: %v", err)
 	}

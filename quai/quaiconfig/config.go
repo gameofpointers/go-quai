@@ -55,7 +55,6 @@ var LightClientGPO = gasprice.Config{
 
 // Defaults contains default settings for use on the Quai main net.
 var Defaults = Config{
-	Progpow:                 progpow.Config{},
 	NetworkId:               1,
 	TxLookupLimit:           2350000,
 	DatabaseCache:           512,

@@ -69,9 +69,10 @@ func (blake3pow *Blake3pow) Seal(header *types.Header, results chan<- *types.Hea
 		threads = 0 // Allows disabling local mining without extra logic around local/remote
 	}
 	// Push new work to remote sealer
-	if blake3pow.remote != nil {
-		blake3pow.remote.workCh <- &sealTask{header: header, results: results}
-	}
+	// TODO: No need for the remote worker now
+	// if blake3pow.remote != nil {
+	// 	blake3pow.remote.workCh <- &sealTask{header: header, results: results}
+	// }
 	var (
 		pend   sync.WaitGroup
 		locals = make(chan *types.Header)
