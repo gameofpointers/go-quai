@@ -36,9 +36,29 @@ func init() {
 	}
 	ConfigureLogger(
 		WithLevel(defaultLogLevel),
-		WithOutput(ToStdOut(), ToLogFile(defaultLogFilePath)),
+		WithOutput(ToLogFile(defaultLogFilePath)),
 	)
-	logger.Infof("Logger started. Writing logs to: %s", defaultLogFilePath)
+	logger.Infof("Global Logger started. Writing logs to: %s", defaultLogFilePath)
+}
+
+func New(logFilePath string, logLevel string) *LogWrapper {
+	newLogger := logrus.New()
+	newLogger.SetOutput(ToLogFile(logFilePath))
+	entry := logrus.NewEntry(newLogger)
+	newWrapper := &LogWrapper{
+		entry: entry,
+	}
+	ConfigureCustomLogger(newWrapper,
+		WithLevel(logLevel),
+	)
+	newWrapper.Info("Shard Logger started", "path", logFilePath, "level", logLevel)
+	return newWrapper
+}
+
+func ConfigureCustomLogger(logger *LogWrapper, opts ...Options) {
+	for _, opt := range opts {
+		opt(logger)
+	}
 }
 
 func ConfigureLogger(opts ...Options) {
@@ -47,54 +67,54 @@ func ConfigureLogger(opts ...Options) {
 	}
 }
 
-func Trace(keyvals ...interface{}) {
-	logger.Trace(keyvals...)
+func WithField(key string, val interface{}) Logger {
+	return logger.WithField(key, val)
+}
+
+func Trace(msg string, args ...interface{}) {
+	logger.Trace(ConstructLogMessage(msg, args...))
 }
 
 func Tracef(msg string, args ...interface{}) {
 	logger.Tracef(msg, args...)
 }
 
-func Debug(keyvals ...interface{}) {
-	logger.Debug(keyvals...)
+func Debug(msg string, args ...interface{}) {
+	logger.Debug(ConstructLogMessage(msg, args...))
 }
 
 func Debugf(msg string, args ...interface{}) {
 	logger.Debugf(msg, args...)
 }
 
-func Info(keyvals ...interface{}) {
-	logger.Info(keyvals...)
+func Info(msg string, args ...interface{}) {
+	logger.Info(ConstructLogMessage(msg, args...))
 }
 
 func Infof(msg string, args ...interface{}) {
 	logger.Infof(msg, args...)
 }
 
-func Warn(keyvals ...interface{}) {
-	logger.Warn(keyvals...)
+func Warn(msg string, args ...interface{}) {
+	logger.Warn(ConstructLogMessage(msg, args...))
 }
 
 func Warnf(msg string, args ...interface{}) {
 	logger.Warnf(msg, args...)
 }
 
-func Error(keyvals ...interface{}) {
-	logger.Error(keyvals...)
+func Error(msg string, args ...interface{}) {
+	logger.Error(ConstructLogMessage(msg, args...))
 }
 
 func Errorf(msg string, args ...interface{}) {
 	logger.Errorf(msg, args...)
 }
 
-func Fatal(keyvals ...interface{}) {
-	logger.Fatal(keyvals...)
+func Fatal(msg string, args ...interface{}) {
+	logger.Fatal(ConstructLogMessage(msg, args...))
 }
 
 func Fatalf(msg string, args ...interface{}) {
 	logger.Fatalf(msg, args...)
-}
-
-func WithField(key string, val interface{}) Logger {
-	return logger.WithField(key, val)
 }

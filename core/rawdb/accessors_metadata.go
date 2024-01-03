@@ -94,11 +94,11 @@ const crashesToKeep = 10
 // the previous data
 // - a list of timestamps
 // - a count of how many old unclean-shutdowns have been discarded
-func PushUncleanShutdownMarker(db ethdb.KeyValueStore) ([]uint64, uint64, error) {
+func PushUncleanShutdownMarker(db ethdb.KeyValueStore, logger log.Logger) ([]uint64, uint64, error) {
 	var uncleanShutdowns crashList
 	// Read old data
 	if data, err := db.Get(uncleanShutdownKey); err != nil {
-		log.Warn("Error reading unclean shutdown markers", "error", err)
+		logger.Warn("Error reading unclean shutdown markers", "error", err)
 	} else if err := rlp.DecodeBytes(data, &uncleanShutdowns); err != nil {
 		return nil, 0, err
 	}
@@ -115,7 +115,7 @@ func PushUncleanShutdownMarker(db ethdb.KeyValueStore) ([]uint64, uint64, error)
 	// And save it again
 	data, _ := rlp.EncodeToBytes(uncleanShutdowns)
 	if err := db.Put(uncleanShutdownKey, data); err != nil {
-		log.Warn("Failed to write unclean-shutdown marker", "err", err)
+		logger.Warn("Failed to write unclean-shutdown marker", "err", err)
 		return nil, 0, err
 	}
 	return previous, discarded, nil

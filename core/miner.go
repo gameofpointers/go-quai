@@ -41,15 +41,16 @@ type Miner struct {
 	engine   consensus.Engine
 	startCh  chan common.Address
 	stopCh   chan struct{}
+	logger   log.Logger
 }
 
-func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engine consensus.Engine, isLocalBlock func(block *types.Header) bool, processingState bool) *Miner {
+func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engine consensus.Engine, isLocalBlock func(block *types.Header) bool, processingState bool, logger log.Logger) *Miner {
 	miner := &Miner{
 		hc:       hc,
 		engine:   engine,
 		startCh:  make(chan common.Address),
 		stopCh:   make(chan struct{}),
-		worker:   newWorker(config, chainConfig, db, engine, hc, txPool, isLocalBlock, true, processingState),
+		worker:   newWorker(config, chainConfig, db, engine, hc, txPool, isLocalBlock, true, processingState, logger),
 		coinbase: config.Etherbase,
 	}
 	go miner.update()
@@ -123,7 +124,7 @@ func (miner *Miner) MakeExtraData(extra []byte) []byte {
 		})
 	}
 	if uint64(len(extra)) > params.MaximumExtraDataSize {
-		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
+		miner.logger.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
 		extra = nil
 	}
 	return extra

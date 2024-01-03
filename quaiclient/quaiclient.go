@@ -37,11 +37,11 @@ type Client struct {
 }
 
 // Dial connects a client to the given URL.
-func Dial(rawurl string) (*Client, error) {
-	return DialContext(context.Background(), rawurl)
+func Dial(rawurl string, logger log.Logger) (*Client, error) {
+	return DialContext(context.Background(), rawurl, logger)
 }
 
-func DialContext(ctx context.Context, rawurl string) (*Client, error) {
+func DialContext(ctx context.Context, rawurl string, logger log.Logger) (*Client, error) {
 	connectStatus := false
 	attempts := 0
 
@@ -62,7 +62,7 @@ func DialContext(ctx context.Context, rawurl string) (*Client, error) {
 		}
 
 		// should only get here if the ffmpeg record stream process dies
-		log.Warn("Attempting to connect to go-quai node. Waiting and retrying...", "attempts", attempts, "delay", delaySecs, "url", rawurl)
+		logger.Warn("Attempting to connect to go-quai node. Waiting and retrying...", "attempts", attempts, "delay", delaySecs, "url", rawurl)
 
 		time.Sleep(time.Duration(delaySecs) * time.Second)
 	}
