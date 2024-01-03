@@ -1185,7 +1185,8 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.Header) {
 		time.Sleep(10 * time.Second)
 	}
 	nodeCtx := sl.NodeLocation().Context()
-	log.Info("//////////////// Newgenesis", "nodectx", nodeCtx)
+	log.Info("//////////////// Newgenesis", "nodectx", nodeCtx, "config ctx", sl.config.Location.Context())
+	log.Info("////////////////// Memory location of chain config", "location", &sl.config)
 	genesisHash := sl.config.GenesisHash
 	// Upate the local pending header
 	localPendingHeader, err := sl.miner.worker.GeneratePendingHeader(sl.hc.GetBlockByHash(genesisHash), false)

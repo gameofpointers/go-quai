@@ -98,6 +98,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	<-ch
 	log.Warnf("Received 'stop' signal, shutting down gracefully...")
 	cancel()
+	// TODO: Kill the consensus first
 	if err := node.Stop(); err != nil {
 		panic(err)
 	}
