@@ -42,6 +42,8 @@ type BodyDb struct {
 	processor    *StateProcessor
 
 	slicesRunning []common.Location
+
+	logger log.Logger
 }
 
 func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chainConfig *params.ChainConfig, cacheConfig *CacheConfig, txLookupLimit *uint64, vmConfig vm.Config, slicesRunning []common.Location) (*BodyDb, error) {
@@ -52,6 +54,7 @@ func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chai
 		engine:        engine,
 		db:            db,
 		slicesRunning: slicesRunning,
+		logger:        hc.logger,
 	}
 
 	// Limiting the number of blocks to be stored in the cache in the case of
@@ -99,7 +102,7 @@ func (bc *BodyDb) Append(block *types.Block, newInboundEtxs types.Transactions) 
 		}
 		rawdb.WriteTxLookupEntriesByBlock(batch, block, nodeCtx)
 	}
-	log.Debug("Time taken to", "apply state:", common.PrettyDuration(time.Since(stateApply)))
+	bc.logger.Debug("Time taken to", "apply state:", common.PrettyDuration(time.Since(stateApply)))
 	if err = batch.Write(); err != nil {
 		return nil, err
 	}

@@ -70,14 +70,16 @@ type Quai struct {
 	etherbase common.Address
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+
+	logger log.Logger
 }
 
 // New creates a new Quai object (including the
 // initialisation of the common Quai object)
-func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error) {
+func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int, logger log.Logger) (*Quai, error) {
 	// Ensure configuration values are compatible and sane
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
-		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", quaiconfig.Defaults.Miner.GasPrice)
+		logger.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", quaiconfig.Defaults.Miner.GasPrice)
 		config.Miner.GasPrice = new(big.Int).Set(quaiconfig.Defaults.Miner.GasPrice)
 	}
 	if config.NoPruning && config.TrieDirtyCache > 0 {
@@ -89,22 +91,22 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		}
 		config.TrieDirtyCache = 0
 	}
-	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
+	logger.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
 	// Assemble the Quai object
 	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
 	if err != nil {
 		return nil, err
 	}
-	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation)
+	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation, logger)
 	if genesisErr != nil {
 		return nil, genesisErr
 	}
 
-	log.Warn("Memory location of chainConfig", "location", &chainConfig)
+	logger.Warn("Memory location of chainConfig", "location", &chainConfig)
 
 	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, stack.ResolvePath(config.TrieCleanCacheJournal)); err != nil {
-		log.Error("Failed to recover state", "error", err)
+		logger.Error("Failed to recover state", "error", err)
 	}
 	quai := &Quai{
 		config:            config,
@@ -114,6 +116,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		gasPrice:          config.Miner.GasPrice,
 		etherbase:         config.Miner.Etherbase,
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
+		logger:            logger,
 	}
 
 	// Copy the chainConfig
@@ -127,36 +130,36 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 	}
 	chainConfig = &newChainConfig
 
-	log.Info("Chain Config", config.NodeLocation)
+	logger.Info("Chain Config", config.NodeLocation)
 	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
-	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
+	logger.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
 	if config.ConsensusEngine == "blake3" {
 		blake3Config := config.Blake3Pow
 		blake3Config.NotifyFull = config.Miner.NotifyFull
 		blake3Config.NodeLocation = config.NodeLocation
-		quai.engine = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, chainDb)
+		quai.engine = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
 	} else {
 		// Transfer mining-related config to the progpow config.
 		progpowConfig := config.Progpow
 		progpowConfig.NodeLocation = config.NodeLocation
 		progpowConfig.NotifyFull = config.Miner.NotifyFull
-		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb)
+		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
 	}
-	log.Info("Initialised chain configuration", "config", chainConfig)
+	logger.Info("Initialised chain configuration", "config", chainConfig)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
 	if bcVersion != nil {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
-	log.Info("Initialising Quai protocol", "network", config.NetworkId, "dbversion", dbVer)
+	logger.Info("Initialising Quai protocol", "network", config.NetworkId, "dbversion", dbVer)
 
 	if !config.SkipBcVersionCheck {
 		if bcVersion != nil && *bcVersion > core.BlockChainVersion {
 			return nil, fmt.Errorf("database version is v%d, Quai %s only supports v%d", *bcVersion, params.Version.Full(), core.BlockChainVersion)
 		} else if bcVersion == nil || *bcVersion < core.BlockChainVersion {
 			if bcVersion != nil { // only print warning on upgrade, not on init
-				log.Warn("Upgrade blockchain database version", "from", dbVer, "to", core.BlockChainVersion)
+				logger.Warn("Upgrade blockchain database version", "from", dbVer, "to", core.BlockChainVersion)
 			}
 			rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 		}
@@ -182,15 +185,15 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 
-	log.Info("Dom clietn", "url", quai.config.DomUrl)
-	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, config.Genesis)
+	logger.Info("Dom client", "url", quai.config.DomUrl)
+	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, config.Genesis, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	// Only index bloom if processing state
 	if quai.core.ProcessingState() && nodeCtx == common.ZONE_CTX {
-		quai.bloomIndexer = core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms, chainConfig.Location.Context())
+		quai.bloomIndexer = core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms, chainConfig.Location.Context(), logger)
 		quai.bloomIndexer.Start(quai.Core().Slice().HeaderChain())
 	}
 
@@ -201,22 +204,22 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		if gpoParams.Default == nil {
 			gpoParams.Default = config.Miner.GasPrice
 		}
-		quai.APIBackend.gpo = gasprice.NewOracle(quai.APIBackend, gpoParams)
+		quai.APIBackend.gpo = gasprice.NewOracle(quai.APIBackend, gpoParams, logger)
 	}
 
 	// Register the backend on the node
 	stack.RegisterAPIs(quai.APIs())
 	stack.RegisterLifecycle(quai)
 	// Check for unclean shutdown
-	if uncleanShutdowns, discards, err := rawdb.PushUncleanShutdownMarker(chainDb); err != nil {
-		log.Error("Could not update unclean-shutdown-marker list", "error", err)
+	if uncleanShutdowns, discards, err := rawdb.PushUncleanShutdownMarker(chainDb, logger); err != nil {
+		logger.Error("Could not update unclean-shutdown-marker list", "error", err)
 	} else {
 		if discards > 0 {
-			log.Warn("Old unclean shutdowns found", "count", discards)
+			logger.Warn("Old unclean shutdowns found", "count", discards)
 		}
 		for _, tstamp := range uncleanShutdowns {
 			t := time.Unix(int64(tstamp), 0)
-			log.Warn("Unclean shutdown detected", "booted", t,
+			logger.Warn("Unclean shutdown detected", "booted", t,
 				"age", common.PrettyAge(t))
 		}
 	}
@@ -290,7 +293,7 @@ func (s *Quai) Etherbase() (eb common.Address, err error) {
 func (s *Quai) isLocalBlock(header *types.Header) bool {
 	author, err := s.engine.Author(header)
 	if err != nil {
-		log.Warn("Failed to retrieve block author", "number", header.NumberU64(s.core.NodeCtx()), "hash", header.Hash(), "err", err)
+		s.logger.Warn("Failed to retrieve block author", "number", header.NumberU64(s.core.NodeCtx()), "hash", header.Hash(), "err", err)
 		return false
 	}
 	// Check whether the given address is etherbase.
@@ -302,7 +305,7 @@ func (s *Quai) isLocalBlock(header *types.Header) bool {
 	}
 	internal, err := author.InternalAddress()
 	if err != nil {
-		log.Error("Failed to retrieve author internal address", "err", err)
+		s.logger.Error("Failed to retrieve author internal address", "err", err)
 	}
 	// Check whether the given address is specified by `txpool.local`
 	// CLI flag.

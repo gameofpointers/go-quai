@@ -21,7 +21,7 @@ func init() {
 	sharedConfig := Config{
 		PowMode: ModeNormal,
 	}
-	sharedBlake3pow = New(sharedConfig, nil, false)
+	sharedBlake3pow = New(sharedConfig, nil, false, log.New("nodelogs/shared-blake3pow.log", "info"))
 }
 
 // Mode defines the type and amount of PoW verification a blake3pow engine makes.
@@ -71,15 +71,18 @@ type Blake3pow struct {
 
 	lock      sync.Mutex // Ensures thread safety for the in-memory caches and mining fields
 	closeOnce sync.Once  // Ensures exit channel will not be closed twice.
+
+	logger log.Logger
 }
 
 // New creates a full sized blake3pow PoW scheme and starts a background thread for
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
-func New(config Config, notify []string, noverify bool) *Blake3pow {
+func New(config Config, notify []string, noverify bool, logger log.Logger) *Blake3pow {
 	blake3pow := &Blake3pow{
 		config: config,
 		update: make(chan struct{}),
+		logger: logger,
 	}
 	if config.PowMode == ModeShared {
 		blake3pow.shared = sharedBlake3pow
@@ -91,7 +94,7 @@ func New(config Config, notify []string, noverify bool) *Blake3pow {
 // NewTester creates a small sized blake3pow PoW scheme useful only for testing
 // purposes.
 func NewTester(notify []string, noverify bool) *Blake3pow {
-	return New(Config{PowMode: ModeTest}, notify, noverify)
+	return New(Config{PowMode: ModeTest}, notify, noverify, log.New("nodelogs/test-blake3pow.log", "info"))
 }
 
 // NewFaker creates a blake3pow consensus engine with a fake PoW scheme that accepts

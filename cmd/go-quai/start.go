@@ -68,8 +68,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		log.Fatalf("error creating node: %s", err)
 	}
 
+	logLevel := cmd.Flag(utils.LogLevelFlag.Name).Value.String()
 	// create instance of consensus backend
-	consensus, err := utils.StartQuaiBackend()
+	consensus, err := utils.StartQuaiBackend(logLevel)
 	if err != nil {
 		log.Fatalf("error creating consensus backend: %s", err)
 	}

@@ -339,7 +339,7 @@ func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, pa
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 
 	if nodeCtx != common.ZONE_CTX {
-		log.Error("Cannot CalcDifficulty for", "context", nodeCtx)
+		blake3pow.logger.Error("Cannot CalcDifficulty for", "context", nodeCtx)
 		return nil
 	}
 
@@ -431,17 +431,17 @@ func (blake3pow *Blake3pow) Finalize(chain consensus.ChainHeaderReader, header *
 	nodeLocation := blake3pow.config.NodeLocation
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
+	accumulateRewards(chain.Config(), state, header, uncles, blake3pow.logger)
 
 	if nodeCtx == common.ZONE_CTX && header.ParentHash(nodeCtx) == chain.Config().GenesisHash {
-		alloc := core.ReadGenesisAlloc("genallocs/gen_alloc_" + nodeLocation.Name() + ".json")
-		log.Info("Allocating genesis accounts", "num", len(alloc))
+		alloc := core.ReadGenesisAlloc("genallocs/gen_alloc_"+nodeLocation.Name()+".json", blake3pow.logger)
+		blake3pow.logger.Info("Allocating genesis accounts", "num", len(alloc))
 
 		for addressString, account := range alloc {
 			addr := common.HexToAddress(addressString, nodeLocation)
 			internal, err := addr.InternalAddress()
 			if err != nil {
-				log.Error("Provided address in genesis block is out of scope")
+				blake3pow.logger.Error("Provided address in genesis block is out of scope")
 			}
 			state.AddBalance(internal, account.Balance)
 			state.SetCode(internal, account.Code)
@@ -475,14 +475,14 @@ func (blake3pow *Blake3pow) ComputePowLight(header *types.Header) (common.Hash, 
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, logger log.Logger) {
 	nodeCtx := config.Location.Context()
 	// Select the correct block reward based on chain progression
 	blockReward := misc.CalculateReward(header)
 
 	coinbase, err := header.Coinbase().InternalAddress()
 	if err != nil {
-		log.Error("Block has out of scope coinbase, skipping block reward", "Address", header.Coinbase().String(), "Hash", header.Hash().String())
+		logger.Error("Block has out of scope coinbase, skipping block reward", "Address", header.Coinbase().String(), "Hash", header.Hash().String())
 		return
 	}
 
@@ -492,7 +492,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	for _, uncle := range uncles {
 		coinbase, err := uncle.Coinbase().InternalAddress()
 		if err != nil {
-			log.Error("Found uncle with out of scope coinbase, skipping reward", "Address", uncle.Coinbase().String(), "Hash", uncle.Hash().String())
+			logger.Error("Found uncle with out of scope coinbase, skipping reward", "Address", uncle.Coinbase().String(), "Hash", uncle.Hash().String())
 			continue
 		}
 		r.Add(uncle.Number(nodeCtx), big8)

@@ -45,12 +45,14 @@ func (*devNull) Close() error                      { return nil }
 type txJournal struct {
 	path   string         // Filesystem path to store the transactions at
 	writer io.WriteCloser // Output stream to write new transactions into
+	logger log.Logger
 }
 
 // newTxJournal creates a new transaction journal to
-func newTxJournal(path string) *txJournal {
+func newTxJournal(path string, logger log.Logger) *txJournal {
 	return &txJournal{
-		path: path,
+		path:   path,
+		logger: logger,
 	}
 }
 
@@ -82,7 +84,7 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 	loadBatch := func(txs types.Transactions) {
 		for _, err := range add(txs) {
 			if err != nil {
-				log.Debug("Failed to add journaled transaction", "err", err)
+				journal.logger.Debug("Failed to add journaled transaction", "err", err)
 				dropped++
 			}
 		}
@@ -111,7 +113,7 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 			batch = batch[:0]
 		}
 	}
-	log.Info("Loaded local transaction journal", "transactions", total, "dropped", dropped)
+	journal.logger.Info("Loaded local transaction journal", "transactions", total, "dropped", dropped)
 
 	return failure
 }
@@ -163,7 +165,7 @@ func (journal *txJournal) rotate(all map[common.InternalAddress]types.Transactio
 		return err
 	}
 	journal.writer = sink
-	log.Info("Regenerated local transaction journal", "transactions", journaled, "accounts", len(all))
+	journal.logger.Info("Regenerated local transaction journal", "transactions", journaled, "accounts", len(all))
 
 	return nil
 }

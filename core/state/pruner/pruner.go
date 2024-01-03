@@ -82,10 +82,11 @@ type Pruner struct {
 	trieCachePath string
 	headHeader    *types.Header
 	snaptree      *snapshot.Tree
+	logger        log.Logger
 }
 
 // NewPruner creates the pruner instance.
-func NewPruner(db ethdb.Database, datadir, trieCachePath string, bloomSize uint64) (*Pruner, error) {
+func NewPruner(db ethdb.Database, datadir, trieCachePath string, bloomSize uint64, logger log.Logger) (*Pruner, error) {
 	headBlock := rawdb.ReadHeadBlock(db)
 	if headBlock == nil {
 		return nil, errors.New("Failed to load head block")
@@ -96,7 +97,7 @@ func NewPruner(db ethdb.Database, datadir, trieCachePath string, bloomSize uint6
 	}
 	// Sanitize the bloom filter size if it's too small.
 	if bloomSize < 256 {
-		log.Warn("Sanitizing bloomfilter size", "provided(MB)", bloomSize, "updated(MB)", 256)
+		logger.Warn("Sanitizing bloomfilter size", "provided(MB)", bloomSize, "updated(MB)", 256)
 		bloomSize = 256
 	}
 	stateBloom, err := newStateBloomWithSize(bloomSize)
@@ -110,6 +111,7 @@ func NewPruner(db ethdb.Database, datadir, trieCachePath string, bloomSize uint6
 		trieCachePath: trieCachePath,
 		headHeader:    headBlock.Header(),
 		snaptree:      snaptree,
+		logger:        logger,
 	}, nil
 }
 
@@ -283,7 +285,7 @@ func (p *Pruner) Prune(root common.Hash) error {
 			if blob := rawdb.ReadTrieNode(p.db, layers[i].Root()); len(blob) != 0 {
 				root = layers[i].Root()
 				found = true
-				log.Info("Selecting middle-layer as the pruning target", "root", root, "depth", i)
+				p.logger.Info("Selecting middle-layer as the pruning target", "root", root, "depth", i)
 				break
 			}
 		}
@@ -295,9 +297,9 @@ func (p *Pruner) Prune(root common.Hash) error {
 		}
 	} else {
 		if len(layers) > 0 {
-			log.Info("Selecting bottom-most difflayer as the pruning target", "root", root, "height", p.headHeader.NumberU64(common.ZONE_CTX)-127)
+			p.logger.Info("Selecting bottom-most difflayer as the pruning target", "root", root, "height", p.headHeader.NumberU64(common.ZONE_CTX)-127)
 		} else {
-			log.Info("Selecting user-specified state as the pruning target", "root", root)
+			p.logger.Info("Selecting user-specified state as the pruning target", "root", root)
 		}
 	}
 	// Before start the pruning, delete the clean trie cache first.
@@ -328,11 +330,11 @@ func (p *Pruner) Prune(root common.Hash) error {
 	}
 	filterName := bloomFilterName(p.datadir, root)
 
-	log.Info("Writing state bloom to disk", "name", filterName)
+	p.logger.Info("Writing state bloom to disk", "name", filterName)
 	if err := p.stateBloom.Commit(filterName, filterName+stateBloomFileTempSuffix); err != nil {
 		return err
 	}
-	log.Info("State bloom filter committed", "name", filterName)
+	p.logger.Info("State bloom filter committed", "name", filterName)
 	return prune(p.snaptree, root, p.db, p.stateBloom, filterName, middleRoots, start)
 }
 
