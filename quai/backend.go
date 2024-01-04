@@ -116,6 +116,17 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 	}
 
+	// Copy the chainConfig
+	newChainConfig := params.ChainConfig{
+		ChainID:         chainConfig.ChainID,
+		ConsensusEngine: chainConfig.ConsensusEngine,
+		Blake3Pow:       chainConfig.Blake3Pow,
+		Progpow:         chainConfig.Progpow,
+		GenesisHash:     chainConfig.GenesisHash,
+		Location:        chainConfig.Location,
+	}
+	chainConfig = &newChainConfig
+
 	log.Info("Chain Config", config.NodeLocation)
 	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
 	log.Info("Node", "Ctx", nodeCtx, "NodeLocation", config.NodeLocation, "genesis location", config.Genesis.Config.Location, "chain config", chainConfig.Location)
