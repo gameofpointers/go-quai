@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 .PHONY: all build run test clean help mocks
 
+GOBIN = ./build/bin
+GO ?= latest
+GORUN = env GO111MODULE=on go run
 
 ## This help screen
 help:
@@ -30,9 +33,10 @@ protogen:
 	./p2p/pb/*.proto 
 
 ## build the go-quai binary
-build:
-	@echo "Building go-quai"
-	@go build -o build/bin/go-quai main.go
+go-quai:
+	$(GORUN) build/ci.go install ./cmd/go-quai
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/go-quai\" to launch go-quai."
 
 run:
 	@echo "Running go-quai"
