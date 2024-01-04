@@ -8,12 +8,13 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
-	"github.com/dominant-strategies/go-quai/common"
-	"github.com/dominant-strategies/go-quai/consensus/types"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
 	quaiprotocol "github.com/dominant-strategies/go-quai/p2p/protocol"
+	"github.com/dominant-strategies/go-quai/quai"
 
+	"github.com/dominant-strategies/go-quai/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -91,7 +92,7 @@ func (p *P2PNode) Stop() error {
 	}
 }
 
-func (p *P2PNode) SetConsensusBackend(be common.ConsensusAPI) {
+func (p *P2PNode) SetConsensusBackend(be quai.ConsensusAPI) {
 	p.consensus = be
 }
 
@@ -104,7 +105,7 @@ func (p *P2PNode) BroadcastTransaction(tx types.Transaction) error {
 }
 
 // Request a block from the network for the specified slice
-func (p *P2PNode) RequestBlock(hash types.Hash, slice types.SliceID) chan *types.Block {
+func (p *P2PNode) RequestBlock(hash common.Hash, slice types.SliceID) chan *types.Block {
 	resultChan := make(chan *types.Block, 1)
 	go func() {
 		defer close(resultChan)
@@ -161,7 +162,7 @@ func (p *P2PNode) RequestBlock(hash types.Hash, slice types.SliceID) chan *types
 	return resultChan
 }
 
-func (p *P2PNode) RequestTransaction(hash types.Hash, loc types.SliceID) chan *types.Transaction {
+func (p *P2PNode) RequestTransaction(hash common.Hash, loc types.SliceID) chan *types.Transaction {
 	panic("todo")
 }
 

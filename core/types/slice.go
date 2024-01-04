@@ -18,6 +18,10 @@ var (
 	ZONE_CTX   = Context{"zone", 2}
 )
 
+type Slice struct {
+	SliceID SliceID
+}
+
 type SliceID struct {
 	Context Context
 	Region  int

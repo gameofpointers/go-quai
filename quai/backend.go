@@ -74,7 +74,7 @@ type Quai struct {
 
 // New creates a new Quai object (including the
 // initialisation of the common Quai object)
-func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error) {
+func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) error {
 	// Ensure configuration values are compatible and sane
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", quaiconfig.Defaults.Miner.GasPrice)
@@ -94,11 +94,11 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 	// Assemble the Quai object
 	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation)
 	if genesisErr != nil {
-		return nil, genesisErr
+		return genesisErr
 	}
 
 	log.Warn("Memory location of chainConfig", "location", &chainConfig)
@@ -153,7 +153,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 
 	if !config.SkipBcVersionCheck {
 		if bcVersion != nil && *bcVersion > core.BlockChainVersion {
-			return nil, fmt.Errorf("database version is v%d, Quai %s only supports v%d", *bcVersion, params.Version.Full(), core.BlockChainVersion)
+			return fmt.Errorf("database version is v%d, Quai %s only supports v%d", *bcVersion, params.Version.Full(), core.BlockChainVersion)
 		} else if bcVersion == nil || *bcVersion < core.BlockChainVersion {
 			if bcVersion != nil { // only print warning on upgrade, not on init
 				log.Warn("Upgrade blockchain database version", "from", dbVer, "to", core.BlockChainVersion)
@@ -185,7 +185,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 	log.Info("Dom clietn", "url", quai.config.DomUrl)
 	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, config.Genesis)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Only index bloom if processing state
@@ -220,7 +220,7 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 				"age", common.PrettyAge(t))
 		}
 	}
-	return quai, nil
+	return nil
 }
 
 // APIs return the collection of RPC services the go-quai package offers.

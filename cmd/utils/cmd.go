@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/vm"
-	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/node"
 	"github.com/dominant-strategies/go-quai/params"
@@ -21,21 +20,15 @@ type quaiConfig struct {
 	Node node.Config
 }
 
-// QuaiBackend implements the quai consensus protocol
-type QuaiBackend struct {
-	p2p interface{}
-}
-
 // Create a new instance of the QuaiBackend consensus service
-func StartQuaiBackend() (*QuaiBackend, error) {
+func StartQuaiBackend() (*quai.QuaiBackend, error) {
 
 	// Make full node
 	go func() {
 		log.Info("Starting Prime")
-		stackPrime, backendPrime := makeFullNode(nil)
+		stackPrime := makeFullNode(nil)
 		defer stackPrime.Close()
-		log.Info("Calling Start Node in Prime")
-		startNode(stackPrime, backendPrime)
+		StartNode(stackPrime)
 		stackPrime.Wait()
 	}()
 
@@ -43,10 +36,9 @@ func StartQuaiBackend() (*QuaiBackend, error) {
 
 	go func() {
 		log.Info("Starting Region")
-		stackRegion, backendRegion := makeFullNode(common.Location{0})
+		stackRegion := makeFullNode(common.Location{0})
 		defer stackRegion.Close()
-		log.Info("Calling Start Node in Region")
-		startNode(stackRegion, backendRegion)
+		StartNode(stackRegion)
 		stackRegion.Wait()
 	}()
 
@@ -54,30 +46,20 @@ func StartQuaiBackend() (*QuaiBackend, error) {
 
 	go func() {
 		log.Info("Starting Zone")
-		stackZone, backendZone := makeFullNode(common.Location{0, 0})
+		stackZone := makeFullNode(common.Location{0, 0})
 		defer stackZone.Close()
-		log.Info("Calling Start Node in Zone")
-		startNode(stackZone, backendZone)
+		StartNode(stackZone)
 		stackZone.Wait()
 	}()
 
-	return &QuaiBackend{}, nil
-}
-
-// startNode boots up the system node and all registered protocols, after which
-// it unlocks any requested accounts, and starts the RPC interfaces and the
-// miner.
-func startNode(stack *node.Node, backend quaiapi.Backend) {
-	// Start up the node itself
-	StartNode(stack)
-	// TODO: Maybe do some developer related stuff
+	return &quai.QuaiBackend{}, nil
 }
 
 func StartNode(stack *node.Node) {
 	if err := stack.Start(); err != nil {
 		Fatalf("Error starting protocol stack: %v", err)
 	}
-	// Stop the node if the memory pressure
+	// TODO: Stop the node if the memory pressure
 }
 
 // makeConfigNode loads quai configuration and creates a blank node instance.
@@ -121,22 +103,21 @@ func defaultNodeConfig() node.Config {
 }
 
 // makeFullNode loads quai configuration and creates the Quai backend.
-func makeFullNode(nodeLocation common.Location) (*node.Node, quaiapi.Backend) {
+func makeFullNode(nodeLocation common.Location) *node.Node {
 	stack, cfg := makeConfigNode(nodeLocation)
-	backend, _ := RegisterQuaiService(stack, cfg.Quai, cfg.Node.NodeLocation.Context())
+	RegisterQuaiService(stack, cfg.Quai, cfg.Node.NodeLocation.Context())
 	// TODO: Start quai stats service
-	return stack, backend
+	return stack
 }
 
 // RegisterQuaiService adds a Quai client to the stack.
 // The second return value is the full node instance, which may be nil if the
 // node is running as a light client.
-func RegisterQuaiService(stack *node.Node, cfg quaiconfig.Config, nodeCtx int) (quaiapi.Backend, *quai.Quai) {
-	backend, err := quai.New(stack, &cfg, nodeCtx)
+func RegisterQuaiService(stack *node.Node, cfg quaiconfig.Config, nodeCtx int) {
+	err := quai.New(stack, &cfg, nodeCtx)
 	if err != nil {
 		Fatalf("Failed to register the Quai service: %v", err)
 	}
-	return backend.APIBackend, backend
 }
 
 // Fatalf formats a message to standard error and exits the program.

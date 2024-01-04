@@ -70,22 +70,22 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// create instance of consensus backend
-	_, err = utils.StartQuaiBackend()
+	consensus, err := utils.StartQuaiBackend()
 	if err != nil {
 		log.Fatalf("error creating consensus backend: %s", err)
 	}
 
 	// start the consensus backend
-	// consensus.SetP2PNode(node)
-	// if err := consensus.Start(); err != nil {
-	// 	log.Fatalf("error starting consensus backend: %s", err)
-	// }
-	//
-	// // start the p2p node
-	// node.SetConsensusBackend(consensus)
-	// if err := node.Start(); err != nil {
-	// 	log.Fatalf("error starting node: %s", err)
-	// }
+	consensus.SetP2PNode(node)
+	if err := consensus.Start(); err != nil {
+		log.Fatalf("error starting consensus backend: %s", err)
+	}
+
+	// start the p2p node
+	node.SetConsensusBackend(consensus)
+	if err := node.Start(); err != nil {
+		log.Fatalf("error starting node: %s", err)
+	}
 
 	// subscribe to necessary protocol events
 	if err := node.StartGossipSub(ctx); err != nil {

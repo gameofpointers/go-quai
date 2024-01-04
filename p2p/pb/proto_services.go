@@ -3,7 +3,8 @@ package pb
 import (
 	"encoding/hex"
 
-	"github.com/dominant-strategies/go-quai/consensus/types"
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -27,7 +28,7 @@ func MarshalProtoMessage(pbMsg proto.Message) ([]byte, error) {
 // converts a custom go Block type (types.Block) to a protocol buffer Block type (pb.Block)
 func ConvertToProtoBlock(block types.Block) *Block {
 	return &Block{
-		Hash: hex.EncodeToString(block.Hash[:]),
+		Hash: hex.EncodeToString(block.Hash().Bytes()),
 		// ... map other fields
 	}
 
@@ -35,11 +36,10 @@ func ConvertToProtoBlock(block types.Block) *Block {
 
 // converts a protocol buffer Block type (pb.Block) to a custom go Block type (types.Block)
 func ConvertFromProtoBlock(pbBlock *Block) types.Block {
-	var hash types.Hash
+	var hash common.Hash
 	copy(hash[:], pbBlock.Hash)
 	// ... map other fields
 	return types.Block{
-		Hash: hash,
 		// ... map other fields
 	}
 }
@@ -56,7 +56,7 @@ func UnmarshalBlock(data []byte) (*types.Block, error) {
 }
 
 // Creates a BlockRequest protocol buffer message
-func CreateProtoBlockRequest(hash types.Hash) *BlockRequest {
+func CreateProtoBlockRequest(hash common.Hash) *BlockRequest {
 	return &BlockRequest{
 		Hash: hex.EncodeToString(hash[:]),
 	}
