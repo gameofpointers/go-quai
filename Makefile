@@ -40,5 +40,5 @@ go-quai:
 
 run:
 	@echo "Running go-quai"
-	build/bin/go-quai start
+	build/bin/go-quai start --local --slices "[0 0]" --nonce 5926993  --http --http.vhosts=* --http.addr localhost --http.api quai --ws --ws.addr localhost --ws.api eth,quai  --db.engine leveldb --showcolors --consensus.engine blake3
 
