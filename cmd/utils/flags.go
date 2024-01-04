@@ -136,19 +136,6 @@ var RPCFlags = []Flag{
 	SendFullStatsFlag,
 }
 
-var MetricsFlags = []Flag{
-	MetricsEnabledFlag,
-	MetricsEnabledExpensiveFlag,
-	MetricsHTTPFlag,
-	MetricsPortFlag,
-	MetricsEnableInfluxDBFlag,
-	MetricsInfluxDBEndpointFlag,
-	MetricsInfluxDBDatabaseFlag,
-	MetricsInfluxDBUsernameFlag,
-	MetricsInfluxDBPasswordFlag,
-	MetricsInfluxDBTagsFlag,
-}
-
 var (
 	// ****************************************
 	// **                                    **
@@ -755,56 +742,6 @@ var (
 		Usage: "Gas price below which gpo will ignore transactions" + generateEnvDoc("gpo.ignoreprice"),
 	}
 
-	MetricsEnabledFlag = Flag{
-		Name:  "metrics",
-		Value: false,
-		Usage: "Enable metrics collection and reporting" + generateEnvDoc("metrics"),
-	}
-	MetricsEnabledExpensiveFlag = Flag{
-		Name:  "metrics.expensive",
-		Value: false,
-		Usage: "Enable expensive metrics collection and reporting" + generateEnvDoc("metrics.expensive"),
-	}
-	// MetricsHTTPFlag defines the endpoint for a stand-alone metrics HTTP endpoint.
-	// Since the pprof service enables sensitive/vulnerable behavior, this allows a user
-	// to enable a public-OK metrics endpoint without having to worry about ALSO exposing
-	// other profiling behavior or information.
-	MetricsHTTPFlag = Flag{
-		Name:  "metrics.addr",
-		Value: DefaultMetricsConfig.HTTP,
-		Usage: "Enable stand-alone metrics HTTP server listening interface" + generateEnvDoc("metrics.addr"),
-	}
-	MetricsPortFlag = Flag{
-		Name:  "metrics.port",
-		Value: DefaultMetricsConfig.Port,
-		Usage: "Metrics HTTP server listening port" + generateEnvDoc("metrics.port"),
-	}
-	MetricsEnableInfluxDBFlag = Flag{
-		Name:  "metrics.influxdb",
-		Value: false,
-		Usage: "Enable metrics export/push to an external InfluxDB database" + generateEnvDoc("metrics.influxdb"),
-	}
-	MetricsInfluxDBEndpointFlag = Flag{
-		Name:  "metrics.influxdb.endpoint",
-		Value: DefaultMetricsConfig.InfluxDBEndpoint,
-		Usage: "InfluxDB API endpoint to report metrics to" + generateEnvDoc("metrics.influxdb.endpoint"),
-	}
-	MetricsInfluxDBDatabaseFlag = Flag{
-		Name:  "metrics.influxdb.database",
-		Value: DefaultMetricsConfig.InfluxDBDatabase,
-		Usage: "InfluxDB database name to push reported metrics to" + generateEnvDoc("metrics.influxdb.database"),
-	}
-	MetricsInfluxDBUsernameFlag = Flag{
-		Name:  "metrics.influxdb.username",
-		Value: DefaultMetricsConfig.InfluxDBUsername,
-		Usage: "Username to authorize access to the database" + generateEnvDoc("metrics.influxdb.username"),
-	}
-	MetricsInfluxDBPasswordFlag = Flag{
-		Name:  "metrics.influxdb.password",
-		Value: DefaultMetricsConfig.InfluxDBPassword,
-		Usage: "Password to authorize access to the database" + generateEnvDoc("metrics.influxdb.password"),
-	}
-
 	ShowColorsFlag = Flag{
 		Name:  "showcolors",
 		Value: false,
@@ -816,16 +753,6 @@ var (
 		Value: false,
 		Usage: "Write log messages to stdout" + generateEnvDoc("logtostdout"),
 	}
-	// Tags are part of every measurement sent to InfluxDB. Queries on tags are faster in InfluxDB.
-	// For example `host` tag could be used so that we can group all nodes and average a measurement
-	// across all of them, but also so that we can select a specific node and inspect its measurements.
-	// https://docs.influxdata.com/influxdb/v1.4/concepts/key_concepts/#tag-key
-	MetricsInfluxDBTagsFlag = Flag{
-		Name:  "metrics.influxdb.tags",
-		Value: DefaultMetricsConfig.InfluxDBTags,
-		Usage: "Comma-separated InfluxDB tags (key/values) attached to all measurements" + generateEnvDoc("metrics.influxdb.tags"),
-	}
-
 	RegionFlag = Flag{
 		Name:  "region",
 		Value: EthConfigDefaults.Region,

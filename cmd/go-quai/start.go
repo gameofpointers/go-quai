@@ -41,11 +41,6 @@ func init() {
 	for _, flag := range utils.RPCFlags {
 		utils.CreateAndBindFlag(flag, startCmd)
 	}
-
-	// Create and bind all metrics flags to the start command
-	for _, flag := range utils.MetricsFlags {
-		utils.CreateAndBindFlag(flag, startCmd)
-	}
 }
 
 func startCmdPreRun(cmd *cobra.Command, args []string) error {
