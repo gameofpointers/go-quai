@@ -5,13 +5,12 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/vm"
-	"github.com/dominant-strategies/go-quai/eth"
-	quai "github.com/dominant-strategies/go-quai/eth"
-	"github.com/dominant-strategies/go-quai/eth/ethconfig"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/node"
 	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/quai"
+	"github.com/dominant-strategies/go-quai/quai/quaiconfig"
 	"github.com/dominant-strategies/go-quai/quaistats"
 	"github.com/spf13/viper"
 	"io"
@@ -25,7 +24,7 @@ type quaistatsConfig struct {
 }
 
 type quaiConfig struct {
-	Quai     ethconfig.Config
+	Quai     quaiconfig.Config
 	Node     node.Config
 	Ethstats quaistatsConfig
 }
@@ -62,7 +61,7 @@ func StartQuaiBackend() (*quai.QuaiBackend, error) {
 		stackZone.Wait()
 	}()
 
-	return &eth.QuaiBackend{}, nil
+	return &quai.QuaiBackend{}, nil
 }
 
 func StartNode(stack *node.Node) {
@@ -76,7 +75,7 @@ func StartNode(stack *node.Node) {
 func makeConfigNode(nodeLocation common.Location) (*node.Node, quaiConfig) {
 	// Load defaults.
 	cfg := quaiConfig{
-		Quai: ethconfig.Defaults,
+		Quai: quaiconfig.Defaults,
 		Node: defaultNodeConfig(),
 	}
 
@@ -129,8 +128,8 @@ func makeFullNode(nodeLocation common.Location) *node.Node {
 // RegisterQuaiService adds a Quai client to the stack.
 // The second return value is the full node instance, which may be nil if the
 // node is running as a light client.
-func RegisterQuaiService(stack *node.Node, cfg ethconfig.Config, nodeCtx int) (quaiapi.Backend, error) {
-	backend, err := eth.New(stack, &cfg, nodeCtx)
+func RegisterQuaiService(stack *node.Node, cfg quaiconfig.Config, nodeCtx int) (quaiapi.Backend, error) {
+	backend, err := quai.New(stack, &cfg, nodeCtx)
 	if err != nil {
 		Fatalf("Failed to register the Quai service: %v", err)
 	}

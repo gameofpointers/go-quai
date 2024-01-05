@@ -19,12 +19,12 @@ import (
 	"github.com/dominant-strategies/go-quai/common/fdlimit"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
-	"github.com/dominant-strategies/go-quai/eth/ethconfig"
-	"github.com/dominant-strategies/go-quai/eth/gasprice"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/node"
 	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/quai/gasprice"
+	"github.com/dominant-strategies/go-quai/quai/quaiconfig"
 	gopsutil "github.com/shirou/gopsutil/mem"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -939,7 +939,7 @@ func setWS(cfg *node.Config, nodeLocation common.Location) {
 }
 
 // setDomUrl sets the dominant chain websocket url.
-func setDomUrl(cfg *ethconfig.Config, nodeLocation common.Location) {
+func setDomUrl(cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// only set the dom url if the node is not prime
 	if nodeLocation != nil {
 		if len(nodeLocation) == 1 {
@@ -952,7 +952,7 @@ func setDomUrl(cfg *ethconfig.Config, nodeLocation common.Location) {
 }
 
 // setSubUrls sets the subordinate chain urls
-func setSubUrls(cfg *ethconfig.Config, nodeLocation common.Location) {
+func setSubUrls(cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// only set the sub urls if its not the zone
 	if len(nodeLocation) != 2 {
 		if nodeLocation == nil {
@@ -965,7 +965,7 @@ func setSubUrls(cfg *ethconfig.Config, nodeLocation common.Location) {
 
 // setGasLimitCeil sets the gas limit ceils based on the network that is
 // running
-func setGasLimitCeil(cfg *ethconfig.Config) {
+func setGasLimitCeil(cfg *quaiconfig.Config) {
 	switch {
 	case viper.GetBool(ColosseumFlag.Name):
 		cfg.Miner.GasCeil = params.ColosseumGasCeil
@@ -990,7 +990,7 @@ func makeSubUrls() []string {
 }
 
 // setSlicesRunning sets the slices running flag
-func setSlicesRunning(cfg *ethconfig.Config) {
+func setSlicesRunning(cfg *quaiconfig.Config) {
 	slices := strings.Split(viper.GetString(SlicesRunningFlag.Name), ",")
 
 	// Sanity checks
@@ -1033,7 +1033,7 @@ func HexAddress(account string, nodeLocation common.Location) (common.Address, e
 
 // setEtherbase retrieves the etherbase either from the directly specified
 // command line flags or from the keystore if CLI indexed.
-func setEtherbase(cfg *ethconfig.Config) {
+func setEtherbase(cfg *quaiconfig.Config) {
 	coinbaseMap, err := ParseCoinbaseAddresses()
 	if err != nil {
 		log.Fatalf("error parsing coinbase addresses: %s", err)
@@ -1195,7 +1195,7 @@ func setTxPool(cfg *core.TxPoolConfig, nodeLocation common.Location) {
 	}
 }
 
-func setConsensusEngineConfig(cfg *ethconfig.Config) {
+func setConsensusEngineConfig(cfg *quaiconfig.Config) {
 	if cfg.ConsensusEngine == "blake3" {
 		// Override any default configs for hard coded networks.
 		switch {
@@ -1266,7 +1266,7 @@ func setConsensusEngineConfig(cfg *ethconfig.Config) {
 	}
 }
 
-func setWhitelist(cfg *ethconfig.Config) {
+func setWhitelist(cfg *quaiconfig.Config) {
 	whitelist := viper.GetString(WhitelistFlag.Name)
 	if whitelist == "" {
 		return
@@ -1328,8 +1328,8 @@ func CheckExclusive(args ...interface{}) {
 	}
 }
 
-// SetQuaiConfig applies eth-related command line flags to the config.
-func SetQuaiConfig(stack *node.Node, cfg *ethconfig.Config, nodeLocation common.Location) {
+// SetQuaiConfig applies quai-related command line flags to the config.
+func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, nodeLocation common.Location) {
 	// Avoid conflicting network flags
 	CheckExclusive(ColosseumFlag, DeveloperFlag, GardenFlag, OrchardFlag, LocalFlag, LighthouseFlag)
 	CheckExclusive(DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
