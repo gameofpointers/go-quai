@@ -1293,14 +1293,46 @@ func setWhitelist(cfg *ethconfig.Config) {
 // set by the user. Each flag might optionally be followed by a string type to
 // specialize it further.
 func CheckExclusive(args ...interface{}) {
-	// TODO: need a way in viper to check if a flag is exclusive
+	set := make([]string, 0, 1)
+	for i := 0; i < len(args); i++ {
+		// Ensure the argument is a string (flag name)
+		flag, ok := args[i].(Flag)
+		if !ok {
+			panic(fmt.Sprintf("invalid argument, not string type: %T", args[i]))
+		}
+
+		// Check if the next arg extends the current flag
+		if i+1 < len(args) {
+			switch extension := args[i+1].(type) {
+			case string:
+				// Extended flag check
+				if viper.GetString(flag.Name) == extension {
+					set = append(set, "--"+flag.Name+"="+extension)
+				}
+				i++ // skip the next argument as it's processed
+				continue
+			case Flag:
+			default:
+				panic(fmt.Sprintf("invalid argument, not string extension: %T", args[i+1]))
+			}
+		}
+
+		// Check if the flag is set
+		if viper.IsSet(flag.Name) {
+			set = append(set, "--"+flag.Name)
+		}
+	}
+
+	if len(set) > 1 {
+		Fatalf("Flags %v can't be used at the same time", strings.Join(set, ", "))
+	}
 }
 
 // SetQuaiConfig applies eth-related command line flags to the config.
 func SetQuaiConfig(stack *node.Node, cfg *ethconfig.Config, nodeLocation common.Location) {
 	// Avoid conflicting network flags
-	// CheckExclusive(ColosseumFlag, DeveloperFlag, GardenFlag, OrchardFlag, LocalFlag, LighthouseFlag)
-	// CheckExclusive(DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
+	CheckExclusive(ColosseumFlag, DeveloperFlag, GardenFlag, OrchardFlag, LocalFlag, LighthouseFlag)
+	CheckExclusive(DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 
 	if viper.GetString(GCModeFlag.Name) == "archive" && viper.GetUint64(TxLookupLimitFlag.Name) != 0 {
 		// TODO: see what this is supposed to do
