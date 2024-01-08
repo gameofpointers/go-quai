@@ -49,9 +49,6 @@ var NodeFlags = []Flag{
 	SoloFlag,
 	CoinbaseAddressFlag,
 	DBEngineFlag,
-	KeystoreDirFlag,
-	NoUSBFlag,
-	USBFlag,
 	NetworkIdFlag,
 	SlicesRunningFlag,
 	ColosseumFlag,
@@ -64,17 +61,9 @@ var NodeFlags = []Flag{
 	DevPeriodFlag,
 	IdentityFlag,
 	DocRootFlag,
-	ExitWhenSyncedFlag,
-	IterativeOutputFlag,
-	ExcludeStorageFlag,
-	IncludeIncompletesFlag,
-	ExcludeCodeFlag,
-	StartKeyFlag,
-	DumpLimitFlag,
 	GCModeFlag,
 	SnapshotFlag,
 	TxLookupLimitFlag,
-	LightKDFFlag,
 	WhitelistFlag,
 	BloomFilterSizeFlag,
 	TxPoolLocalsFlag,
@@ -104,24 +93,13 @@ var NodeFlags = []Flag{
 	ExternalSignerFlag,
 	VMEnableDebugFlag,
 	InsecureUnlockAllowedFlag,
-	ShowColorsFlag,
-	LogToStdOutFlag,
 	MaxPendingPeersFlag,
-	BootnodesFlag,
-	NodeKeyFileFlag,
-	NodeKeyHexFlag,
-	NATFlag,
 	NoDiscoverFlag,
-	DiscoveryV5Flag,
-	NetrestrictFlag,
 	DNSDiscoveryFlag,
-	JSpathFlag,
 	GpoBlocksFlag,
 	GpoPercentileFlag,
 	GpoMaxGasPriceFlag,
 	GpoIgnoreGasPriceFlag,
-	FakePoWFlag,
-	NoCompactionFlag,
 	DomUrl,
 	SubUrls,
 }
@@ -129,18 +107,15 @@ var NodeFlags = []Flag{
 var RPCFlags = []Flag{
 	HTTPEnabledFlag,
 	HTTPListenAddrFlag,
-	HTTPPortFlag,
 	HTTPCORSDomainFlag,
 	HTTPVirtualHostsFlag,
 	HTTPApiFlag,
 	HTTPPathPrefixFlag,
 	WSEnabledFlag,
 	WSListenAddrFlag,
-	WSPortFlag,
 	WSApiFlag,
 	WSAllowedOriginsFlag,
 	WSPathPrefixFlag,
-	ExecFlag,
 	PreloadJSFlag,
 	RPCGlobalTxFeeCapFlag,
 	RPCGlobalGasCapFlag,
@@ -267,24 +242,6 @@ var (
 		Value: "leveldb",
 		Usage: "Backing database implementation to use ('leveldb' or 'pebble')" + generateEnvDoc("db.engine"),
 	}
-	// Is this the same as keyfile?
-	KeystoreDirFlag = Flag{
-		Name:  "keystore",
-		Value: xdg.DataHome + "/" + constants.APP_NAME + "/",
-		Usage: "Directory containing the node's private keys" + generateEnvDoc("keystore"),
-	}
-
-	NoUSBFlag = Flag{
-		Name:  "no-usb",
-		Value: false,
-		Usage: "Disable USB hardware wallet support" + generateEnvDoc("no-usb"),
-	}
-
-	USBFlag = Flag{
-		Name:  "usb",
-		Value: false,
-		Usage: "Enable monitoring and management of USB hardware wallets" + generateEnvDoc("usb"),
-	}
 
 	NetworkIdFlag = Flag{
 		Name:  "networkid",
@@ -355,42 +312,6 @@ var (
 	// ** 	      PY FLAGS    				 **
 	// ** 								     **
 	// ****************************************
-
-	ExitWhenSyncedFlag = Flag{
-		Name:  "exitwhensynced",
-		Value: false,
-		Usage: "Exits after block synchronisation completes" + generateEnvDoc("exitwhensynced"),
-	}
-	IterativeOutputFlag = Flag{
-		Name:  "iterative",
-		Value: true,
-		Usage: "Print streaming JSON iteratively, delimited by newlines" + generateEnvDoc("iterative"),
-	}
-	ExcludeStorageFlag = Flag{
-		Name:  "nostorage",
-		Value: false,
-		Usage: "Exclude storage entries (save db lookups)" + generateEnvDoc("nostorage"),
-	}
-	IncludeIncompletesFlag = Flag{
-		Name:  "incompletes",
-		Value: false,
-		Usage: "Include accounts for which we don't have the address (missing preimage)" + generateEnvDoc("incompletes"),
-	}
-	ExcludeCodeFlag = Flag{
-		Name:  "nocode",
-		Value: false,
-		Usage: "Exclude contract code (save db lookups)" + generateEnvDoc("nocode"),
-	}
-	StartKeyFlag = Flag{
-		Name:  "start",
-		Value: "0x0000000000000000000000000000000000000000000000000000000000000000",
-		Usage: "Start position. Either a hash or address" + generateEnvDoc("start"),
-	}
-	DumpLimitFlag = Flag{
-		Name:  "limit",
-		Value: 0,
-		Usage: "Max number of elements (0 = no limit)" + generateEnvDoc("limit"),
-	}
 	GCModeFlag = Flag{
 		Name:  "gcmode",
 		Value: "full",
@@ -407,12 +328,6 @@ var (
 		Name:  "txlookuplimit",
 		Value: QuaiConfigDefaults.TxLookupLimit,
 		Usage: "Number of recent blocks to maintain transactions index for (default = about one year, 0 = entire chain)" + generateEnvDoc("txlookuplimit"),
-	}
-
-	LightKDFFlag = Flag{
-		Name:  "lightkdf",
-		Value: false,
-		Usage: "Reduce key-derivation RAM & CPU usage at some expense of KDF strength" + generateEnvDoc("lightkdf"),
 	}
 
 	WhitelistFlag = Flag{
@@ -593,16 +508,6 @@ var (
 		Value: false,
 		Usage: "Send full stats boolean flag for quaistats" + generateEnvDoc("sendfullstats"),
 	}
-	FakePoWFlag = Flag{
-		Name:  "fakepow",
-		Value: false,
-		Usage: "Disables proof-of-work verification" + generateEnvDoc("fakepow"),
-	}
-	NoCompactionFlag = Flag{
-		Name:  "nocompaction",
-		Value: false,
-		Usage: "Disables db compaction after import" + generateEnvDoc("nocompaction"),
-	}
 	// RPC settings
 	HTTPEnabledFlag = Flag{
 		Name:  "http",
@@ -613,11 +518,6 @@ var (
 		Name:  "http.addr",
 		Value: DefaultHTTPHost,
 		Usage: "HTTP-RPC server listening interface" + generateEnvDoc("http.addr"),
-	}
-	HTTPPortFlag = Flag{
-		Name:  "http.port",
-		Value: DefaultHTTPPort,
-		Usage: "HTTP-RPC server listening port" + generateEnvDoc("http.port"),
 	}
 	HTTPCORSDomainFlag = Flag{
 		Name:  "http.corsdomain",
@@ -650,11 +550,6 @@ var (
 		Value: DefaultWSHost,
 		Usage: "WS-RPC server listening interface" + generateEnvDoc("ws"),
 	}
-	WSPortFlag = Flag{
-		Name:  "ws.port",
-		Value: DefaultWSPort,
-		Usage: "WS-RPC server listening port" + generateEnvDoc("ws"),
-	}
 	WSApiFlag = Flag{
 		Name:  "ws.api",
 		Value: "",
@@ -670,11 +565,6 @@ var (
 		Value: "",
 		Usage: "HTTP path prefix on which JSON-RPC is served. Use '/' to serve on all paths." + generateEnvDoc("ws"),
 	}
-	ExecFlag = Flag{
-		Name:  "exec",
-		Value: "",
-		Usage: "Execute JavaScript statement" + generateEnvDoc("exec"),
-	}
 	PreloadJSFlag = Flag{
 		Name:  "preload",
 		Value: "",
@@ -687,54 +577,16 @@ var (
 		Usage: "Maximum number of pending connection attempts (defaults used if set to 0)" + generateEnvDoc("maxpendpeers"),
 	}
 
-	BootnodesFlag = Flag{
-		Name:  "bootnodes",
-		Value: "",
-		Usage: "Comma separated enode URLs for P2P discovery bootstrap" + generateEnvDoc("bootnodes"),
-	}
-
-	NodeKeyFileFlag = Flag{
-		Name:  "nodekey",
-		Value: "",
-		Usage: "P2P node key file" + generateEnvDoc("nodekey"),
-	}
-	NodeKeyHexFlag = Flag{
-		Name:  "nodekeyhex",
-		Value: "",
-		Usage: "P2P node key as hex (for testing)" + generateEnvDoc("nodekeyhex"),
-	}
-	NATFlag = Flag{
-		Name:  "nat",
-		Value: "any",
-		Usage: "NAT port mapping mechanism (any|none|upnp|pmp|extip:<IP>)" + generateEnvDoc("nat"),
-	}
-
 	NoDiscoverFlag = Flag{
 		Name:  "nodiscover",
 		Value: false,
 		Usage: "Disables the peer discovery mechanism (manual peer addition)" + generateEnvDoc("nodiscover"),
 	}
 
-	DiscoveryV5Flag = Flag{
-		Name:  "v5disc",
-		Value: false,
-		Usage: "Enables the experimental RLPx V5 (Topic Discovery) mechanism" + generateEnvDoc("v5disc"),
-	}
-	NetrestrictFlag = Flag{
-		Name:  "netrestrict",
-		Value: "",
-		Usage: "Restricts network communication to the given IP networks (CIDR masks)" + generateEnvDoc("netrestrict"),
-	}
 	DNSDiscoveryFlag = Flag{
 		Name:  "discovery.dns",
 		Value: "",
 		Usage: "Sets DNS discovery entry points (use '' to disable DNS)" + generateEnvDoc("discovery.dns"),
-	}
-	// ATM the url is left to the user and deployment to
-	JSpathFlag = Flag{
-		Name:  "jspath",
-		Value: ".",
-		Usage: "JavaScript root path for `loadScript`" + generateEnvDoc("jspath"),
 	}
 	// Gas price oracle settings
 	GpoBlocksFlag = Flag{
@@ -758,17 +610,6 @@ var (
 		Usage: "Gas price below which gpo will ignore transactions" + generateEnvDoc("gpo.ignoreprice"),
 	}
 
-	ShowColorsFlag = Flag{
-		Name:  "showcolors",
-		Value: false,
-		Usage: "Enable colorized logging" + generateEnvDoc("showcolors"),
-	}
-
-	LogToStdOutFlag = Flag{
-		Name:  "logtostdout",
-		Value: false,
-		Usage: "Write log messages to stdout" + generateEnvDoc("logtostdout"),
-	}
 	DomUrl = Flag{
 		Name:  "dom.url",
 		Value: QuaiConfigDefaults.DomUrl,
@@ -1084,12 +925,6 @@ func SetNodeConfig(cfg *node.Config, nodeLocation common.Location) {
 	}
 	if viper.IsSet(DeveloperFlag.Name) {
 		cfg.UseLightweightKDF = true
-	}
-	if viper.IsSet(NoUSBFlag.Name) || cfg.NoUSB {
-		log.Warn("Option nousb is deprecated and USB is deactivated by default. Use --usb to enable")
-	}
-	if viper.IsSet(USBFlag.Name) {
-		cfg.USB = viper.GetBool(USBFlag.Name)
 	}
 	if viper.IsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = viper.GetBool(InsecureUnlockAllowedFlag.Name)
