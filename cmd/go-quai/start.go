@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -70,7 +71,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	logLevel := cmd.Flag(utils.LogLevelFlag.Name).Value.String()
 	// create instance of consensus backend
-	consensus, err := utils.StartQuaiBackend(logLevel)
+	var nodeWG sync.WaitGroup
+	consensus, err := utils.StartQuaiBackend(ctx, logLevel, &nodeWG)
 	if err != nil {
 		log.Fatalf("error creating consensus backend: %s", err)
 	}
@@ -98,6 +100,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	<-ch
 	log.Warnf("Received 'stop' signal, shutting down gracefully...")
 	cancel()
+	nodeWG.Wait()
 	if err := node.Stop(); err != nil {
 		panic(err)
 	}
