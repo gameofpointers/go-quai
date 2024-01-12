@@ -56,11 +56,13 @@ func (p *P2PNode) Start() error {
 	return nil
 }
 
-func (p *P2PNode) Subscribe(location common.Location, data interface{}) error {
+func (p *P2PNode) Subscribe(data interface{}, location common.Location) error {
+	log.Warn("Subscribed to Blocks", "location", location)
 	return p.pubsub.Subscribe(location, data)
 }
 
-func (p *P2PNode) Broadcast(location common.Location, data interface{}) error {
+func (p *P2PNode) Broadcast(data interface{}, location common.Location) error {
+	log.Warn("Broadcast Block", "block", data)
 	return p.pubsub.Broadcast(location, data)
 }
 

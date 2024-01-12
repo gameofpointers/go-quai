@@ -598,7 +598,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 	s.b.WriteBlock(block)
 	// Broadcast the block and announce chain insertion event
 	if block.Header() != nil {
-		s.b.EventMux().Post(core.NewMinedBlockEvent{Block: block})
+		s.b.BroadcastBlock(block, s.b.NodeLocation())
 	}
 	log.WithFields(logrus.Fields{
 		"number":   header.Number(s.b.NodeCtx()),
