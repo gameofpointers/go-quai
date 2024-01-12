@@ -56,12 +56,14 @@ func (p *P2PNode) Start() error {
 	return nil
 }
 
-func (p *P2PNode) Subscribe(slice types.SliceID, data interface{}) error {
-	return p.pubsub.Subscribe(slice, data)
+func (p *P2PNode) Subscribe(data interface{}, location common.Location) error {
+	log.Warn("Subscribed to Blocks", "location", location)
+	return p.pubsub.Subscribe(LocationToSliceID(location), data)
 }
 
-func (p *P2PNode) Broadcast(slice types.SliceID, data interface{}) error {
-	return p.pubsub.Broadcast(slice, data)
+func (p *P2PNode) Broadcast(data interface{}, location common.Location) error {
+	log.Warn("Broadcast Block", "block", data)
+	return p.pubsub.Broadcast(LocationToSliceID(location), data)
 }
 
 func (p *P2PNode) SetConsensusBackend(be quai.ConsensusAPI) {
@@ -106,6 +108,28 @@ func (p *P2PNode) Stop() error {
 	} else {
 		return nil
 	}
+}
+
+func LocationToSliceID(location common.Location) types.SliceID {
+	var context types.Context
+	var sliceID types.SliceID
+	switch location.Context() {
+	case common.PRIME_CTX:
+		context = types.PRIME_CTX
+	case common.REGION_CTX:
+		context = types.REGION_CTX
+		sliceID.Region = uint32(location.Region())
+	case common.ZONE_CTX:
+		context = types.ZONE_CTX
+		sliceID.Region = uint32(location.Region())
+		sliceID.Zone = uint32(location.Zone())
+	}
+	sliceID.Context = context
+	return sliceID
+}
+
+func (p *P2PNode) BroadcastTransaction(tx types.Transaction) error {
+	panic("todo")
 }
 
 // Request a block from the network for the specified slice
@@ -218,3 +242,4 @@ func (p *P2PNode) handleBroadcast(data interface{}) {
 		// TODO: ban the peer which sent it?
 	}
 }
+

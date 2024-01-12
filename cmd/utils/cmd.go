@@ -20,12 +20,15 @@ import (
 )
 
 // Create a new instance of the QuaiBackend consensus service
-func StartQuaiBackend() (*quai.QuaiBackend, error) {
+func StartQuaiBackend(p2p quai.NetworkingAPI) (*quai.QuaiBackend, error) {
+
+	quaiBackend, _ := quai.NewQuaiBackend()
 
 	// Make full node
 	go func() {
 		log.Info("Starting Prime")
-		stackPrime := makeFullNode(nil)
+		stackPrime, primeBackend := makeFullNode(p2p, nil)
+		quaiBackend.SetPrimeBackend(primeBackend)
 		defer stackPrime.Close()
 		StartNode(stackPrime)
 		stackPrime.Wait()
@@ -35,7 +38,8 @@ func StartQuaiBackend() (*quai.QuaiBackend, error) {
 
 	go func() {
 		log.Info("Starting Region")
-		stackRegion := makeFullNode(common.Location{0})
+		stackRegion, regionBackend := makeFullNode(p2p, common.Location{0})
+		quaiBackend.SetRegionBackend(regionBackend, common.Location{0})
 		defer stackRegion.Close()
 		StartNode(stackRegion)
 		stackRegion.Wait()
@@ -45,13 +49,14 @@ func StartQuaiBackend() (*quai.QuaiBackend, error) {
 
 	go func() {
 		log.Info("Starting Zone")
-		stackZone := makeFullNode(common.Location{0, 0})
+		stackZone, zoneBackend := makeFullNode(p2p, common.Location{0, 0})
+		quaiBackend.SetZoneBackend(zoneBackend, common.Location{0, 0})
 		defer stackZone.Close()
 		StartNode(stackZone)
 		stackZone.Wait()
 	}()
 
-	return &quai.QuaiBackend{}, nil
+	return quaiBackend, nil
 }
 
 func StartNode(stack *node.Node) {
@@ -104,22 +109,22 @@ func defaultNodeConfig() node.Config {
 }
 
 // makeFullNode loads quai configuration and creates the Quai backend.
-func makeFullNode(nodeLocation common.Location) *node.Node {
+func makeFullNode(p2p quai.NetworkingAPI, nodeLocation common.Location) (*node.Node, quaiapi.Backend) {
 	stack, cfg := makeConfigNode(nodeLocation)
-	backend, _ := RegisterQuaiService(stack, cfg.Quai, cfg.Node.NodeLocation.Context())
+	backend, _ := RegisterQuaiService(stack, p2p, cfg.Quai, cfg.Node.NodeLocation.Context())
 	sendfullstats := viper.GetBool(SendFullStatsFlag.Name)
 	// Add the Quai Stats daemon if requested.
 	if cfg.Quaistats.URL != "" {
 		RegisterQuaiStatsService(stack, backend, cfg.Quaistats.URL, sendfullstats)
 	}
-	return stack
+	return stack, backend
 }
 
 // RegisterQuaiService adds a Quai client to the stack.
 // The second return value is the full node instance, which may be nil if the
 // node is running as a light client.
-func RegisterQuaiService(stack *node.Node, cfg quaiconfig.Config, nodeCtx int) (quaiapi.Backend, error) {
-	backend, err := quai.New(stack, &cfg, nodeCtx)
+func RegisterQuaiService(stack *node.Node, p2p quai.NetworkingAPI, cfg quaiconfig.Config, nodeCtx int) (quaiapi.Backend, error) {
+	backend, err := quai.New(stack, p2p, &cfg, nodeCtx)
 	if err != nil {
 		Fatalf("Failed to register the Quai service: %v", err)
 	}

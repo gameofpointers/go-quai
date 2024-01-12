@@ -69,15 +69,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// create instance of consensus backend
-	consensus, err := utils.StartQuaiBackend()
+	consensus, err := utils.StartQuaiBackend(node)
 	if err != nil {
 		log.Fatalf("error creating consensus backend: %s", err)
-	}
-
-	// start the consensus backend
-	consensus.SetP2PNode(node)
-	if err := consensus.Start(); err != nil {
-		log.Fatalf("error starting consensus backend: %s", err)
 	}
 
 	// start the p2p node

@@ -54,6 +54,8 @@ type Quai struct {
 	// Handlers
 	core *core.Core
 
+	p2p NetworkingAPI
+
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
 
@@ -74,7 +76,7 @@ type Quai struct {
 
 // New creates a new Quai object (including the
 // initialisation of the common Quai object)
-func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error) {
+func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int) (*Quai, error) {
 	// Ensure configuration values are compatible and sane
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", quaiconfig.Defaults.Miner.GasPrice)
@@ -193,6 +195,12 @@ func New(stack *node.Node, config *quaiconfig.Config, nodeCtx int) (*Quai, error
 		quai.bloomIndexer = core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms, chainConfig.Location.Context())
 		quai.bloomIndexer.Start(quai.Core().Slice().HeaderChain())
 	}
+
+	// Set the p2p Networking API
+	quai.p2p = p2p
+
+	// Subscribe to the Blocks subscription
+	quai.p2p.Subscribe(types.Block{}, config.NodeLocation)
 
 	quai.APIBackend = &QuaiAPIBackend{stack.Config().ExtRPCEnabled(), quai, nil}
 	// Gasprice oracle is only initiated in zone chains

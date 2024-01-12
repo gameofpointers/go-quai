@@ -36,10 +36,10 @@ type NetworkingAPI interface {
 	Stop() error
 
 	// Method to subscribe to data from a given location. If the data-type is not supported, an error will be returned.
-	Subscribe(types.SliceID, interface{}) error
+	Subscribe(interface{}, common.Location) error
 
 	// Method to broadcast data to the network
-	Broadcast(types.SliceID, interface{}) error
+	Broadcast(interface{}, common.Location) error
 
 	// Methods to lookup specific data from the network. Each request method
 	// returns a result channel. If the result is found, it will be put into the
