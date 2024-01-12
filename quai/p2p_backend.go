@@ -63,6 +63,13 @@ func (qbe *QuaiBackend) Start() error {
 func (qbe *QuaiBackend) OnNewBlock(sourcePeer p2p.PeerID, block types.Block) bool {
 	log.Info("New Block Found", "Block", block)
 	// TODO: Add the entropy logic
+	// TODO: Start the downloader if its Prime
+	// Calc the order of the block
+	// Start the Downloader if the block has a higher entropy than the current entropy of the prime chain
+	// Downloader logic:
+	// 1. Fetch the skeleton blocks
+	// 2. Fill the skeleton from different peers
+	// 3. Write the block to the database and add to append queue
 	panic("todo")
 }
 
