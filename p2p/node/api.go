@@ -51,7 +51,7 @@ func (p *P2PNode) Start() error {
 	p.pubsub.Start(p.handleBroadcast)
 
 	// Open data streams with connected Quai peers
-	go quaiprotocol.OpenPeerStreams(p)
+	// go quaiprotocol.OpenPeerStreams(p)
 
 	return nil
 }
