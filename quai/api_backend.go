@@ -31,6 +31,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/event"
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quai/gasprice"
 	"github.com/dominant-strategies/go-quai/rpc"
@@ -533,5 +534,8 @@ func (b *QuaiAPIBackend) SetSyncTarget(header *types.Header) {
 // /////// P2P ///////////////
 // ///////////////////////////
 func (b *QuaiAPIBackend) BroadcastBlock(block *types.Block, location common.Location) {
-	b.quai.p2p.Broadcast(block, location)
+	err := b.quai.p2p.Broadcast(*block, location)
+	if err != nil {
+		log.Warn("Error Broadcasting", err)
+	}
 }

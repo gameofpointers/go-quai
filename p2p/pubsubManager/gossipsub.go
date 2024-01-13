@@ -72,7 +72,7 @@ func (g *PubsubManager) Subscribe(slice types.SliceID, data interface{}) error {
 		return err
 	}
 	g.topics[topicName] = topic
-
+	log.Warn("topic name", topicName, "g topic", g.topics[topicName])
 	// subscribe to the topic
 	subscription, err := topic.Subscribe()
 	if err != nil {
@@ -89,6 +89,7 @@ func (g *PubsubManager) Broadcast(slice types.SliceID, data interface{}) error {
 	if err != nil {
 		return err
 	}
+	log.Warn("topic name", topicName, "g topic", g.topics[topicName])
 	return g.topics[topicName].Publish(g.ctx, pb.MarshalData(data))
 }
 

@@ -57,12 +57,12 @@ func (p *P2PNode) Start() error {
 }
 
 func (p *P2PNode) Subscribe(data interface{}, location common.Location) error {
-	log.Warn("Subscribed to Blocks", "location", location)
+	log.Warn("Subscribed to Blocks", "location", location, "location to slice", LocationToSliceID(location))
 	return p.pubsub.Subscribe(LocationToSliceID(location), data)
 }
 
 func (p *P2PNode) Broadcast(data interface{}, location common.Location) error {
-	log.Warn("Broadcast Block", "block", data)
+	log.Warn("Broadcast Block", "block", data, "location to slice", LocationToSliceID(location))
 	return p.pubsub.Broadcast(LocationToSliceID(location), data)
 }
 
@@ -242,4 +242,3 @@ func (p *P2PNode) handleBroadcast(data interface{}) {
 		// TODO: ban the peer which sent it?
 	}
 }
-
