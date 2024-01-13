@@ -64,7 +64,7 @@ func DefaultDataDir() string {
 			}
 			return filepath.Join(appdata, "Quai")
 		default:
-			return filepath.Join(home, ".quai")
+			return filepath.Join(home, ".quai-lib")
 		}
 	}
 	// As we cannot guess a stable location, return empty and handle later
