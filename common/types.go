@@ -311,6 +311,10 @@ func (ma *MixedcaseAddress) Original() string {
 // zone[1,2] = [1, 2]
 type Location []byte
 
+type BlockHash struct {
+	Hash string
+}
+
 func (loc Location) Region() int {
 	if len(loc) >= 1 {
 		return int(loc[REGION_CTX-1])

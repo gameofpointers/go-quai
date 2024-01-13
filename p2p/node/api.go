@@ -242,4 +242,3 @@ func (p *P2PNode) handleBroadcast(data interface{}) {
 		// TODO: ban the peer which sent it?
 	}
 }
-

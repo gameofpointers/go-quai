@@ -534,7 +534,7 @@ func (b *QuaiAPIBackend) SetSyncTarget(header *types.Header) {
 // /////// P2P ///////////////
 // ///////////////////////////
 func (b *QuaiAPIBackend) BroadcastBlock(block *types.Block, location common.Location) {
-	err := b.quai.p2p.Broadcast(block, location)
+	err := b.quai.p2p.Broadcast(*block, location)
 	if err != nil {
 		log.Errorf("error broadcasting block: %s", err)
 	}
