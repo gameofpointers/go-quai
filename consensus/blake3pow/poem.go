@@ -21,8 +21,8 @@ func (blake3pow *Blake3pow) CalcOrder(header *types.Header) (*big.Int, int, erro
 	}
 
 	// Get entropy reduction of this header
-	// intrinsicS := blake3pow.IntrinsicExtraLogS(header.Hash(), header.Difficulty())
-	intrinsicS := blake3pow.IntrinsicLogS(header.Hash())
+	intrinsicS := blake3pow.IntrinsicExtraLogS(header.Hash(), header.Difficulty())
+	// intrinsicS := blake3pow.IntrinsicLogS(header.Hash())
 	return intrinsicS, common.ZONE_CTX, nil
 }
 
@@ -38,7 +38,8 @@ func (blake3pow *Blake3pow) IntrinsicExtraLogS(powHash common.Hash, difficulty *
 	bigBitst := new(big.Int).Mul(big.NewInt(int64(tx)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
 	bigBitst = new(big.Int).Add(bigBitst, tm)
 
-	bigBitsc := new(big.Int).Mul(big.NewInt(int64(6)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
+	gamma := 12
+	bigBitsc := new(big.Int).Mul(big.NewInt(int64(gamma)), new(big.Int).Exp(big.NewInt(2), big.NewInt(mantBits), nil))
 	last := new(big.Int).Sub(bigBitst, bigBitsx)
 	return new(big.Int).Add(last, bigBitsc)
 }
