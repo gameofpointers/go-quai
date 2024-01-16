@@ -7,6 +7,8 @@ package mocks
 import (
 	reflect "reflect"
 
+	common "github.com/dominant-strategies/go-quai/common"
+	types "github.com/dominant-strategies/go-quai/core/types"
 	gomock "github.com/golang/mock/gomock"
 	network "github.com/libp2p/go-libp2p/core/network"
 	peer "github.com/libp2p/go-libp2p/core/peer"
@@ -50,6 +52,20 @@ func (mr *MockQuaiP2PNodeMockRecorder) Connect(pi interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Connect", reflect.TypeOf((*MockQuaiP2PNode)(nil).Connect), pi)
 }
 
+// GetBlock mocks base method.
+func (m *MockQuaiP2PNode) GetBlock(hash common.Hash, location common.Location) *types.Block {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlock", hash, location)
+	ret0, _ := ret[0].(*types.Block)
+	return ret0
+}
+
+// GetBlock indicates an expected call of GetBlock.
+func (mr *MockQuaiP2PNodeMockRecorder) GetBlock(hash, location interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlock", reflect.TypeOf((*MockQuaiP2PNode)(nil).GetBlock), hash, location)
+}
+
 // GetBootPeers mocks base method.
 func (m *MockQuaiP2PNode) GetBootPeers() []peer.AddrInfo {
 	m.ctrl.T.Helper()
@@ -62,6 +78,20 @@ func (m *MockQuaiP2PNode) GetBootPeers() []peer.AddrInfo {
 func (mr *MockQuaiP2PNodeMockRecorder) GetBootPeers() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBootPeers", reflect.TypeOf((*MockQuaiP2PNode)(nil).GetBootPeers))
+}
+
+// GetHeader mocks base method.
+func (m *MockQuaiP2PNode) GetHeader(hash common.Hash, location common.Location) *types.Header {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHeader", hash, location)
+	ret0, _ := ret[0].(*types.Header)
+	return ret0
+}
+
+// GetHeader indicates an expected call of GetHeader.
+func (mr *MockQuaiP2PNodeMockRecorder) GetHeader(hash, location interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHeader", reflect.TypeOf((*MockQuaiP2PNode)(nil).GetHeader), hash, location)
 }
 
 // Network mocks base method.
