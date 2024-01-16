@@ -1,35 +1,16 @@
 package pb
 
 import (
-	"encoding/hex"
-
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
-// converts a custom go Block type (types.Block) to a protocol buffer Block type (pb.Block)
-func MarshalData(data interface{}) []byte {
-	var bytes []byte
-	var err error
-	switch v := data.(type) {
-	case *types.Block:
-		bytes, err = MarshalBlock(v)
-	default:
-		return nil
-	}
-	if err != nil {
-		log.Errorf("Error marshalling data: ", err)
-		return nil
-	} else {
-		return bytes
-	}
-}
-
 // Unmarshals a serialized protobuf slice of bytes into a protocol buffer type
-func UnmarshalProtoMessage(data []byte, pbMsg proto.Message) error {
-	if err := proto.Unmarshal(data, pbMsg); err != nil {
+func UnmarshalProtoMessage(data []byte, msg proto.Message) error {
+	if err := proto.Unmarshal(data, msg); err != nil {
 		return err
 	}
 	return nil
@@ -44,51 +25,157 @@ func MarshalProtoMessage(pbMsg proto.Message) ([]byte, error) {
 	return data, nil
 }
 
-// converts a custom go Block type (types.Block) to a protocol buffer Block type (pb.Block)
-func ConvertToProtoBlock(block types.Block) *Block {
-	return &Block{
-		Hash: hex.EncodeToString(block.Hash().Bytes()),
-		// ... map other fields
+// EncodeRequestMessage creates a marshaled protobuf message for a Quai Request.
+// Returns the serialized protobuf message.
+func EncodeQuaiRequest(action QuaiRequestMessage_ActionType, location common.Location, hash common.Hash) ([]byte, error) {
+	request := &Request{
+		Hash:     convertHashToProto(hash),
+		Location: convertLocationToProto(location),
 	}
+
+	quaiMsg := &QuaiRequestMessage{
+		Action:  action,
+		Request: request,
+	}
+
+	return MarshalProtoMessage(quaiMsg)
 
 }
 
-// converts a protocol buffer Block type (pb.Block) to a custom go Block type (types.Block)
-func ConvertFromProtoBlock(pbBlock *Block) types.Block {
-	var hash common.Hash
-	copy(hash[:], pbBlock.Hash)
-	// ... map other fields
-	return types.Block{
-		// ... map other fields
+// DecodeRequestMessage unmarshals a protobuf message into a Quai Request.
+// Returns the action type, sliceID, and hash.
+func DecodeQuaiRequest(data []byte) (action QuaiRequestMessage_ActionType, location common.Location, hash common.Hash, err error) {
+	var quaiMsg QuaiRequestMessage
+	err = UnmarshalProtoMessage(data, &quaiMsg)
+	if err != nil {
+		return QuaiRequestMessage_UNKNOWN, common.Location{}, common.Hash{}, err
 	}
+
+	action = quaiMsg.Action
+	if !isActionValid(action) {
+		return QuaiRequestMessage_UNKNOWN, common.Location{}, common.Hash{}, errors.Errorf("unsupported action type: %v", action)
+	}
+	request := quaiMsg.GetRequest()
+	protoHash := request.GetHash()
+	protoLocation := request.GetLocation()
+
+	location = convertProtoToLocation(protoLocation)
+	hash = convertProtoToHash(protoHash)
+
+	return action, location, hash, nil
 }
 
-// Unmarshals a received serialized protobuf slice of bytes into a custom *types.Block type
-func UnmarshalBlock(data []byte) (*types.Block, error) {
-	var pbBlock Block
-	err := UnmarshalProtoMessage(data, &pbBlock)
+// EncodeResponse creates a marshaled protobuf message for a Quai Response.
+// Returns the serialized protobuf message.
+func EncodeQuaiResponse(action QuaiResponseMessage_ActionType, data interface{}) ([]byte, error) {
+
+	var quaiMsg *QuaiResponseMessage
+	response, err := convertDataToProtoResponse(action, data)
 	if err != nil {
 		return nil, err
 	}
-	block := ConvertFromProtoBlock(&pbBlock)
-	return &block, nil
-}
-
-// Marshals a custom *types.Block type into a serialized protobuf slice of bytes
-// to be sent over the wire
-func MarshalBlock(block *types.Block) ([]byte, error) {
-	pbBlock := ConvertToProtoBlock(*block)
-	data, err := MarshalProtoMessage(pbBlock)
-	if err != nil {
-		return nil, err
+	quaiMsg = &QuaiResponseMessage{
+		Action:   action,
+		Response: response,
 	}
-	return data, nil
+
+	return MarshalProtoMessage(quaiMsg)
 }
 
-// Creates a BlockRequest protocol buffer message
-func CreateProtoBlockRequest(hash common.Hash, location common.Location) *BlockRequest {
-	return &BlockRequest{
-		Hash:     hex.EncodeToString(hash[:]),
-		Location: hex.EncodeToString(location),
+// Unmarshals a serialized protobuf message into a Quai Response message.
+// Returns the action type and the decoded type (i.e. *types.Header, *types.Block, etc).
+func DecodeQuaiResponse(data []byte) (action QuaiResponseMessage_ActionType, response interface{}, err error) {
+	var quaiMsg QuaiResponseMessage
+	err = UnmarshalProtoMessage(data, &quaiMsg)
+	if err != nil {
+		return QuaiResponseMessage_UNKNOWN, nil, err
+	}
+
+	action = quaiMsg.Action
+
+	switch action {
+	case QuaiResponseMessage_RESPONSE_BLOCK:
+		protoBlock := quaiMsg.Response.GetBlock()
+		block := convertProtoToBlock(protoBlock)
+		response = block
+
+	case QuaiResponseMessage_RESPONSE_HEADER:
+		protoHeader := quaiMsg.Response.GetHeader()
+		header := convertProtoToHeader(protoHeader)
+		response = header
+
+	case QuaiResponseMessage_RESPONSE_TRANSACTION:
+		protoTransaction := quaiMsg.Response.GetTransaction()
+		transaction := convertProtoToTransaction(protoTransaction)
+		response = transaction
+	default:
+		return QuaiResponseMessage_UNKNOWN, nil, errors.Errorf("unsupported action type: %v", action)
+	}
+
+	return action, response, nil
+}
+
+// Converts a custom go type to a proto type and marhsals it into a protobuf message
+func ConvertAndMarshal(data interface{}) ([]byte, error) {
+	switch data := data.(type) {
+	case *types.Block:
+		log.Tracef("marshalling block: %+v", data)
+		protoBlock := convertBlockToProto(data)
+		return MarshalProtoMessage(protoBlock)
+	case *types.Transaction:
+		log.Tracef("marshalling transaction: %+v", data)
+		protoTransaction := convertTransactionToProto(data)
+		return MarshalProtoMessage(protoTransaction)
+	case *types.Header:
+		log.Tracef("marshalling header: %+v", data)
+		protoHeader := convertHeaderToProto(data)
+		return MarshalProtoMessage(protoHeader)
+	default:
+		return nil, errors.New("unsupported data type")
+	}
+}
+
+// Unmarshals a protobuf message into a proto type and converts it to a custom go type
+func UnmarshalAndConvert(data []byte, dataPtr interface{}) error {
+	switch dataPtr := dataPtr.(type) {
+	case *types.Block:
+		protoBlock := new(Block)
+		err := UnmarshalProtoMessage(data, protoBlock)
+		if err != nil {
+			return err
+		}
+		block := convertProtoToBlock(protoBlock)
+		*dataPtr = *block
+		return nil
+	case *types.Transaction:
+		protoTransaction := new(Transaction)
+		err := UnmarshalProtoMessage(data, protoTransaction)
+		if err != nil {
+			return err
+		}
+		transaction := convertProtoToTransaction(protoTransaction)
+		*dataPtr = *transaction
+		return nil
+	case *types.Header:
+		protoHeader := new(Header)
+		err := UnmarshalProtoMessage(data, protoHeader)
+		if err != nil {
+			return err
+		}
+		header := convertProtoToHeader(protoHeader)
+		*dataPtr = *header
+		return nil
+	default:
+		return errors.New("unsupported data type")
+	}
+}
+
+// helper function to determine if the action type is valid
+func isActionValid(action QuaiRequestMessage_ActionType) bool {
+	switch action {
+	case QuaiRequestMessage_REQUEST_BLOCK, QuaiRequestMessage_REQUEST_HEADER, QuaiRequestMessage_REQUEST_TRANSACTION:
+		return true
+	default:
+		return false
 	}
 }
