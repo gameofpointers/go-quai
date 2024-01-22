@@ -1,74 +1,38 @@
 syntax = "proto3";
 
-
 package quaiprotocol;
 option go_package = "github.com/dominant-strategies/go-quai/p2p/pb";
 
-// GossipSub messages for broadcasting blocks and transactions
-message GossipBlock { Block block = 1; }
+import "p2p/pb/block.proto";
 
-message GossipTransaction { Transaction transaction = 1; }
+// GossipSub messages for broadcasting blocks and transactions
+message GossipBlock { block.Block block = 1; }
+
+message GossipTransaction { block.Transaction transaction = 1; }
 
 // QuaiRequestMessage is the main 'envelope' for QuaiProtocol request messages
 message QuaiRequestMessage {
-    Location location = 1;
-    Hash hash = 2;
-    oneof request {
-        Block block = 3;
-        Header header = 4;
-        Transaction transaction = 5;
-    }
+  Location location = 1;
+  Hash hash = 2;
+  oneof request {
+    block.Block block = 3;
+    block.Header header = 4;
+    block.Transaction transaction = 5;
+  }
 }
 
 // QuaiResponseMessage is the main 'envelope' for QuaiProtocol response messages
 message QuaiResponseMessage {
-    oneof response {
-        Block block = 1;
-        Header header = 2;
-        Transaction transaction = 3;
-    }
+  oneof response {
+    block.Block block = 1;
+    block.Header header = 2;
+    block.Transaction transaction = 3;
+  }
 }
 
-message Location {
-    bytes location = 1;
-}
+message Location { bytes location = 1; }
 
 // Hash structure
 message Hash {
-    bytes hash = 1; // Hash is an array of 32 bytes
-}
-
-// Block structure
-message Block {
-    Header header = 1;
-    repeated Transaction txs = 2;
-    repeated Header uncles = 3;
-    repeated Transaction etxs = 4;
-// TODO: add submanifest
-// TODO: add receipts
-// TODO: add hasher
-    uint32 nodeCtx = 7;
-    // Additional fields...
-}
-
-// Header structure
-message Header {
-    Hash hash = 1;
-    Hash parentHash = 2;
-    uint64 gasLimit = 3;
-    uint64 gasUsed = 4;
-    // Additional fields...
-}
-
-// Transaction structure
-message Transaction {
-    Hash hash = 1;
-    string from = 2;
-    string to = 3;
-    uint64 nonce = 4;
-    string value = 5;
-    string gasPrice = 6;
-    uint64 gas = 7;
-    bytes input = 8;
-    // Additional fields...
+  bytes hash = 1; // Hash is an array of 32 bytes
 }
