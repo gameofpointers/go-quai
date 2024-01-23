@@ -206,6 +206,7 @@ func (p *P2PNode) handleBroadcast(sourcePeer peer.ID, data interface{}) {
 	switch v := data.(type) {
 	case types.Block:
 		p.cacheAdd(v.Hash(), &v)
+		p.consensus.OnNewBlock(p.ID(), v)
 	// TODO: send it to consensus
 	default:
 		log.Debugf("received unsupported block broadcast")

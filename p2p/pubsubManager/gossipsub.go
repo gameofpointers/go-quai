@@ -84,7 +84,7 @@ func (g *PubsubManager) Subscribe(location common.Location, datatype interface{}
 
 			var data interface{}
 			// unmarshal the received data depending on the topic's type
-			err = pb.UnmarshalAndConvert(msg.Data, &data)
+			err = pb.UnmarshalAndConvert(msg.Data, &data, dataType)
 			if err != nil {
 				log.Errorf("error unmarshalling data: %s", err)
 				return
@@ -110,5 +110,6 @@ func (g *PubsubManager) Broadcast(location common.Location, datatype interface{}
 	if err != nil {
 		return err
 	}
+	log.Warn("protoData for block", protoData, "topicname", topicName)
 	return g.topics[topicName].Publish(g.ctx, protoData)
 }

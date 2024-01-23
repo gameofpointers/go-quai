@@ -51,12 +51,29 @@ func (qbe *QuaiBackend) SetZoneApiBackend(zoneBackend quaiapi.Backend, location 
 
 func (qbe *QuaiBackend) GetBackend(location common.Location) *quaiapi.Backend {
 	// TODO: Return the backened based on the sliceID and return it
+	switch location.Context() {
+	case common.PRIME_CTX:
+		return qbe.primeApiBackend
+	case common.REGION_CTX:
+		return qbe.regionApiBackends[location.Region()]
+	case common.ZONE_CTX:
+		return qbe.zoneApiBackends[location.Region()][location.Zone()]
+	}
 	return nil
 }
 
 // Handle consensus data propagated to us from our peers
 func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}) bool {
-	panic("todo")
+	block := data.(*types.Block)
+	primeBackend := *qbe.GetBackend(common.Location{})
+	primeBackend.WriteBlock(block)
+
+	regionBackend := *qbe.GetBackend(common.Location{uint8(block.Location().Region())})
+	regionBackend.WriteBlock(block)
+
+	zoneBackend := *qbe.GetBackend(block.Location())
+	zoneBackend.WriteBlock(block)
+	return true
 }
 
 // Returns the current block height for the given location

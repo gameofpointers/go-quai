@@ -88,7 +88,7 @@ func convertTransactionToProto(t *types.Transaction) *Transaction {
 	switch t.Type() {
 	case 0:
 		protoTx.ChainId = t.ChainId().Bytes()
-		// TODO: Add access list
+		protoTx.AccessList = convertAccessListToProto(t.AccessList())
 		protoTx.Nonce = t.Nonce()
 		protoTx.Gas = t.Gas()
 		protoTx.MaxFeePerGas = t.GasFeeCap().Bytes()
@@ -102,7 +102,7 @@ func convertTransactionToProto(t *types.Transaction) *Transaction {
 		protoTx.S = S.Bytes()
 	case 1:
 		protoTx.ChainId = t.ChainId().Bytes()
-		// TODO: Add access list
+		protoTx.AccessList = convertAccessListToProto(t.AccessList())
 		protoTx.Nonce = t.Nonce()
 		protoTx.Gas = t.Gas()
 		protoTx.MaxFeePerGas = t.GasFeeCap().Bytes()
@@ -112,7 +112,7 @@ func convertTransactionToProto(t *types.Transaction) *Transaction {
 		protoTx.To = t.To().String()
 	case 2:
 		protoTx.ChainId = t.ChainId().Bytes()
-		// TODO: Add access list
+		protoTx.AccessList = convertAccessListToProto(t.AccessList())
 		protoTx.Nonce = t.Nonce()
 		protoTx.Gas = t.Gas()
 		protoTx.MaxFeePerGas = t.GasFeeCap().Bytes()
@@ -128,7 +128,7 @@ func convertTransactionToProto(t *types.Transaction) *Transaction {
 		protoTx.EtxGasPrice = t.ETXGasPrice().Bytes()
 		protoTx.EtxGasTip = t.ETXGasTip().Bytes()
 		protoTx.EtxData = t.ETXData()
-		// TODO: Add external access list
+		protoTx.EtxAccessList = convertAccessListToProto(t.ETXAccessList())
 	}
 	return protoTx
 }
@@ -140,6 +140,22 @@ func convertManifestsToProto(manifest types.BlockManifest) *Manifest {
 		protoManifest.Manifest = append(protoManifest.Manifest, hash.Bytes())
 	}
 	return protoManifest
+}
+
+// converts an access list to a protobuf access list
+func convertAccessListToProto(accessLists types.AccessList) *Accesslist {
+	protoAccessList := &Accesslist{}
+	for _, accessList := range accessLists {
+		protoAccessList.AccessTuples = append(protoAccessList.AccessTuples, convertAccessTupleToProto(&accessList))
+	}
+	return protoAccessList
+}
+
+func convertAccessTupleToProto(accessTuple *types.AccessTuple) *AccessTuple {
+	protoAccessTuple := &AccessTuple{}
+	protoAccessTuple.Address = accessTuple.Address.Bytes()
+	protoAccessTuple.StorageKey = convertHashArrayToProto(accessTuple.StorageKeys)
+	return protoAccessTuple
 }
 
 // Converts a custom Block type to a protobuf Block type

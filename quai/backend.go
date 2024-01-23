@@ -221,7 +221,10 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	quai.p2p = p2p
 
 	// Subscribe to the Blocks subscription
-	quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
+	err = quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
+	if err != nil {
+		logger.WithField("err", err).Warn("Error subscribing to the blocks topic")
+	}
 
 	quai.APIBackend = &QuaiAPIBackend{stack.Config().ExtRPCEnabled(), quai, nil}
 	// Gasprice oracle is only initiated in zone chains

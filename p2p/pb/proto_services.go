@@ -62,15 +62,24 @@ func DecodeQuaiRequest(data []byte) (interface{}, common.Location, common.Hash, 
 	switch quaiMsg.Request.(type) {
 	case *QuaiRequestMessage_Block:
 		protoBlock := quaiMsg.GetBlock()
-		block := convertProtoToBlock(protoBlock)
+		block, err := convertProtoToBlock(protoBlock)
+		if err != nil {
+			return nil, common.Location{}, common.Hash{}, err
+		}
 		return block, location, hash, nil
 	case *QuaiRequestMessage_Header:
 		protoHeader := quaiMsg.GetHeader()
-		header := convertProtoToHeader(protoHeader)
+		header, err := convertProtoToHeader(protoHeader)
+		if err != nil {
+			return nil, common.Location{}, common.Hash{}, err
+		}
 		return header, location, hash, nil
 	case *QuaiRequestMessage_Transaction:
 		protoTransaction := quaiMsg.GetTransaction()
-		transaction := convertProtoToTransaction(protoTransaction)
+		transaction, err := convertProtoToTransaction(protoTransaction)
+		if err != nil {
+			return nil, common.Location{}, common.Hash{}, err
+		}
 		return transaction, location, hash, nil
 	default:
 		return nil, common.Location{}, common.Hash{}, errors.Errorf("unsupported request type: %T", quaiMsg.Request)
@@ -152,8 +161,8 @@ func ConvertAndMarshal(data interface{}) ([]byte, error) {
 }
 
 // Unmarshals a protobuf message into a proto type and converts it to a custom go type
-func UnmarshalAndConvert(data []byte, dataPtr interface{}) error {
-	switch dataPtr := dataPtr.(type) {
+func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}) error {
+	switch datatype.(type) {
 	case *types.Block:
 		protoBlock := new(Block)
 		err := UnmarshalProtoMessage(data, protoBlock)

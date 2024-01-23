@@ -12,6 +12,7 @@ message Block {
   Manifest manifest = 5;
 }
 
+// Header structure
 message Header {
   repeated bytes parent_hash = 1;
   bytes uncle_hash = 2;
@@ -33,7 +34,7 @@ message Header {
   uint64 time = 18;
   bytes extra = 19;
   bytes mix_hash = 20;
-  bytes nonce = 21;
+  uint64 nonce = 21;
 }
 
 // Transaction structure
@@ -50,15 +51,15 @@ message Transaction {
   bytes chain_id = 10;
   bytes max_priority_gasfee = 11;
   bytes max_fee_per_gas = 12;
-  // TODO: Accesslist
-  uint64 etx_gas_limit = 13;
-  bytes etx_gas_price = 14;
-  bytes etx_gas_tip = 15;
-  bytes etx_data = 16;
-  // TODO: Etx Accesslist
-  bytes v = 17;
-  bytes r = 18;
-  bytes s = 19;
+  Accesslist access_list = 13;
+  uint64 etx_gas_limit = 14;
+  bytes etx_gas_price = 15;
+  bytes etx_gas_tip = 16;
+  bytes etx_data = 17;
+  Accesslist etx_access_list = 18;
+  bytes v = 19;
+  bytes r = 20;
+  bytes s = 21;
 }
 
 // Transactions structure
@@ -69,3 +70,12 @@ message Headers { repeated Header headers = 1; }
 
 // Manifest structure
 message Manifest { repeated bytes manifest = 1; }
+
+// Accesslist structure
+message Accesslist { repeated AccessTuple access_tuples = 1; }
+
+// AccessTuple structure
+message AccessTuple {
+  bytes address = 1;
+  repeated bytes storage_key = 2;
+}
