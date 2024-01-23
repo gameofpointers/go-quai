@@ -104,8 +104,8 @@ func TestConvertAndUnmarshall(t *testing.T) {
 	require.NoError(t, err)
 
 	// unmarshall the header
-	var unmarshalledHeader = types.Header{}
-	err = UnmarshalAndConvert(data, &unmarshalledHeader)
+	var unmarshalledHeader interface{}
+	err = UnmarshalAndConvert(data, &unmarshalledHeader, &types.Header{}, common.Location{0, 0})
 	require.NoError(t, err)
 
 	// check if the unmarshalled header is equal to the original header

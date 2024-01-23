@@ -49,17 +49,18 @@ message Transaction {
   uint64 gas = 8;
   bytes input = 9;
   bytes chain_id = 10;
-  bytes max_priority_gasfee = 11;
+  bytes max_priority_gas_fee = 11;
   bytes max_fee_per_gas = 12;
-  Accesslist access_list = 13;
-  uint64 etx_gas_limit = 14;
-  bytes etx_gas_price = 15;
-  bytes etx_gas_tip = 16;
-  bytes etx_data = 17;
-  Accesslist etx_access_list = 18;
-  bytes v = 19;
-  bytes r = 20;
-  bytes s = 21;
+  AccessList access_list = 13;
+  bytes sender = 14;
+  uint64 etx_gas_limit = 15;
+  bytes etx_gas_price = 16;
+  bytes etx_gas_tip = 17;
+  bytes etx_data = 18;
+  AccessList etx_access_list = 19;
+  bytes v = 20;
+  bytes r = 21;
+  bytes s = 22;
 }
 
 // Transactions structure
@@ -71,8 +72,8 @@ message Headers { repeated Header headers = 1; }
 // Manifest structure
 message Manifest { repeated bytes manifest = 1; }
 
-// Accesslist structure
-message Accesslist { repeated AccessTuple access_tuples = 1; }
+// AccessList structure
+message AccessList { repeated AccessTuple access_tuples = 1; }
 
 // AccessTuple structure
 message AccessTuple {

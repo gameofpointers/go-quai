@@ -76,7 +76,7 @@ func DecodeQuaiRequest(data []byte) (interface{}, common.Location, common.Hash, 
 		return header, location, hash, nil
 	case *QuaiRequestMessage_Transaction:
 		protoTransaction := quaiMsg.GetTransaction()
-		transaction, err := convertProtoToTransaction(protoTransaction)
+		transaction, err := convertProtoToTransaction(protoTransaction, location)
 		if err != nil {
 			return nil, common.Location{}, common.Hash{}, err
 		}
@@ -115,7 +115,7 @@ func EncodeQuaiResponse(data interface{}) ([]byte, error) {
 
 // Unmarshals a serialized protobuf message into a Quai Response message.
 // Returns the decoded type (i.e. *types.Header, *types.Block, etc).
-func DecodeQuaiResponse(data []byte) (interface{}, error) {
+func DecodeQuaiResponse(data []byte, location common.Location) (interface{}, error) {
 	var quaiMsg QuaiResponseMessage
 	err := UnmarshalProtoMessage(data, &quaiMsg)
 	if err != nil {
@@ -125,15 +125,24 @@ func DecodeQuaiResponse(data []byte) (interface{}, error) {
 	switch quaiMsg.Response.(type) {
 	case *QuaiResponseMessage_Block:
 		protoBlock := quaiMsg.GetBlock()
-		block := convertProtoToBlock(protoBlock)
+		block, err := convertProtoToBlock(protoBlock)
+		if err != nil {
+			return nil, err
+		}
 		return block, nil
 	case *QuaiResponseMessage_Header:
 		protoHeader := quaiMsg.GetHeader()
-		header := convertProtoToHeader(protoHeader)
+		header, err := convertProtoToHeader(protoHeader)
+		if err != nil {
+			return nil, err
+		}
 		return header, nil
 	case *QuaiResponseMessage_Transaction:
 		protoTransaction := quaiMsg.GetTransaction()
-		transaction := convertProtoToTransaction(protoTransaction)
+		transaction, err := convertProtoToTransaction(protoTransaction, location)
+		if err != nil {
+			return nil, err
+		}
 		return transaction, nil
 	default:
 		return nil, errors.Errorf("unsupported response type: %T", quaiMsg.Response)
@@ -161,7 +170,7 @@ func ConvertAndMarshal(data interface{}) ([]byte, error) {
 }
 
 // Unmarshals a protobuf message into a proto type and converts it to a custom go type
-func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}) error {
+func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}, location common.Location) error {
 	switch datatype.(type) {
 	case *types.Block:
 		protoBlock := new(Block)
@@ -169,7 +178,10 @@ func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}
 		if err != nil {
 			return err
 		}
-		block := convertProtoToBlock(protoBlock)
+		block, err := convertProtoToBlock(protoBlock)
+		if err != nil {
+			return err
+		}
 		*dataPtr = *block
 		return nil
 	case *types.Header:
@@ -178,7 +190,10 @@ func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}
 		if err != nil {
 			return err
 		}
-		header := convertProtoToHeader(protoHeader)
+		header, err := convertProtoToHeader(protoHeader)
+		if err != nil {
+			return err
+		}
 		*dataPtr = *header
 		return nil
 	case *types.Transaction:
@@ -187,7 +202,10 @@ func UnmarshalAndConvert(data []byte, dataPtr *interface{}, datatype interface{}
 		if err != nil {
 			return err
 		}
-		transaction := convertProtoToTransaction(protoTransaction)
+		transaction, err := convertProtoToTransaction(protoTransaction, location)
+		if err != nil {
+			return err
+		}
 		*dataPtr = *transaction
 		return nil
 	default:

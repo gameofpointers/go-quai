@@ -583,6 +583,8 @@ func (c *Core) WriteBlock(block *types.Block) {
 	defer c.writeBlockLock.Unlock()
 	nodeCtx := c.NodeCtx()
 
+	c.logger.Warn("Block", block.Header())
+
 	if c.sl.IsBlockHashABadHash(block.Hash()) {
 		return
 	}

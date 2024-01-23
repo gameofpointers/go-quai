@@ -47,7 +47,7 @@ func convertHeaderToProto(header *types.Header) *Header {
 		Time:          header.Time(),
 		Extra:         header.Extra(),
 		MixHash:       header.MixHash().Bytes(),
-		Nonce:         header.Nonce().Bytes(),
+		Nonce:         header.Nonce().Uint64(),
 	}
 
 	// Convert []*big.Int fields with HierarchyDepth
@@ -143,8 +143,8 @@ func convertManifestsToProto(manifest types.BlockManifest) *Manifest {
 }
 
 // converts an access list to a protobuf access list
-func convertAccessListToProto(accessLists types.AccessList) *Accesslist {
-	protoAccessList := &Accesslist{}
+func convertAccessListToProto(accessLists types.AccessList) *AccessList {
+	protoAccessList := &AccessList{}
 	for _, accessList := range accessLists {
 		protoAccessList.AccessTuples = append(protoAccessList.AccessTuples, convertAccessTupleToProto(&accessList))
 	}

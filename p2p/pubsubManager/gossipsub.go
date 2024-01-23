@@ -84,7 +84,7 @@ func (g *PubsubManager) Subscribe(location common.Location, datatype interface{}
 
 			var data interface{}
 			// unmarshal the received data depending on the topic's type
-			err = pb.UnmarshalAndConvert(msg.Data, &data, dataType)
+			err = pb.UnmarshalAndConvert(msg.Data, &data, datatype, location)
 			if err != nil {
 				log.Errorf("error unmarshalling data: %s", err)
 				return

@@ -28,11 +28,11 @@ func convertProtoToBlock(protoBlock *Block) (*types.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	txs, err := convertProtoToTransactions(protoBlock.Txs)
+	txs, err := convertProtoToTransactions(protoBlock.Txs, header.Location())
 	if err != nil {
 		return nil, err
 	}
-	etxs, err := convertProtoToTransactions(protoBlock.Etxs)
+	etxs, err := convertProtoToTransactions(protoBlock.Etxs, header.Location())
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +138,10 @@ func convertProtoToHeader(protoHeader *Header) (*types.Header, error) {
 	return header, nil
 }
 
-func convertProtoToTransactions(protoTransactions *Transactions) (types.Transactions, error) {
+func convertProtoToTransactions(protoTransactions *Transactions, location common.Location) (types.Transactions, error) {
 	var txs types.Transactions
 	for _, tx := range protoTransactions.GetTransactions() {
-		convertedTx, err := convertProtoToTransaction(tx)
+		convertedTx, err := convertProtoToTransaction(tx, location)
 		if err != nil {
 			return nil, err
 		}
@@ -151,20 +151,163 @@ func convertProtoToTransactions(protoTransactions *Transactions) (types.Transact
 }
 
 // Converts a protobuf Transaction type to native Transaction type
-func convertProtoToTransaction(protoTransaction *Transaction) (*types.Transaction, error) {
+func convertProtoToTransaction(protoTx *Transaction, location common.Location) (*types.Transaction, error) {
 	tx := &types.Transaction{}
 
-	txType := protoTransaction.GetType()
+	txType := protoTx.GetType()
 	switch txType {
 	case 0:
 		var itx types.InternalTx
-		return itx, nil
+		if protoTx.AccessList == nil {
+			return nil, errors.New("missing required field 'AccessList' in InternalTx")
+		}
+		itx.AccessList = convertProtoToAccessList(protoTx.GetAccessList(), location)
+		if protoTx.ChainId == nil {
+			return nil, errors.New("missing required field 'ChainId' in InternalTx")
+		}
+		itx.ChainID = new(big.Int).SetBytes(protoTx.GetChainId())
+		itx.Nonce = protoTx.GetNonce()
+		if protoTx.MaxPriorityGasFee == nil {
+			return nil, errors.New("missing required field 'GasTipCap' in InternalTx")
+		}
+		itx.GasTipCap = new(big.Int).SetBytes(protoTx.GetMaxPriorityGasFee())
+		if protoTx.MaxFeePerGas == nil {
+			return nil, errors.New("missing required field 'GasFeeCap' in InternalTx")
+		}
+		itx.GasFeeCap = new(big.Int).SetBytes(protoTx.GetMaxFeePerGas())
+		itx.Gas = protoTx.GetGas()
+		if protoTx.Value == nil {
+			return nil, errors.New("missing required field 'Value' in InternalTx")
+		}
+		itx.Value = new(big.Int).SetBytes(protoTx.GetValue())
+		if protoTx.Input == nil {
+			return nil, errors.New("missing required field 'Data' in InternalTx")
+		}
+		itx.Data = protoTx.GetInput()
+		if protoTx.V == nil {
+			return nil, errors.New("missing required field 'V' in InternalTx")
+		}
+		itx.V = new(big.Int).SetBytes(protoTx.GetV())
+		if protoTx.R == nil {
+			return nil, errors.New("missing required field 'R' in InternalTx")
+		}
+		itx.R = new(big.Int).SetBytes(protoTx.GetR())
+		if protoTx.S == nil {
+			return nil, errors.New("missing required field 'S' in InternalTx")
+		}
+		itx.S = new(big.Int).SetBytes(protoTx.GetS())
+		withSignature := itx.V.Sign() != 0 || itx.R.Sign() != 0 || itx.S.Sign() != 0
+		if withSignature {
+			if err := types.SanityCheckSignature(itx.V, itx.R, itx.S); err != nil {
+				return nil, err
+			}
+		}
+		tx = types.NewTx(&itx)
+		return tx, nil
 	case 1:
+		var etx types.ExternalTx
+		if protoTx.AccessList == nil {
+			return nil, errors.New("missing required field 'AccessList' in ExternalTx")
+		}
+		etx.AccessList = convertProtoToAccessList(protoTx.GetAccessList(), location)
+		if protoTx.ChainId == nil {
+			return nil, errors.New("missing required field 'ChainId' in ExternalTx")
+		}
+		etx.ChainID = new(big.Int).SetBytes(protoTx.GetChainId())
+		if protoTx.MaxPriorityGasFee == nil {
+			return nil, errors.New("missing required field 'GasTipCap' in ExternalTx")
+		}
+		etx.GasTipCap = new(big.Int).SetBytes(protoTx.GetMaxPriorityGasFee())
+		if protoTx.MaxFeePerGas == nil {
+			return nil, errors.New("missing required field 'GasFeeCap' in ExternalTx")
+		}
+		etx.GasFeeCap = new(big.Int).SetBytes(protoTx.GetMaxFeePerGas())
+		etx.Gas = protoTx.GetGas()
+		if protoTx.Input == nil {
+			return nil, errors.New("missing required field 'Data' in ExternalTx")
+		}
+		etx.Data = protoTx.GetInput()
+		etx.Value = new(big.Int).SetBytes(protoTx.GetValue())
+		if protoTx.Sender == nil {
+			return nil, errors.New("missing required field 'Sender' in ExternalTx")
+		}
+		etx.Sender = common.BytesToAddress(protoTx.GetSender(), location)
+
+		tx = types.NewTx(&etx)
+		return tx, nil
 	case 2:
+		var ietx types.InternalToExternalTx
+		if protoTx.AccessList == nil {
+			return nil, errors.New("missing required field 'AccessList' in InternalToExternalTx")
+		}
+		ietx.AccessList = convertProtoToAccessList(protoTx.GetAccessList(), location)
+		if protoTx.ChainId == nil {
+			return nil, errors.New("missing required field 'ChainId' in InternalToExternalTx")
+		}
+		if protoTx.ChainId == nil {
+			return nil, errors.New("missing required field 'ChainId' in InternalToExternalTx")
+		}
+		ietx.ChainID = new(big.Int).SetBytes(protoTx.GetChainId())
+		ietx.Nonce = protoTx.GetNonce()
+		if protoTx.MaxPriorityGasFee == nil {
+			return nil, errors.New("missing required field 'GasTipCap' in InternalToExternalTx")
+		}
+		ietx.GasTipCap = new(big.Int).SetBytes(protoTx.GetMaxPriorityGasFee())
+		if protoTx.MaxFeePerGas == nil {
+			return nil, errors.New("missing required field 'GasFeeCap' in InternalToExternalTx")
+		}
+		ietx.GasFeeCap = new(big.Int).SetBytes(protoTx.GetMaxFeePerGas())
+		ietx.Gas = protoTx.GetGas()
+		if protoTx.Value == nil {
+			return nil, errors.New("missing required field 'Value' in InternalToExternalTx")
+		}
+		ietx.Value = new(big.Int).SetBytes(protoTx.GetValue())
+		if protoTx.Input == nil {
+			return nil, errors.New("missing required field 'Data' in InternalToExternalTx")
+		}
+		ietx.Data = protoTx.GetInput()
+		if protoTx.V == nil {
+			return nil, errors.New("missing required field 'V' in InternalToExternalTx")
+		}
+		ietx.V = new(big.Int).SetBytes(protoTx.GetV())
+		if protoTx.R == nil {
+			return nil, errors.New("missing required field 'R' in InternalToExternalTx")
+		}
+		ietx.R = new(big.Int).SetBytes(protoTx.GetR())
+		if protoTx.S == nil {
+			return nil, errors.New("missing required field 'S' in InternalToExternalTx")
+		}
+		ietx.S = new(big.Int).SetBytes(protoTx.GetS())
+		if protoTx.Sender == nil {
+			return nil, errors.New("missing required field 'Sender' in InternalToExternalTx")
+		}
+		withSignature := ietx.V.Sign() != 0 || ietx.R.Sign() != 0 || ietx.S.Sign() != 0
+		if withSignature {
+			if err := types.SanityCheckSignature(ietx.V, ietx.R, ietx.S); err != nil {
+				return nil, err
+			}
+		}
+		if protoTx.EtxAccessList == nil {
+			return nil, errors.New("missing required field 'EtxAccessList' in InternalToExternalTx")
+		}
+		ietx.ETXAccessList = convertProtoToAccessList(protoTx.GetEtxAccessList(), location)
+		ietx.ETXGasLimit = protoTx.GetEtxGasLimit()
+		if protoTx.EtxGasPrice == nil {
+			return nil, errors.New("missing required field 'EtxGasPrice' in InternalToExternalTx")
+		}
+		ietx.ETXGasPrice = new(big.Int).SetBytes(protoTx.GetEtxGasPrice())
+		if protoTx.EtxGasTip == nil {
+			return nil, errors.New("missing required field 'EtxGasTip' in InternalToExternalTx")
+		}
+		ietx.ETXGasTip = new(big.Int).SetBytes(protoTx.GetEtxGasTip())
+		if protoTx.EtxData == nil {
+			return nil, errors.New("missing required field 'EtxData' in InternalToExternalTx")
+		}
+		tx = types.NewTx(&ietx)
+		return tx, nil
 	default:
 		return nil, errors.New("invalid transaction type")
 	}
-	return tx, nil
 }
 
 // Converts a protobuf manifest type to a BlockManifest type
@@ -187,6 +330,20 @@ func convertProtoToUncles(protoUncles *Headers) ([]*types.Header, error) {
 		uncles = append(uncles, convertedUncle)
 	}
 	return uncles, nil
+}
+
+// Converts a protobuf AccessList type to a AccessList type
+func convertProtoToAccessList(protoAccessList *AccessList, location common.Location) types.AccessList {
+	accessList := types.AccessList{}
+	for _, access := range protoAccessList.GetAccessTuples() {
+		accessTuple := types.AccessTuple{}
+		accessTuple.Address = common.BytesToAddress(access.GetAddress(), location)
+		for _, key := range access.GetStorageKey() {
+			accessTuple.StorageKeys = append(accessTuple.StorageKeys, common.BytesToHash(key))
+		}
+		accessList = append(accessList, accessTuple)
+	}
+	return accessList
 }
 
 // helper to convert uint64 into a byte array

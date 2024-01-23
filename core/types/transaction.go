@@ -181,7 +181,7 @@ func (tx *Transaction) setDecoded(inner TxData, size int) {
 	}
 }
 
-func sanityCheckSignature(v *big.Int, r *big.Int, s *big.Int) error {
+func SanityCheckSignature(v *big.Int, r *big.Int, s *big.Int) error {
 	if !crypto.ValidateSignatureValues(byte(v.Uint64()), r, s) {
 		return ErrInvalidSig
 	}
