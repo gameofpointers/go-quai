@@ -134,6 +134,7 @@ func convertProtoToHeader(protoHeader *Header) (*types.Header, error) {
 	header.SetExtra(protoHeader.GetExtra())
 	header.SetMixHash(common.BytesToHash(protoHeader.GetMixHash()))
 	header.SetNonce(uint64ToByteArr(protoHeader.GetNonce()))
+	header.SetLocation(protoHeader.Location)
 
 	return header, nil
 }

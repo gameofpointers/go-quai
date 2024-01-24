@@ -4,6 +4,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
 )
 
@@ -64,15 +65,19 @@ func (qbe *QuaiBackend) GetBackend(location common.Location) *quaiapi.Backend {
 
 // Handle consensus data propagated to us from our peers
 func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}) bool {
-	block := data.(*types.Block)
-	primeBackend := *qbe.GetBackend(common.Location{})
-	primeBackend.WriteBlock(block)
+	switch (data).(type) {
+	case types.Block:
+		block := data.(types.Block)
+		log.Warn("Block location", block.Location())
+		primeBackend := *qbe.GetBackend(common.Location{})
+		primeBackend.WriteBlock(&block)
 
-	regionBackend := *qbe.GetBackend(common.Location{uint8(block.Location().Region())})
-	regionBackend.WriteBlock(block)
+		regionBackend := *qbe.GetBackend(common.Location{uint8(block.Location().Region())})
+		regionBackend.WriteBlock(&block)
 
-	zoneBackend := *qbe.GetBackend(block.Location())
-	zoneBackend.WriteBlock(block)
+		zoneBackend := *qbe.GetBackend(block.Location())
+		zoneBackend.WriteBlock(&block)
+	}
 	return true
 }
 
