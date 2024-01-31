@@ -5,12 +5,15 @@ import (
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/event"
+	"github.com/dominant-strategies/go-quai/log"
 	"sync"
 )
 
 const (
-	// missingBlockChanSize is the size of channel listening to the MissingBlockEvent
-	missingBlockChanSize = 60
+	// c_missingBlockChanSize is the size of channel listening to the MissingBlockEvent
+	c_missingBlockChanSize = 60
+	// c_txsChanSize is the size of channel listening to the new txs event
+	c_newTxsChanSize = 100
 )
 
 // handler manages the fetch requests from the core and tx pool also takes care of the tx broadcast
@@ -20,6 +23,8 @@ type handler struct {
 	core            *core.Core
 	missingBlockCh  chan types.BlockRequest
 	missingBlockSub event.Subscription
+	txsCh           chan core.NewTxsEvent
+	txsSub          event.Subscription
 	wg              sync.WaitGroup
 }
 
@@ -34,13 +39,25 @@ func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.L
 
 func (h *handler) Start() {
 	h.wg.Add(1)
-	h.missingBlockCh = make(chan types.BlockRequest, missingBlockChanSize)
+	h.missingBlockCh = make(chan types.BlockRequest, c_missingBlockChanSize)
 	h.missingBlockSub = h.core.SubscribeMissingBlockEvent(h.missingBlockCh)
 	go h.missingBlockLoop()
+
+	nodeCtx := h.nodeLocation.Context()
+	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
+		h.wg.Add(1)
+		h.txsCh = make(chan core.NewTxsEvent, c_newTxsChanSize)
+		h.txsSub = h.core.SubscribeNewTxsEvent(h.txsCh)
+		go h.txBroadcastLoop()
+	}
 }
 
 func (h *handler) Stop() {
 	h.missingBlockSub.Unsubscribe() // quits missingBlockLoop
+	nodeCtx := h.nodeLocation.Context()
+	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
+		h.txsSub.Unsubscribe() // quits the txBroadcastLoop
+	}
 	h.wg.Wait()
 }
 
@@ -58,6 +75,24 @@ func (h *handler) missingBlockLoop() {
 				}
 			}()
 		case <-h.missingBlockSub.Err():
+			return
+		}
+	}
+}
+
+// txBroadcastLoop announces new transactions to connected peers.
+func (h *handler) txBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case event := <-h.txsCh:
+			for _, tx := range event.Txs {
+				err := h.p2pBackend.Broadcast(h.nodeLocation, tx)
+				if err != nil {
+					log.Global.Error("Error broadcasting transaction hash", tx.Hash())
+				}
+			}
+		case <-h.txsSub.Err():
 			return
 		}
 	}
