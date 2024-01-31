@@ -110,12 +110,6 @@ func (p *P2PNode) Request(location common.Location, hash common.Hash, datatype i
 	resultChan := make(chan interface{}, 1)
 	go func() {
 		defer close(resultChan)
-		// 1. Check if the data is in the local cache
-		if res, ok := p.cacheGet(hash, datatype); ok {
-			log.Global.Debugf("data %s found in cache", hash)
-			resultChan <- res.(*types.Block)
-			return
-		}
 
 		// 2. If not, query the topic peers for the data
 		peerList := p.peerManager.GetBestPeers()
@@ -238,11 +232,7 @@ func (p *P2PNode) Connect(pi peer.AddrInfo) error {
 // Search for a block in the node's cache, or query the consensus backend if it's not found in cache.
 // Returns nil if the block is not found.
 func (p *P2PNode) GetBlock(hash common.Hash, location common.Location) *types.Block {
-	if res, ok := p.cacheGet(hash, &types.Block{}); ok {
-		return res.(*types.Block)
-	} else {
-		return p.consensus.LookupBlock(hash, location)
-	}
+	return p.consensus.LookupBlock(hash, location)
 }
 
 func (p *P2PNode) GetHeader(hash common.Hash, location common.Location) *types.Header {
