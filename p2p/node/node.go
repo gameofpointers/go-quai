@@ -180,15 +180,10 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 		return nil, err
 	}
 
-	// Create a new LRU cache for each data-type we support caching
 	cache := map[string]*lru.Cache[common.Hash, interface{}]{
-		"blocks": func() *lru.Cache[common.Hash, interface{}] {
-			cache, err := lru.New[common.Hash, interface{}](10)
-			if err != nil {
-				log.Global.Fatal("error initializing cache;", err)
-			}
-			return cache
-		}(),
+		"blocks":       createCache(),
+		"transactions": createCache(),
+		"headers":      createCache(),
 	}
 
 	return &P2PNode{
@@ -202,6 +197,14 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 	}, nil
 }
 
+func createCache() *lru.Cache[common.Hash, interface{}] {
+	cache, err := lru.New[common.Hash, interface{}](10) // Assuming a fixed size of 10 for each cache
+	if err != nil {
+		log.Global.Fatal("error initializing cache;", err)
+	}
+	return cache
+}
+
 // Get the full multi-address to reach our node
 func (p *P2PNode) p2pAddress() (multiaddr.Multiaddr, error) {
 	return multiaddr.NewMultiaddr(fmt.Sprintf("/p2p/%s", p.ID()))
@@ -212,6 +215,10 @@ func (p *P2PNode) pickCache(datatype interface{}) *lru.Cache[common.Hash, interf
 	switch datatype.(type) {
 	case *types.Block:
 		return p.cache["blocks"]
+	case *types.Transaction:
+		return p.cache["transactions"]
+	case *types.Header:
+		return p.cache["headers"]
 	default:
 		log.Global.Fatalf("unsupported type")
 		return nil
