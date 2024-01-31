@@ -76,6 +76,13 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 		return true
 	case types.Header:
 	case types.Transaction:
+		tx := data.(types.Transaction)
+		backend := *qbe.GetBackend(nodeLocation)
+		if backend == nil {
+			log.Global.Error("no backend found")
+			return false
+		}
+		backend.SendRemoteTx(&tx)
 	}
 	return true
 }
