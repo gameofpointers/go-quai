@@ -110,12 +110,6 @@ func (p *P2PNode) Request(location common.Location, hash common.Hash, datatype i
 	resultChan := make(chan interface{}, 1)
 	go func() {
 		defer close(resultChan)
-		// 1. Check if the data is in the local cache
-		if res, ok := p.cacheGet(hash, datatype); ok {
-			log.Global.Debugf("data %s found in cache", hash)
-			resultChan <- res.(*types.Block)
-			return
-		}
 
 		// 2. If not, query the topic peers for the data
 		peerList := p.peerManager.GetBestPeers()
