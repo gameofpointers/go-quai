@@ -82,7 +82,8 @@ func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream
 	// check if we have the block in our cache or database
 	block := node.GetBlock(hash, loc)
 	if block == nil {
-		log.Global.Debugf("block not found")
+		log.Global.Debugf("block not found hash %s", hash)
+		return nil
 		// TODO: handle block not found
 	}
 	log.Global.Debugf("block found %s", block.Hash())

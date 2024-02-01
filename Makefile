@@ -38,3 +38,6 @@ go-quai:
 	$(GORUN) build/ci.go build ./cmd/go-quai
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/go-quai\" to launch go-quai."
+
+debug:
+	go build -gcflags=all="-N -l" -v -o build/bin/go-quai ./cmd/go-quai

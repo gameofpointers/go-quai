@@ -53,6 +53,8 @@ func StartQuaiBackend(ctx context.Context, p2p quai.NetworkingAPI, logLevel stri
 		}()
 	}
 
+	quaiBackend.SetP2PApiBackend(p2p)
+
 	// Start nodes in separate goroutines
 	startNode("nodelogs/prime.log", nil)
 	startNode("nodelogs/region-0.log", common.Location{0})

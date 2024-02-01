@@ -1,12 +1,13 @@
 package quai
 
 import (
+	"sync"
+
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/dominant-strategies/go-quai/log"
-	"sync"
 )
 
 const (
@@ -67,10 +68,12 @@ func (h *handler) missingBlockLoop() {
 	for {
 		select {
 		case blockRequest := <-h.missingBlockCh:
+			log.Global.Infof("Requesting block by hash %s", blockRequest.Hash)
 			go func() {
 				resultCh := h.p2pBackend.Request(h.nodeLocation, blockRequest.Hash, &types.Block{})
 				block := <-resultCh
 				if block != nil {
+					log.Global.Infof("Block found %s", block)
 					h.core.WriteBlock(block.(*types.Block))
 				}
 			}()
