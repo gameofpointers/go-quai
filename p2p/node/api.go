@@ -157,7 +157,7 @@ func (p *P2PNode) Request(location common.Location, hash common.Hash, datatype i
 func (p *P2PNode) requestAndWait(peerID peer.ID, location common.Location, hash common.Hash, datatype interface{}, resultChan chan interface{}) (resultFound bool) {
 	// Ask peer and wait for response
 	if recvd, err := p.requestFromPeer(peerID, location, hash, datatype); err == nil {
-		log.Global.Debugf("Received %s from peer %s", hash, peerID)
+		log.Global.Infof("Received %s from peer %s", hash, peerID)
 		// cache the response
 		p.cacheAdd(hash, recvd)
 		// send the block to the result channel

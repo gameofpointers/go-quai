@@ -10,6 +10,7 @@ import (
 
 // QuaiBackend implements the quai consensus protocol
 type QuaiBackend struct {
+	p2pBackend        NetworkingAPI
 	primeApiBackend   *quaiapi.Backend
 	regionApiBackends []*quaiapi.Backend
 	zoneApiBackends   [][]*quaiapi.Backend
@@ -33,6 +34,10 @@ func (qbe *QuaiBackend) SetApiBackend(apiBackend quaiapi.Backend, location commo
 	case common.ZONE_CTX:
 		qbe.SetZoneApiBackend(apiBackend, location)
 	}
+}
+
+func (qbe *QuaiBackend) SetP2PApiBackend(p2pBackend NetworkingAPI) {
+	qbe.p2pBackend = p2pBackend
 }
 
 // Set the PrimeBackend into the QuaiBackend
@@ -72,7 +77,11 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 			log.Global.Error("no backend found")
 			return false
 		}
+		// TODO: Verify the block before writing it
 		backend.WriteBlock(&block)
+		// TODO: Determine if the data payload was lively or stale.
+		qbe.p2pBackend.MarkLivelyPeer(sourcePeer)
+
 		return true
 	case types.Header:
 	case types.Transaction:

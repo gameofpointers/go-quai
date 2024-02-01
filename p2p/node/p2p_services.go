@@ -19,6 +19,7 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, hash
 	stream, err := p.NewStream(peerID, protocol.ProtocolVersion)
 	if err != nil {
 		// TODO: should we report this peer for failure to participate?
+		log.Global.Error("failed to open stream to peer", err)
 		return nil, err
 	}
 	defer stream.Close()
