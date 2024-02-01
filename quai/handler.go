@@ -8,6 +8,8 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/dominant-strategies/go-quai/log"
+	"math/big"
+	"time"
 )
 
 const (
@@ -15,6 +17,8 @@ const (
 	c_missingBlockChanSize = 60
 	// c_txsChanSize is the size of channel listening to the new txs event
 	c_newTxsChanSize = 100
+	// c_checkNextBlockInterval is the interval for checking the next Block in Prime
+	c_checkNextBlockInterval = 10 * time.Second
 )
 
 // handler manages the fetch requests from the core and tx pool also takes care of the tx broadcast
@@ -27,6 +31,7 @@ type handler struct {
 	txsCh           chan core.NewTxsEvent
 	txsSub          event.Subscription
 	wg              sync.WaitGroup
+	quitCh          chan struct{}
 }
 
 func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.Location) *handler {
@@ -34,6 +39,7 @@ func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.L
 		nodeLocation: nodeLocation,
 		p2pBackend:   p2pBackend,
 		core:         core,
+		quitCh:       make(chan struct{}),
 	}
 	return handler
 }
@@ -51,6 +57,11 @@ func (h *handler) Start() {
 		h.txsSub = h.core.SubscribeNewTxsEvent(h.txsCh)
 		go h.txBroadcastLoop()
 	}
+
+	if nodeCtx == common.PRIME_CTX {
+		h.wg.Add(1)
+		go h.checkNextBlock()
+	}
 }
 
 func (h *handler) Stop() {
@@ -59,6 +70,7 @@ func (h *handler) Stop() {
 	if nodeCtx == common.ZONE_CTX && h.core.ProcessingState() {
 		h.txsSub.Unsubscribe() // quits the txBroadcastLoop
 	}
+	close(h.quitCh)
 	h.wg.Wait()
 }
 
@@ -96,6 +108,43 @@ func (h *handler) txBroadcastLoop() {
 				}
 			}
 		case <-h.txsSub.Err():
+			return
+		}
+	}
+}
+
+// checkNextBlock runs every c_checkNextBlockInterval and ask the peer for the next Block
+func (h *handler) checkNextBlock() {
+	defer h.wg.Done()
+	checkNextBlockTimer := time.NewTicker(c_checkNextBlockInterval)
+	defer checkNextBlockTimer.Stop()
+	for {
+		select {
+		case <-checkNextBlockTimer.C:
+			currentHeight := h.core.CurrentHeader().Number(h.nodeLocation.Context())
+			log.Global.Warn("Prime Height is", currentHeight)
+			go func() {
+				resultCh := h.p2pBackend.Request(h.nodeLocation, new(big.Int).Add(currentHeight, big.NewInt(1)), common.Hash{})
+				data := <-resultCh
+				if data != nil {
+					blockHash, ok := data.(common.Hash)
+					log.Global.Warn("Prime Height is", currentHeight)
+					if ok {
+						block := h.core.GetBlockByHash(blockHash)
+						if block != nil {
+							go func() {
+								resultCh := h.p2pBackend.Request(h.nodeLocation, blockHash, &types.Block{})
+								block := <-resultCh
+								if block != nil {
+									log.Global.Warn("Got Next Block is", currentHeight)
+									h.core.WriteBlock(block.(*types.Block))
+								}
+							}()
+						}
+					}
+				}
+			}()
+		case <-h.quitCh:
 			return
 		}
 	}

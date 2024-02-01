@@ -1,6 +1,7 @@
 package quai
 
 import (
+	"context"
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -8,6 +9,7 @@ import (
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
+	"github.com/dominant-strategies/go-quai/rpc"
 )
 
 // QuaiBackend implements the quai consensus protocol
@@ -115,5 +117,20 @@ func (qbe *QuaiBackend) LookupBlock(hash common.Hash, location common.Location) 
 }
 
 func (qbe *QuaiBackend) LookupBlockHashByNumber(number *big.Int, location common.Location) *common.Hash {
-	panic("todo")
+	backend := *qbe.GetBackend(location)
+	if backend == nil {
+		log.Global.Error("no backend found")
+		return nil
+	}
+	log.Global.Warnf("Looked up Block Number %s, Locaion %s", number, location)
+	block, err := backend.BlockByNumber(context.Background(), rpc.BlockNumber(number.Int64()))
+	if err != nil {
+		log.Global.Error("Error looking up the BlockByNumber", location)
+	}
+	if block != nil {
+		blockHash := block.Hash()
+		return &blockHash
+	} else {
+		return nil
+	}
 }

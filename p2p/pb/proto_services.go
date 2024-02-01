@@ -39,7 +39,7 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 	switch d := data.(type) {
 	case common.Hash:
 		reqMsg.Data = &QuaiRequestMessage_Hash{Hash: d.ProtoEncode()}
-	case big.Int:
+	case *big.Int:
 		reqMsg.Data = &QuaiRequestMessage_Number{Number: d.Bytes()}
 	default:
 		return nil, errors.Errorf("unsupported request input data field type: %T", data)
@@ -66,7 +66,7 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 //  1. The request ID
 //  2. The decoded type (i.e. *types.Header, *types.Block, etc)
 //  3. The location
-//  4. The hash
+//  4. The request data
 //  5. An error
 func DecodeQuaiRequest(data []byte) (uint32, interface{}, common.Location, interface{}, error) {
 	var reqMsg QuaiRequestMessage
@@ -91,20 +91,20 @@ func DecodeQuaiRequest(data []byte) (uint32, interface{}, common.Location, inter
 	var reqType interface{}
 	switch t := reqMsg.Request.(type) {
 	case *QuaiRequestMessage_Block:
-		reqType = t.Block
+		reqType = &types.Block{}
 	case *QuaiRequestMessage_Header:
-		reqType = t.Header
+		reqType = &types.Header{}
 	case *QuaiRequestMessage_Transaction:
-		reqType = t.Transaction
+		reqType = &types.Transaction{}
 	case *QuaiRequestMessage_BlockHash:
-		blockHash := common.Hash{}
+		blockHash := &common.Hash{}
 		blockHash.ProtoDecode(t.BlockHash)
 		reqType = blockHash
 	default:
 		return reqMsg.Id, nil, common.Location{}, common.Hash{}, errors.Errorf("unsupported request type: %T", reqMsg.Request)
 	}
 
-	return reqMsg.Id, reqData, *location, reqType, nil
+	return reqMsg.Id, reqType, *location, reqData, nil
 }
 
 // EncodeResponse creates a marshaled protobuf message for a Quai Response.
@@ -134,7 +134,7 @@ func EncodeQuaiResponse(id uint32, data interface{}) ([]byte, error) {
 			return nil, err
 		}
 		respMsg.Response = &QuaiResponseMessage_Transaction{Transaction: protoTransaction}
-	case common.Hash:
+	case *common.Hash:
 		respMsg.Response = &QuaiResponseMessage_BlockHash{BlockHash: data.ProtoEncode()}
 	default:
 		return nil, errors.Errorf("unsupported response data type: %T", data)

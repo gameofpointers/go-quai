@@ -107,6 +107,7 @@ func (p *P2PNode) Stop() error {
 }
 
 func (p *P2PNode) RequestByNumber(location common.Location, number *big.Int, datatype interface{}) chan interface{} {
+	log.Global.Warnf("RequestByHash %s, %s", location, number)
 	resultChan := make(chan interface{}, 1)
 	go func() {
 		defer close(resultChan)
@@ -119,7 +120,7 @@ func (p *P2PNode) RequestByNumber(location common.Location, number *big.Int, dat
 		for _, peerID := range peers {
 			go func(peerID p2p.PeerID) {
 				if recvd, err := p.requestFromPeer(peerID, location, number, datatype); err == nil {
-					log.Global.Debugf("Received %s from peer %s", number, peerID)
+					log.Global.Infof("Received %s from peer %s", number, peerID)
 					// send the block to the result channel
 					resultChan <- recvd
 				}
@@ -136,14 +137,14 @@ func (p *P2PNode) RequestByNumber(location common.Location, number *big.Int, dat
 		// create a Cid from the slice location
 		shardCid := locationToCid(location)
 		for retries := 0; retries < maxDHTQueryRetries; retries++ {
-			log.Global.Debugf("Querying DHT for slice Cid %s (retry %d)", shardCid, retries)
+			log.Global.Infof("Querying DHT for slice Cid %s (retry %d)", shardCid, retries)
 			// query the DHT for peers in the slice
 			// TODO: need to find providers of a topic, not a shard
 			for peer := range p.dht.FindProvidersAsync(p.ctx, shardCid, peersPerDHTQuery) {
 				go func() {
 					// Ask peer and wait for response
 					if recvd, err := p.requestFromPeer(peer.ID, location, number, datatype); err == nil {
-						log.Global.Debugf("Received %s from peer %s", number, peer.ID)
+						log.Global.Infof("Received %s from peer %s", number, peer.ID)
 						// send the block to the result channel
 						resultChan <- recvd
 						// TODO: make sure gossipsub holds onto this good peer for future queries
@@ -151,15 +152,16 @@ func (p *P2PNode) RequestByNumber(location common.Location, number *big.Int, dat
 				}()
 			}
 			// if the data is not found, wait for a bit and try again
-			log.Global.Debugf("Block %s not found in slice %s. Retrying...", number, location)
+			log.Global.Infof("Block %s not found in slice %s. Retrying...", number, location)
 			time.Sleep(dhtQueryRetryInterval * time.Second)
 		}
-		log.Global.Debugf("Block %s not found in slice %s", number, location)
+		log.Global.Infof("Block %s not found in slice %s", number, location)
 	}()
 	return resultChan
 }
 
 func (p *P2PNode) RequestByHash(location common.Location, hash common.Hash, datatype interface{}) chan interface{} {
+	log.Global.Warnf("RequestByHash %s, %s", location, hash)
 	resultChan := make(chan interface{}, 1)
 	go func() {
 		defer close(resultChan)

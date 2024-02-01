@@ -78,9 +78,9 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, data
 		if tx, ok := recvdType.(*types.Transaction); ok && tx.Hash() == data.(common.Hash) {
 			return tx, nil
 		}
-	case *common.Hash:
+	case common.Hash:
 		// TODO: Check that block hash matches the request number
-		if hash, ok := recvdType.(*common.Hash); ok {
+		if hash, ok := recvdType.(common.Hash); ok {
 			return hash, nil
 		}
 	default:

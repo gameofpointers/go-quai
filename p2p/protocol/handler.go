@@ -13,6 +13,7 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p/pb"
 )
 
+// QuaiProtocolHandler handles all the incoming requests and responds with corresponding data
 func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 	defer stream.Close()
 
@@ -45,7 +46,7 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 			continue
 		}
 		switch query.(type) {
-		case common.Hash:
+		case *common.Hash:
 			log.Global.Debugf("Received request id: %d for %T, location %v hash %s from peer %s", id, decodedType, loc, query, stream.Conn().RemotePeer())
 		case *big.Int:
 			log.Global.Debugf("Received request id: %d for %T, location %v number %s from peer %s", id, decodedType, loc, query, stream.Conn().RemotePeer())
@@ -55,28 +56,32 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 
 		switch decodedType.(type) {
 		case *types.Block:
-			err = handleBlockRequest(id, loc, query.(common.Hash), stream, node)
+			requestedHash := query.(*common.Hash)
+			err = handleBlockRequest(id, loc, *requestedHash, stream, node)
 			if err != nil {
 				log.Global.Errorf("error handling block request: %s", err)
 				// TODO: handle error
 				continue
 			}
 		case *types.Header:
-			err = handleHeaderRequest(id, loc, query.(common.Hash), stream, node)
+			requestedHash := query.(*common.Hash)
+			err = handleHeaderRequest(id, loc, *requestedHash, stream, node)
 			if err != nil {
 				log.Global.Errorf("error handling header request: %s", err)
 				// TODO: handle error
 				continue
 			}
 		case *types.Transaction:
-			err = handleTransactionRequest(id, loc, query.(common.Hash), stream, node)
+			requestedHash := query.(*common.Hash)
+			err = handleTransactionRequest(id, loc, *requestedHash, stream, node)
 			if err != nil {
 				log.Global.Errorf("error handling transaction request: %s", err)
 				// TODO: handle error
 				continue
 			}
-		case common.Hash:
-			err = handleBlockNumberRequest(id, loc, query.(big.Int), stream, node)
+		case *common.Hash:
+			number := query.(*big.Int)
+			err = handleBlockNumberRequest(id, loc, number, stream, node)
 			if err != nil {
 				log.Global.Errorf("error handling block number request: %s", err)
 				// TODO: handle error
@@ -142,12 +147,12 @@ func handleTransactionRequest(id uint32, loc common.Location, hash common.Hash, 
 }
 
 // Seeks the block in the cache or database and sends it to the peer in a pb.QuaiResponseMessage
-func handleBlockNumberRequest(id uint32, loc common.Location, number big.Int, stream network.Stream, node QuaiP2PNode) error {
+func handleBlockNumberRequest(id uint32, loc common.Location, number *big.Int, stream network.Stream, node QuaiP2PNode) error {
 	// check if we have the block in our cache or database
-	blockHash := node.GetBlockHashByNumber(&number, loc)
+	blockHash := node.GetBlockHashByNumber(number, loc)
 	if blockHash == nil {
 		log.Global.Debugf("block not found")
-		// TODO: handle block not found
+		return nil
 	}
 	log.Global.Debugf("block found %s", blockHash)
 	// create a Quai Message Response with the block
