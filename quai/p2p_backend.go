@@ -108,5 +108,6 @@ func (qbe *QuaiBackend) LookupBlock(hash common.Hash, location common.Location) 
 		log.Global.Error("no backend found")
 		return nil
 	}
+	log.Global.Warnf("Looked up Block Hash %s, Locaion %s", hash, location)
 	return backend.BlockOrCandidateByHash(hash)
 }
