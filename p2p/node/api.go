@@ -2,6 +2,7 @@ package node
 
 import (
 	"math/big"
+	// "sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -169,11 +170,16 @@ func (p *P2PNode) RequestByHash(location common.Location, hash common.Hash, data
 		// 2. If not, query the topic peers for the data
 		peerList := p.peerManager.GetBestPeers()
 		doneChan := make(chan bool)
+		// var requestWg sync.WaitGroup
 		for _, peerID := range peerList {
+			// requestWg.Add(1)
 			go func(peerID peer.ID) {
-				doneChan <- p.requestAndWait(peerID, location, hash, datatype, resultChan)
+				// defer requestWg.Done()
+				p.requestAndWait(peerID, location, hash, datatype, resultChan)
 			}(peerID)
 		}
+
+		// requestWg.Wait()
 
 		// Wait for a response from a peer
 		// If any peer provides a response, then return
