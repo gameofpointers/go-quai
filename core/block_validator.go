@@ -103,6 +103,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // otherwise nil and an error is returned.
 func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
 	start := time.Now()
+	nodeCtx := v.hc.NodeCtx()
 	header := types.CopyHeader(block.Header())
 	time1 := common.PrettyDuration(time.Since(start))
 	if block.GasUsed() != usedGas {
@@ -135,13 +136,31 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if etxHash := types.DeriveSha(emittedEtxs, trie.NewStackTrie(nil)); etxHash != header.EtxHash() {
 		return fmt.Errorf("invalid etx hash (remote: %x local: %x)", header.EtxHash(), etxHash)
 	}
+	time7 := common.PrettyDuration(time.Since(start))
+	var time7_1 common.PrettyDuration
+	if nodeCtx > common.PRIME_CTX {
+		// Collect the ETX rollup with emitted ETXs since the last coincident block,
+		// excluding this block.
+		etxRollup, err := v.hc.CollectEtxRollup(block)
+		if err != nil {
+			return fmt.Errorf("unable to get ETX rollup")
+		}
+		time7_1 = common.PrettyDuration(time.Since(start))
+		if etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil)); etxRollupHash != header.EtxRollupHash() {
+			return fmt.Errorf("invalid etx rollup hash (remote: %x local: %x)", header.EtxRollupHash(), etxRollupHash)
+		}
+	}
+	time8 := common.PrettyDuration(time.Since(start))
 	v.hc.logger.WithFields(log.Fields{
-		"t1": time1,
-		"t2": time2,
-		"t3": time3,
-		"t4": time4,
-		"t5": time5,
-		"t6": time6,
+		"t1":   time1,
+		"t2":   time2,
+		"t3":   time3,
+		"t4":   time4,
+		"t5":   time5,
+		"t6":   time6,
+		"t7":   time7,
+		"t7_1": time7_1,
+		"t8":   time8,
 	}).Debug("times during validate state")
 	return nil
 }

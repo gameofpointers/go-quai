@@ -91,9 +91,9 @@ type Termini struct {
 }
 
 type appendReturns struct {
-	Etxs     types.Transactions `json:"pendingEtxs"`
-	SubReorg bool               `json:"subReorg"`
-	SetHead  bool               `json:"setHead"`
+	Etxs     []types.Transactions `json:"pendingEtxs"`
+	SubReorg bool                 `json:"subReorg"`
+	SetHead  bool                 `json:"setHead"`
 }
 
 // SubscribePendingHeader subscribes to notifications about the current pending block on the node.
@@ -101,7 +101,7 @@ func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.H
 	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
 }
 
-func (ec *Client) Append(ctx context.Context, header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (ec *Client) Append(ctx context.Context, header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, bool, error) {
 	fields := map[string]interface{}{
 		"header":           header.RPCMarshalHeader(),
 		"manifest":         manifest,
@@ -181,25 +181,6 @@ func (ec *Client) GetManifest(ctx context.Context, blockHash common.Hash) (types
 	return manifest, nil
 }
 
-// GetPendingEtxsRollupFromSub gets the pendingEtxsRollup from the region
-func (ec *Client) GetPendingEtxsRollupFromSub(ctx context.Context, hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
-	fields := make(map[string]interface{})
-	fields["Hash"] = hash
-	fields["Location"] = location
-
-	var raw json.RawMessage
-	err := ec.c.CallContext(ctx, &raw, "quai_getPendingEtxsRollupFromSub", fields)
-	if err != nil {
-		return types.PendingEtxsRollup{}, err
-	}
-
-	var pEtxsRollup types.PendingEtxsRollup
-	if err := json.Unmarshal(raw, &pEtxsRollup); err != nil {
-		return types.PendingEtxsRollup{}, err
-	}
-	return pEtxsRollup, nil
-}
-
 // GetPendingEtxsFromSub gets the pendingEtxsRollup from the region
 func (ec *Client) GetPendingEtxsFromSub(ctx context.Context, hash common.Hash, location common.Location) (types.PendingEtxs, error) {
 	fields := make(map[string]interface{})
@@ -229,14 +210,6 @@ func (ec *Client) SendPendingEtxsToDom(ctx context.Context, pEtxs types.PendingE
 		return err
 	}
 	return nil
-}
-
-func (ec *Client) SendPendingEtxsRollupToDom(ctx context.Context, pEtxsRollup types.PendingEtxsRollup) error {
-	fields := make(map[string]interface{})
-	fields["header"] = pEtxsRollup.Header.RPCMarshalHeader()
-	fields["manifest"] = pEtxsRollup.Manifest
-	var raw json.RawMessage
-	return ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsRollupToDom", fields)
 }
 
 func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.Header, checkpointHashes types.Termini) error {

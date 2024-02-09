@@ -151,7 +151,7 @@ func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
 				if nodeCtx > common.PRIME_CTX {
 					pendingEtx := types.PendingEtxs{block.Header(), newPendingEtxs}
 					// Only send the pending Etxs to dom if valid, because in the case of running a slice, for the zones that the node doesn't run, it cannot have the etxs generated
-					if pendingEtx.IsValid(trie.NewStackTrie(nil)) {
+					if pendingEtx.IsValid(trie.NewStackTrie(nil), c.NodeCtx()) {
 						if err := c.SendPendingEtxsToDom(pendingEtx); err != nil {
 							c.logger.WithFields(log.Fields{
 								"blockHash": block.Hash(),
@@ -620,7 +620,7 @@ func (c *Core) WriteBlock(block *types.Block) {
 	}
 }
 
-func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, bool, error) {
 	nodeCtx := c.NodeCtx()
 	newPendingEtxs, subReorg, setHead, err := c.sl.Append(header, domPendingHeader, domTerminus, domOrigin, newInboundEtxs)
 	if err != nil {
@@ -701,24 +701,16 @@ func (c *Core) GetSubManifest(slice common.Location, blockHash common.Hash) (typ
 	return c.sl.GetSubManifest(slice, blockHash)
 }
 
-func (c *Core) GetPendingEtxs(hash common.Hash) *types.PendingEtxs {
-	return rawdb.ReadPendingEtxs(c.sl.sliceDb, hash)
-}
-
-func (c *Core) GetPendingEtxsRollup(hash common.Hash) *types.PendingEtxsRollup {
-	return rawdb.ReadPendingEtxsRollup(c.sl.sliceDb, hash)
-}
-
-func (c *Core) GetPendingEtxsRollupFromSub(hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
-	return c.sl.GetPendingEtxsRollupFromSub(hash, location)
+func (c *Core) GetPendingEtxs(hash common.Hash, location common.Location) *types.PendingEtxs {
+	return rawdb.ReadPendingEtxs(c.sl.sliceDb, hash, location)
 }
 
 func (c *Core) GetPendingEtxsFromSub(hash common.Hash, location common.Location) (types.PendingEtxs, error) {
 	return c.sl.GetPendingEtxsFromSub(hash, location)
 }
 
-func (c *Core) HasPendingEtxs(hash common.Hash) bool {
-	return c.GetPendingEtxs(hash) != nil
+func (c *Core) HasPendingEtxs(hash common.Hash, location common.Location) bool {
+	return c.GetPendingEtxs(hash, location) != nil
 }
 
 func (c *Core) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
@@ -727,10 +719,6 @@ func (c *Core) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
 
 func (c *Core) AddPendingEtxs(pEtxs types.PendingEtxs) error {
 	return c.sl.AddPendingEtxs(pEtxs)
-}
-
-func (c *Core) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
-	return c.sl.AddPendingEtxsRollup(pEtxsRollup)
 }
 
 func (c *Core) GenerateRecoveryPendingHeader(pendingHeader *types.Header, checkpointHashes types.Termini) error {

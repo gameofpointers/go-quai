@@ -23,7 +23,6 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
-	"github.com/dominant-strategies/go-quai/trie"
 )
 
 const (
@@ -98,7 +97,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	}
 
 	var err error
-	sl.hc, err = NewHeaderChain(db, engine, sl.GetPEtxRollupAfterRetryThreshold, sl.GetPEtxAfterRetryThreshold, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning, logger)
+	sl.hc, err = NewHeaderChain(db, engine, sl.GetPEtxAfterRetryThreshold, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +148,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 // Append takes a proposed header and constructs a local block and attempts to hierarchically append it to the block graph.
 // If this is called from a dominant context a domTerminus must be provided else a common.Hash{} should be used and domOrigin should be set to true.
 // Return of this function is the Etxs generated in the Zone Block, subReorg bool that tells dom if should be mined on, setHead bool that determines if we should set the block as the current head and the error
-func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, bool, error) {
 	start := time.Now()
 
 	nodeCtx := sl.NodeCtx()
@@ -236,6 +235,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		}
 	}
 
+	subRollup := types.Transactions{}
 	// If this was a coincident block, our dom will be passing us a set of newly
 	// confirmed ETXs If this is not a coincident block, we need to build up the
 	// list of confirmed ETXs using the subordinate manifest In either case, if
@@ -268,12 +268,13 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	time5 := common.PrettyDuration(time.Since(start))
 
 	time6 := common.PrettyDuration(time.Since(start))
-	var subPendingEtxs types.Transactions
 	var subReorg bool
 	var setHead bool
 	var time6_1 common.PrettyDuration
 	var time6_2 common.PrettyDuration
 	var time6_3 common.PrettyDuration
+	localPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
+	subPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
 	// Call my sub to append the block, and collect the rolled up ETXs from that sub
 	if nodeCtx != common.ZONE_CTX {
 		// How to get the sub pending etxs if not running the full node?.
@@ -284,19 +285,35 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			}
 			time6_1 = common.PrettyDuration(time.Since(start))
 			// Cache the subordinate's pending ETXs
-			pEtxs := types.PendingEtxs{header, subPendingEtxs}
+			pEtxs := types.PendingEtxs{Header: header, Etxs: subPendingEtxs}
 			time6_2 = common.PrettyDuration(time.Since(start))
 			// Add the pending etx given by the sub in the rollup
 			sl.AddPendingEtxs(pEtxs)
 			// Only region has the rollup hashes for pendingEtxs
-			if nodeCtx == common.REGION_CTX {
-				// We also need to store the pendingEtxRollup to the dom
-				pEtxRollup := types.PendingEtxsRollup{header, block.SubManifest()}
-				sl.AddPendingEtxsRollup(pEtxRollup)
-			}
 			time6_3 = common.PrettyDuration(time.Since(start))
 		}
 	}
+	// Combine sub's pending ETXs, sub rollup, and our local ETXs into localPendingEtxs
+	// e.g. localPendingEtxs[ctx]:
+	// * for 'ctx' is dom: empty
+	// * for 'ctx' is local: ETXs emitted in this block
+	// * for 'ctx' is direct sub: replace sub pending ETXs with sub rollup ETXs
+	// * for 'ctx' is indirect sub: copy sub pending ETXs (sub's sub has already been rolled up)
+	//
+	// We get this in the following three steps:
+	// 1) Copy the rollup set for any subordinates of my subordinate (i.e. ctx >= nodeCtx+1)
+	// 2) Compute the rollup of my subordinate and assign to ctx = nodeCtx+1
+	// 3) Assign local pending ETXs to ctx = nodeCtx
+	for ctx := nodeCtx + 2; ctx < common.HierarchyDepth; ctx++ {
+		localPendingEtxs[ctx] = make(types.Transactions, len(subPendingEtxs[ctx]))
+		copy(localPendingEtxs[ctx], subPendingEtxs[ctx]) // copy pending for each indirect sub
+	}
+	if nodeCtx < common.ZONE_CTX {
+		localPendingEtxs[nodeCtx+1] = make(types.Transactions, len(subRollup))
+		copy(localPendingEtxs[nodeCtx+1], subRollup) // overwrite direct sub with sub rollup
+	}
+	localPendingEtxs[nodeCtx] = make(types.Transactions, len(block.ExtTransactions()))
+	copy(localPendingEtxs[nodeCtx], block.ExtTransactions()) // Assign our new ETXs without rolling up
 
 	time7 := common.PrettyDuration(time.Since(start))
 
@@ -439,10 +456,8 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 				go sl.domClient.UpdateDom(context.Background(), bestPh.Termini().DomTerminus(sl.NodeLocation()), pendingHeaderWithTermini, sl.NodeLocation())
 			}
 		}
-		return block.ExtTransactions(), subReorg, setHead, nil
-	} else {
-		return subPendingEtxs, subReorg, setHead, nil
 	}
+	return localPendingEtxs, subReorg, setHead, nil
 }
 
 func (sl *Slice) miningStrategy(bestPh types.PendingHeader, pendingHeader types.PendingHeader) bool {
@@ -679,6 +694,7 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 	nodeLocation := sl.NodeLocation()
 	nodeCtx := sl.NodeCtx()
 	// Collect rollup of ETXs from the subordinate node's manifest
+	referencableEtxs := types.Transactions{}
 	subRollup := types.Transactions{}
 	var err error
 	if nodeCtx < common.ZONE_CTX {
@@ -690,10 +706,15 @@ func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.L
 				"len":  len(subRollup),
 			}).Info("Found the rollup in cache")
 		} else {
-			subRollup, err = sl.hc.CollectSubRollup(block)
+			subRollups, err := sl.hc.CollectSubRollups(block)
 			if err != nil {
 				return nil, nil, err
 			}
+			for _, etxs := range subRollups {
+				referencableEtxs = append(referencableEtxs, etxs...)
+			}
+			referencableEtxs = append(referencableEtxs, block.ExtTransactions()...)
+			subRollup = subRollups[nodeCtx+1]
 			sl.hc.subRollupCache.Add(block.Hash(), subRollup)
 		}
 	}
@@ -840,36 +861,6 @@ func (sl *Slice) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
 	return sl.domClient.SendPendingEtxsToDom(context.Background(), pEtxs)
 }
 
-func (sl *Slice) GetPEtxRollupAfterRetryThreshold(blockHash common.Hash, hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
-	pEtx, exists := sl.pEtxRetryCache.Get(blockHash)
-	if !exists || pEtx.(pEtxRetry).retries < c_pEtxRetryThreshold {
-		return types.PendingEtxsRollup{}, ErrPendingEtxNotFound
-	}
-	return sl.GetPendingEtxsRollupFromSub(hash, location)
-}
-
-// GetPendingEtxsRollupFromSub gets the pending etxs rollup from the appropriate prime
-func (sl *Slice) GetPendingEtxsRollupFromSub(hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
-	nodeCtx := sl.NodeLocation().Context()
-	if nodeCtx == common.PRIME_CTX {
-		if sl.subClients[location.SubIndex(sl.NodeLocation())] != nil {
-			pEtxRollup, err := sl.subClients[location.SubIndex(sl.NodeLocation())].GetPendingEtxsRollupFromSub(context.Background(), hash, location)
-			if err != nil {
-				return types.PendingEtxsRollup{}, err
-			} else {
-				sl.AddPendingEtxsRollup(pEtxRollup)
-				return pEtxRollup, nil
-			}
-		}
-	} else if nodeCtx == common.REGION_CTX {
-		block := sl.hc.GetBlockByHash(hash)
-		if block != nil {
-			return types.PendingEtxsRollup{Header: block.Header(), Manifest: block.SubManifest()}, nil
-		}
-	}
-	return types.PendingEtxsRollup{}, ErrPendingEtxNotFound
-}
-
 func (sl *Slice) GetPEtxAfterRetryThreshold(blockHash common.Hash, hash common.Hash, location common.Location) (types.PendingEtxs, error) {
 	pEtx, exists := sl.pEtxRetryCache.Get(blockHash)
 	if !exists || pEtx.(pEtxRetry).retries < c_pEtxRetryThreshold {
@@ -880,23 +871,7 @@ func (sl *Slice) GetPEtxAfterRetryThreshold(blockHash common.Hash, hash common.H
 
 // GetPendingEtxsFromSub gets the pending etxs from the appropriate prime
 func (sl *Slice) GetPendingEtxsFromSub(hash common.Hash, location common.Location) (types.PendingEtxs, error) {
-	nodeCtx := sl.NodeLocation().Context()
-	if nodeCtx != common.ZONE_CTX {
-		if sl.subClients[location.SubIndex(sl.NodeLocation())] != nil {
-			pEtx, err := sl.subClients[location.SubIndex(sl.NodeLocation())].GetPendingEtxsFromSub(context.Background(), hash, location)
-			if err != nil {
-				return types.PendingEtxs{}, err
-			} else {
-				sl.AddPendingEtxs(pEtx)
-				return pEtx, nil
-			}
-		}
-	}
-	block := sl.hc.GetBlockByHash(hash)
-	if block != nil {
-		return types.PendingEtxs{Header: block.Header(), Etxs: block.ExtTransactions()}, nil
-	}
-	return types.PendingEtxs{}, ErrPendingEtxNotFound
+	return types.PendingEtxs{}, nil
 }
 
 // SubRelayPendingHeader takes a pending header from the sender (ie dominant), updates the phCache with a composited header and relays result to subordinates
@@ -1180,16 +1155,10 @@ func (sl *Slice) init(genesis *Genesis) error {
 		sl.hc.SetCurrentHeader(genesisHeader)
 
 		// Create empty pending ETX entry for genesis block -- genesis may not emit ETXs
-		emptyPendingEtxs := types.Transactions{}
-		err := sl.hc.AddPendingEtxs(types.PendingEtxs{genesisHeader, emptyPendingEtxs})
-		if err != nil {
-			return err
-		}
-		err = sl.AddPendingEtxsRollup(types.PendingEtxsRollup{genesisHeader, []common.Hash{}})
-		if err != nil {
-			return err
-		}
-		err = sl.hc.AddBloom(types.Bloom{}, genesisHeader.Hash())
+		emptyPendingEtxs := []types.Transactions{}
+		sl.hc.AddPendingEtxs(types.PendingEtxs{genesisHeader, emptyPendingEtxs})
+
+		err := sl.hc.AddBloom(types.Bloom{}, genesisHeader.Hash())
 		if err != nil {
 			return err
 		}
@@ -1485,37 +1454,6 @@ func (sl *Slice) AddPendingEtxs(pEtxs types.PendingEtxs) error {
 	return nil
 }
 
-func (sl *Slice) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
-	if !pEtxsRollup.IsValid(trie.NewStackTrie(nil)) {
-		sl.logger.Info("PendingEtxRollup is invalid")
-		return ErrPendingEtxRollupNotValid
-	}
-	nodeCtx := sl.NodeLocation().Context()
-	sl.logger.WithFields(log.Fields{
-		"header": pEtxsRollup.Header.Hash(),
-		"len":    len(pEtxsRollup.Manifest),
-	}).Debug("Received pending ETXs Rollup")
-	// Only write the pending ETXs if we have not seen them before
-	if !sl.hc.pendingEtxsRollup.Contains(pEtxsRollup.Header.Hash()) {
-		// Also write to cache for faster access
-		sl.hc.pendingEtxsRollup.Add(pEtxsRollup.Header.Hash(), pEtxsRollup)
-		// Write to pending ETX rollup database
-		rawdb.WritePendingEtxsRollup(sl.sliceDb, pEtxsRollup)
-
-		// Only Prime broadcasts the pendingEtxRollups
-		if nodeCtx == common.PRIME_CTX {
-			// Also the first time when adding the pending etx rollup broadcast it to the peers
-			sl.pendingEtxsRollupFeed.Send(pEtxsRollup)
-			// Only in the region case, send the pending etx rollup to the dom
-		} else if nodeCtx == common.REGION_CTX {
-			if sl.domClient != nil {
-				sl.domClient.SendPendingEtxsRollupToDom(context.Background(), pEtxsRollup)
-			}
-		}
-	}
-	return nil
-}
-
 func (sl *Slice) CheckForBadHashAndRecover() {
 	nodeCtx := sl.NodeLocation().Context()
 	// Lookup the bad hashes list to see if we have it in the database
@@ -1592,15 +1530,15 @@ func (sl *Slice) cleanCacheAndDatabaseTillBlock(hash common.Hash) {
 		rawdb.DeleteTermini(sl.sliceDb, header.Hash())
 		rawdb.DeleteEtxSet(sl.sliceDb, header.Hash(), header.NumberU64(nodeCtx))
 		if nodeCtx != common.ZONE_CTX {
-			pendingEtxsRollup := rawdb.ReadPendingEtxsRollup(sl.sliceDb, header.Hash())
+			block := sl.hc.GetBlock(header.Hash(), header.NumberU64(nodeCtx))
+			manifest := block.SubManifest()
 			// First hash in the manifest is always a dom block and it needs to be
 			// deleted separately because last hash in the final iteration will be
 			// referenced in the next dom block after the restart
-			for _, manifestHash := range pendingEtxsRollup.Manifest[1:] {
+			for _, manifestHash := range manifest[1:] {
 				rawdb.DeletePendingEtxs(sl.sliceDb, manifestHash)
 			}
 			rawdb.DeletePendingEtxs(sl.sliceDb, header.Hash())
-			rawdb.DeletePendingEtxsRollup(sl.sliceDb, header.Hash())
 		}
 		// delete the trie node for a given root of the header
 		rawdb.DeleteTrieNode(sl.sliceDb, header.Root())

@@ -273,19 +273,6 @@ func IsHexAddress(s string) bool {
 	return len(s) == 2*AddressLength && isHex(s)
 }
 
-func (a *AddressBytes) UnmarshalJSON(input []byte) error {
-	var temp [AddressLength]byte
-	if err := hexutil.UnmarshalFixedJSON(reflect.TypeOf(AddressBytes{}), input, temp[:]); err != nil {
-		return err
-	}
-	copy(a[:], temp[:])
-	return nil
-}
-
-func (a AddressBytes) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a[:])
-}
-
 // Hex returns a hex string representation of the address.
 func (a AddressBytes) Hex() string {
 	return string(a.checksumHex())

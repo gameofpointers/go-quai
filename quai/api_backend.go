@@ -458,7 +458,7 @@ func (b *QuaiAPIBackend) StateAtTransaction(ctx context.Context, block *types.Bl
 	return b.quai.core.StateAtTransaction(block, txIndex, reexec)
 }
 
-func (b *QuaiAPIBackend) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (b *QuaiAPIBackend) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, bool, error) {
 	return b.quai.core.Append(header, manifest, domPendingHeader, domTerminus, domOrigin, newInboundEtxs)
 }
 
@@ -518,20 +518,12 @@ func (b *QuaiAPIBackend) AddPendingEtxs(pEtxs types.PendingEtxs) error {
 	return b.quai.core.AddPendingEtxs(pEtxs)
 }
 
-func (b *QuaiAPIBackend) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
-	return b.quai.core.AddPendingEtxsRollup(pEtxsRollup)
-}
-
 func (b *QuaiAPIBackend) SubscribePendingHeaderEvent(ch chan<- *types.Header) event.Subscription {
 	return b.quai.core.SubscribePendingHeader(ch)
 }
 
 func (b *QuaiAPIBackend) GenerateRecoveryPendingHeader(pendingHeader *types.Header, checkpointHashes types.Termini) error {
 	return b.quai.core.GenerateRecoveryPendingHeader(pendingHeader, checkpointHashes)
-}
-
-func (b *QuaiAPIBackend) GetPendingEtxsRollupFromSub(hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
-	return b.quai.core.GetPendingEtxsRollupFromSub(hash, location)
 }
 
 func (b *QuaiAPIBackend) GetPendingEtxsFromSub(hash common.Hash, location common.Location) (types.PendingEtxs, error) {

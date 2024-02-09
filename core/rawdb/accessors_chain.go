@@ -1134,7 +1134,7 @@ func WritePendingEtxsProto(db ethdb.KeyValueWriter, hash common.Hash, data []byt
 }
 
 // ReadPendingEtxs retreives the pending ETXs corresponding to a given block
-func ReadPendingEtxs(db ethdb.Reader, hash common.Hash) *types.PendingEtxs {
+func ReadPendingEtxs(db ethdb.Reader, hash common.Hash, location common.Location) *types.PendingEtxs {
 	data := ReadPendingEtxsProto(db, hash)
 	if len(data) == 0 {
 		return nil
@@ -1144,7 +1144,7 @@ func ReadPendingEtxs(db ethdb.Reader, hash common.Hash) *types.PendingEtxs {
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal pending etxs")
 	}
 	pendingEtxs := new(types.PendingEtxs)
-	if err := pendingEtxs.ProtoDecode(protoPendingEtxs); err != nil {
+	if err := pendingEtxs.ProtoDecode(protoPendingEtxs, location); err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
 			"err":  err,
@@ -1171,52 +1171,6 @@ func WritePendingEtxs(db ethdb.KeyValueWriter, pendingEtxs types.PendingEtxs) {
 func DeletePendingEtxs(db ethdb.KeyValueWriter, hash common.Hash) {
 	if err := db.Delete(pendingEtxsKey(hash)); err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to delete pending etxs")
-	}
-}
-
-// ReadPendingEtxsRollup retreives the pending ETXs rollup corresponding to a given block
-func ReadPendingEtxsRollup(db ethdb.Reader, hash common.Hash) *types.PendingEtxsRollup {
-	// Try to look up the data in leveldb.
-	data, _ := db.Get(pendingEtxsRollupKey(hash))
-	if len(data) == 0 {
-		return nil
-	}
-	protoPendingEtxsRollup := new(types.ProtoPendingEtxsRollup)
-	err := proto.Unmarshal(data, protoPendingEtxsRollup)
-	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal pending etxs rollup")
-	}
-	pendingEtxsRollup := new(types.PendingEtxsRollup)
-	err = pendingEtxsRollup.ProtoDecode(protoPendingEtxsRollup)
-	if err != nil {
-		log.Global.WithFields(log.Fields{
-			"hash": hash,
-			"err":  err,
-		}).Error("Invalid pending etxs rollup Proto")
-		return nil
-	}
-	return pendingEtxsRollup
-}
-
-// WritePendingEtxsRollup stores the pending ETXs rollup corresponding to a given block
-func WritePendingEtxsRollup(db ethdb.KeyValueWriter, pendingEtxsRollup types.PendingEtxsRollup) {
-	protoPendingEtxsRollup, err := pendingEtxsRollup.ProtoEncode()
-	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to proto encode pending etxs rollup")
-	}
-	data, err := proto.Marshal(protoPendingEtxsRollup)
-	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to proto Marshal pending etxs rollup")
-	}
-	if err := db.Put(pendingEtxsRollupKey(pendingEtxsRollup.Header.Hash()), data); err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to store pending etxs rollup")
-	}
-}
-
-// DeletePendingEtxsRollup removes all pending ETX rollup data associated with a block.
-func DeletePendingEtxsRollup(db ethdb.KeyValueWriter, hash common.Hash) {
-	if err := db.Delete(pendingEtxsRollupKey(hash)); err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to delete pending etxs rollup")
 	}
 }
 

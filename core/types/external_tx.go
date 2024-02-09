@@ -28,74 +28,43 @@ type ExternalTx struct {
 	// the origin chain indeed confirmed emission of that ETX.
 }
 
-// PendingEtxsRollup is Header and manifest Hash of that header that should
-// be forward propagated
-type PendingEtxsRollup struct {
-	Header   *Header       `json:"header" gencodec:"required"`
-	Manifest BlockManifest `json:"manifest" gencodec:"required"`
-}
-
-func (p *PendingEtxsRollup) IsValid(hasher TrieHasher) bool {
-	if p == nil || p.Header == nil || p.Manifest == nil {
-		log.Global.WithField("p", p).Info("PendingEtxRollup: p/p.Header/p.Manifest is nil")
-		return false
-	}
-	return DeriveSha(p.Manifest, hasher) == p.Header.ManifestHash(common.ZONE_CTX)
-}
-
-// ProtoEncode encodes the PendingEtxsRollup to protobuf format.
-func (p *PendingEtxsRollup) ProtoEncode() (*ProtoPendingEtxsRollup, error) {
-	header, err := p.Header.ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	manifest, err := p.Manifest.ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	return &ProtoPendingEtxsRollup{
-		Header:   header,
-		Manifest: manifest,
-	}, nil
-}
-
-// ProtoDecode decodes the protobuf to a PendingEtxsRollup representation.
-func (p *PendingEtxsRollup) ProtoDecode(protoPendingEtxsRollup *ProtoPendingEtxsRollup) error {
-	if protoPendingEtxsRollup.Header == nil {
-		return errors.New("header is nil in ProtoDecode")
-	}
-	p.Header = new(Header)
-	err := p.Header.ProtoDecode(protoPendingEtxsRollup.GetHeader())
-	if err != nil {
-		return err
-	}
-	p.Manifest = BlockManifest{}
-	err = p.Manifest.ProtoDecode(protoPendingEtxsRollup.GetManifest())
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// PendingEtxs are ETXs which have been emitted from the zone which produced
-// the given block. Specifically, it contains the collection of ETXs emitted
-// since our prior coincident with our sub in that slice. In Prime context, our
-// subordinate will be a region node, so the Etxs list will contain the rollup
-// of ETXs emitted from each zone block since the zone's prior coincidence with
-// the region. In Region context, our subordinate chain will be the zone
-// itself, so the Etxs list will just contain the ETXs emitted directly in that
-// zone block (a.k.a. a singleton).
+// PendingEtxs are ETXs which have been emitted in a subordinate block. The
+// block is not valid in dominant chains, but dominant chains relay the pending
+// ETXs to other chains in the network to facilitate ETX forward propagation.
+//
+// A dominant chain does not have the state to check correctness or acceptability
+// of these ETXs in the subordinate chains, but it does need to know that these
+// ETXs are valid against a block header which came from a subordinate chain.
+// For this reason, we indlude a header from the subordinate chain.
 type PendingEtxs struct {
-	Header *Header      `json:"header" gencodec:"required"`
-	Etxs   Transactions `json:"etxs"   gencodec:"required"`
+	Header *Header `json:"header" gencodec:"required"`
+	// Etxs array contains ETXs from the chain which produced this block, and a
+	// subordinate rollup of ETXs for that chain's subordinate (if it has one).
+	// Etxs[originCtx] = external transactions in origin CTX
+	// (optional) Etxs[originCtx+1] = rollup of ETXs emitted by originCtx+1
+	Etxs []Transactions `json:"etxs"   gencodec:"required"`
 }
 
-func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
+func (p *PendingEtxs) IsValid(hasher TrieHasher, nodeCtx int) bool {
 	if p == nil || p.Header == nil || p.Etxs == nil {
 		log.Global.WithField("p", p).Info("PendingEtx: p/p.Header/p.Etxs is nil")
 		return false
 	}
-	return DeriveSha(p.Etxs, hasher) == p.Header.EtxHash()
+	if len(p.Etxs) < common.HierarchyDepth {
+		return false
+	}
+	// pending ETXs must have originated from our subordinate context.
+	singletonCtx := nodeCtx + 1
+	rollupCtx := singletonCtx + 1
+	// singletonCtx must exist and must match hash
+	if singletonCtx >= len(p.Etxs) || DeriveSha(p.Etxs[singletonCtx], hasher) != p.Header.EtxHash() {
+		return false
+	}
+	// rollupCtx may not exist (i.e. if we are a region node), but if it is, the rollup hash must match
+	if rollupCtx < len(p.Etxs) && DeriveSha(p.Etxs[rollupCtx], hasher) != p.Header.EtxRollupHash() {
+		return false
+	}
+	return true
 }
 
 // ProtoEncode encodes the PendingEtxs to protobuf format.
@@ -104,9 +73,12 @@ func (p *PendingEtxs) ProtoEncode() (*ProtoPendingEtxs, error) {
 	if err != nil {
 		return nil, err
 	}
-	etxs, err := p.Etxs.ProtoEncode()
-	if err != nil {
-		return nil, err
+	etxs := make([]*ProtoTransactions, len(p.Etxs))
+	for i, pEtxs := range p.Etxs {
+		etxs[i], err = pEtxs.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &ProtoPendingEtxs{
 		Header: header,
@@ -115,7 +87,7 @@ func (p *PendingEtxs) ProtoEncode() (*ProtoPendingEtxs, error) {
 }
 
 // ProtoDecode decodes the protobuf to a PendingEtxs representation.
-func (p *PendingEtxs) ProtoDecode(protoPendingEtxs *ProtoPendingEtxs) error {
+func (p *PendingEtxs) ProtoDecode(protoPendingEtxs *ProtoPendingEtxs, location common.Location) error {
 	if protoPendingEtxs.Header == nil {
 		return errors.New("header is nil in ProtoDecode")
 	}
@@ -124,10 +96,16 @@ func (p *PendingEtxs) ProtoDecode(protoPendingEtxs *ProtoPendingEtxs) error {
 	if err != nil {
 		return err
 	}
-	p.Etxs = Transactions{}
-	err = p.Etxs.ProtoDecode(protoPendingEtxs.GetEtxs(), p.Header.Location())
-	if err != nil {
-		return err
+	p.Etxs = make([]Transactions, len(protoPendingEtxs.Etxs))
+	for i, protoEtxs := range protoPendingEtxs.Etxs {
+		p.Etxs[i] = make(Transactions, len(protoEtxs.GetTransactions()))
+		for j, protoTx := range protoEtxs.GetTransactions() {
+			p.Etxs[i][j] = &Transaction{}
+			err = p.Etxs[i][j].ProtoDecode(protoTx, location)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

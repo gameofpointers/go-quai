@@ -72,7 +72,7 @@ type Backend interface {
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
 	SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription
 	WriteBlock(block *types.Block)
-	Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error)
+	Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) ([]types.Transactions, bool, bool, error)
 	DownloadBlocksInManifest(hash common.Hash, manifest types.BlockManifest, entropy *big.Int)
 	ConstructLocalMinedBlock(header *types.Header) (*types.Block, error)
 	InsertBlock(ctx context.Context, block *types.Block) (int, error)
@@ -85,10 +85,8 @@ type Backend interface {
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)
 	GetSubManifest(slice common.Location, blockHash common.Hash) (types.BlockManifest, error)
 	AddPendingEtxs(pEtxs types.PendingEtxs) error
-	AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error
 	PendingBlockAndReceipts() (*types.Block, types.Receipts)
 	GenerateRecoveryPendingHeader(pendingHeader *types.Header, checkpointHashes types.Termini) error
-	GetPendingEtxsRollupFromSub(hash common.Hash, location common.Location) (types.PendingEtxsRollup, error)
 	GetPendingEtxsFromSub(hash common.Hash, location common.Location) (types.PendingEtxs, error)
 	SetSyncTarget(header *types.Header)
 	ProcessingState() bool

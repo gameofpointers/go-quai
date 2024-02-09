@@ -1012,6 +1012,29 @@ func (w *worker) ComputeManifestHash(header *types.Header) common.Hash {
 	return manifestHash
 }
 
+// ComputeEtxRollup given a block collects all the etxTransactions that have
+// occured since past coincident
+func (w *worker) ComputeEtxRollupHash(block *types.Block) (common.Hash, error) {
+	nodeCtx := w.hc.NodeCtx()
+	etxRollup := types.Transactions{}
+	if nodeCtx == common.PRIME_CTX {
+		// No EtxRollup In Prime
+		etxRollup = types.Transactions{}
+	} else if w.engine.IsDomCoincident(w.hc, block.Header()) {
+		etxRollup = block.ExtTransactions()
+	} else {
+		var err error
+		etxRollup, err = w.hc.CollectEtxRollup(block)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		etxRollup = append(etxRollup, block.ExtTransactions()...)
+	}
+	etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
+
+	return etxRollupHash, nil
+}
+
 func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Block, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error) {
 	nodeCtx := w.hc.NodeCtx()
 	block, err := w.engine.FinalizeAndAssemble(chain, header, state, txs, uncles, etxs, subManifest, receipts)
@@ -1019,26 +1042,17 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *typ
 		return nil, err
 	}
 
-	manifestHash := w.ComputeManifestHash(parent.Header())
-
 	if w.hc.ProcessingState() {
+		manifestHash := w.ComputeManifestHash(parent.Header())
 		block.Header().SetManifestHash(manifestHash, nodeCtx)
+		// Etx rollup is calculated by the zone
 		if nodeCtx == common.ZONE_CTX {
-			// Compute and set etx rollup hash
-			var etxRollup types.Transactions
-			if w.engine.IsDomCoincident(w.hc, parent.Header()) {
-				etxRollup = parent.ExtTransactions()
-			} else {
-				etxRollup, err = w.hc.CollectEtxRollup(parent)
-				if err != nil {
-					return nil, err
-				}
-				etxRollup = append(etxRollup, parent.ExtTransactions()...)
+			etxRollupHash, err := w.ComputeEtxRollupHash(parent)
+			if err != nil {
+				return nil, err
 			}
-			etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
 			block.Header().SetEtxRollupHash(etxRollupHash)
 		}
-
 		w.AddPendingBlockBody(block.Header(), block.Body())
 	}
 

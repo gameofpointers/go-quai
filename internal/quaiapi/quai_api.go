@@ -757,19 +757,6 @@ func (s *PublicBlockChainQuaiAPI) SendPendingEtxsToDom(ctx context.Context, raw 
 	return s.b.AddPendingEtxs(pEtxs)
 }
 
-type SendPendingEtxsRollupToDomArgs struct {
-	Header   *types.Header       `json:"header"`
-	Manifest types.BlockManifest `json:"manifest"`
-}
-
-func (s *PublicBlockChainQuaiAPI) SendPendingEtxsRollupToDom(ctx context.Context, raw json.RawMessage) error {
-	var pEtxsRollup SendPendingEtxsRollupToDomArgs
-	if err := json.Unmarshal(raw, &pEtxsRollup); err != nil {
-		return err
-	}
-	return s.b.AddPendingEtxsRollup(types.PendingEtxsRollup{Header: pEtxsRollup.Header, Manifest: pEtxsRollup.Manifest})
-}
-
 type GenerateRecoveryPendingHeaderArgs struct {
 	PendingHeader    *types.Header `json:"pendingHeader"`
 	CheckpointHashes types.Termini `json:"checkpointHashes"`
@@ -781,27 +768,6 @@ func (s *PublicBlockChainQuaiAPI) GenerateRecoveryPendingHeader(ctx context.Cont
 		return err
 	}
 	return s.b.GenerateRecoveryPendingHeader(pHandcheckPointHashes.PendingHeader, pHandcheckPointHashes.CheckpointHashes)
-}
-
-type GetPendingEtxsRollupFuncArgs struct {
-	Hash     common.Hash
-	Location common.Location
-}
-
-func (s *PublicBlockChainQuaiAPI) GetPendingEtxsRollupFromSub(ctx context.Context, raw json.RawMessage) (map[string]interface{}, error) {
-	var getPEtxsRollup GetPendingEtxsFuncArgs
-	if err := json.Unmarshal(raw, &getPEtxsRollup); err != nil {
-		return nil, err
-	}
-	pEtxsRollup, err := s.b.GetPendingEtxsRollupFromSub(getPEtxsRollup.Hash, getPEtxsRollup.Location)
-	if err != nil {
-		return nil, err
-	}
-	fields := make(map[string]interface{})
-	fields["header"] = pEtxsRollup.Header.RPCMarshalHeader()
-	fields["manifest"] = pEtxsRollup.Manifest
-
-	return fields, nil
 }
 
 type GetPendingEtxsFuncArgs struct {

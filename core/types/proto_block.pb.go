@@ -1290,8 +1290,8 @@ type ProtoPendingEtxs struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Header *ProtoHeader       `protobuf:"bytes,1,opt,name=header,proto3,oneof" json:"header,omitempty"`
-	Etxs   *ProtoTransactions `protobuf:"bytes,2,opt,name=etxs,proto3,oneof" json:"etxs,omitempty"`
+	Header *ProtoHeader         `protobuf:"bytes,1,opt,name=header,proto3,oneof" json:"header,omitempty"`
+	Etxs   []*ProtoTransactions `protobuf:"bytes,2,rep,name=etxs,proto3" json:"etxs,omitempty"`
 }
 
 func (x *ProtoPendingEtxs) Reset() {
@@ -1333,64 +1333,9 @@ func (x *ProtoPendingEtxs) GetHeader() *ProtoHeader {
 	return nil
 }
 
-func (x *ProtoPendingEtxs) GetEtxs() *ProtoTransactions {
+func (x *ProtoPendingEtxs) GetEtxs() []*ProtoTransactions {
 	if x != nil {
 		return x.Etxs
-	}
-	return nil
-}
-
-type ProtoPendingEtxsRollup struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Header   *ProtoHeader   `protobuf:"bytes,1,opt,name=header,proto3,oneof" json:"header,omitempty"`
-	Manifest *ProtoManifest `protobuf:"bytes,2,opt,name=manifest,proto3,oneof" json:"manifest,omitempty"`
-}
-
-func (x *ProtoPendingEtxsRollup) Reset() {
-	*x = ProtoPendingEtxsRollup{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_core_types_proto_block_proto_msgTypes[18]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *ProtoPendingEtxsRollup) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProtoPendingEtxsRollup) ProtoMessage() {}
-
-func (x *ProtoPendingEtxsRollup) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[18]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProtoPendingEtxsRollup.ProtoReflect.Descriptor instead.
-func (*ProtoPendingEtxsRollup) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *ProtoPendingEtxsRollup) GetHeader() *ProtoHeader {
-	if x != nil {
-		return x.Header
-	}
-	return nil
-}
-
-func (x *ProtoPendingEtxsRollup) GetManifest() *ProtoManifest {
-	if x != nil {
-		return x.Manifest
 	}
 	return nil
 }
@@ -1659,29 +1604,18 @@ var file_core_types_proto_block_proto_rawDesc = []byte{
 	0x48, 0x61, 0x73, 0x68, 0x48, 0x02, 0x52, 0x07, 0x65, 0x74, 0x78, 0x48, 0x61, 0x73, 0x68, 0x88,
 	0x01, 0x01, 0x42, 0x09, 0x0a, 0x07, 0x5f, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x42, 0x06, 0x0a,
 	0x04, 0x5f, 0x65, 0x74, 0x78, 0x42, 0x0b, 0x0a, 0x09, 0x5f, 0x65, 0x74, 0x78, 0x5f, 0x68, 0x61,
-	0x73, 0x68, 0x22, 0x8a, 0x01, 0x0a, 0x10, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x65, 0x6e, 0x64,
-	0x69, 0x6e, 0x67, 0x45, 0x74, 0x78, 0x73, 0x12, 0x2f, 0x0a, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65,
-	0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e,
-	0x50, 0x72, 0x6f, 0x74, 0x6f, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x48, 0x00, 0x52, 0x06, 0x68,
-	0x65, 0x61, 0x64, 0x65, 0x72, 0x88, 0x01, 0x01, 0x12, 0x31, 0x0a, 0x04, 0x65, 0x74, 0x78, 0x73,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x50,
-	0x72, 0x6f, 0x74, 0x6f, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x73,
-	0x48, 0x01, 0x52, 0x04, 0x65, 0x74, 0x78, 0x73, 0x88, 0x01, 0x01, 0x42, 0x09, 0x0a, 0x07, 0x5f,
-	0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x42, 0x07, 0x0a, 0x05, 0x5f, 0x65, 0x74, 0x78, 0x73, 0x22,
-	0x98, 0x01, 0x0a, 0x16, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x65, 0x6e, 0x64, 0x69, 0x6e, 0x67,
-	0x45, 0x74, 0x78, 0x73, 0x52, 0x6f, 0x6c, 0x6c, 0x75, 0x70, 0x12, 0x2f, 0x0a, 0x06, 0x68, 0x65,
-	0x61, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x62, 0x6c, 0x6f,
-	0x63, 0x6b, 0x2e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x48, 0x00,
-	0x52, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x88, 0x01, 0x01, 0x12, 0x35, 0x0a, 0x08, 0x6d,
-	0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e,
-	0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x4d, 0x61, 0x6e, 0x69, 0x66,
-	0x65, 0x73, 0x74, 0x48, 0x01, 0x52, 0x08, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x88,
-	0x01, 0x01, 0x42, 0x09, 0x0a, 0x07, 0x5f, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x42, 0x0b, 0x0a,
-	0x09, 0x5f, 0x6d, 0x61, 0x6e, 0x69, 0x66, 0x65, 0x73, 0x74, 0x42, 0x33, 0x5a, 0x31, 0x67, 0x69,
-	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6e,
-	0x74, 0x2d, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x69, 0x65, 0x73, 0x2f, 0x67, 0x6f, 0x2d,
-	0x71, 0x75, 0x61, 0x69, 0x2f, 0x63, 0x6f, 0x72, 0x65, 0x2f, 0x74, 0x79, 0x70, 0x65, 0x73, 0x62,
-	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x68, 0x22, 0x7c, 0x0a, 0x10, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50, 0x65, 0x6e, 0x64, 0x69,
+	0x6e, 0x67, 0x45, 0x74, 0x78, 0x73, 0x12, 0x2f, 0x0a, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x50,
+	0x72, 0x6f, 0x74, 0x6f, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x48, 0x00, 0x52, 0x06, 0x68, 0x65,
+	0x61, 0x64, 0x65, 0x72, 0x88, 0x01, 0x01, 0x12, 0x2c, 0x0a, 0x04, 0x65, 0x74, 0x78, 0x73, 0x18,
+	0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2e, 0x50, 0x72,
+	0x6f, 0x74, 0x6f, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52,
+	0x04, 0x65, 0x74, 0x78, 0x73, 0x42, 0x09, 0x0a, 0x07, 0x5f, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
+	0x42, 0x33, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64,
+	0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6e, 0x74, 0x2d, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x69,
+	0x65, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x71, 0x75, 0x61, 0x69, 0x2f, 0x63, 0x6f, 0x72, 0x65, 0x2f,
+	0x74, 0x79, 0x70, 0x65, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1696,7 +1630,7 @@ func file_core_types_proto_block_proto_rawDescGZIP() []byte {
 	return file_core_types_proto_block_proto_rawDescData
 }
 
-var file_core_types_proto_block_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_core_types_proto_block_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_core_types_proto_block_proto_goTypes = []interface{}{
 	(*ProtoBlock)(nil),              // 0: block.ProtoBlock
 	(*ProtoBody)(nil),               // 1: block.ProtoBody
@@ -1716,10 +1650,9 @@ var file_core_types_proto_block_proto_goTypes = []interface{}{
 	(*ProtoEtxSet)(nil),             // 15: block.ProtoEtxSet
 	(*ProtoEtxSetEntry)(nil),        // 16: block.ProtoEtxSetEntry
 	(*ProtoPendingEtxs)(nil),        // 17: block.ProtoPendingEtxs
-	(*ProtoPendingEtxsRollup)(nil),  // 18: block.ProtoPendingEtxsRollup
-	(*common.ProtoHash)(nil),        // 19: common.ProtoHash
-	(*common.ProtoLocation)(nil),    // 20: common.ProtoLocation
-	(*common.ProtoAddress)(nil),     // 21: common.ProtoAddress
+	(*common.ProtoHash)(nil),        // 18: common.ProtoHash
+	(*common.ProtoLocation)(nil),    // 19: common.ProtoLocation
+	(*common.ProtoAddress)(nil),     // 20: common.ProtoAddress
 }
 var file_core_types_proto_block_proto_depIdxs = []int32{
 	2,  // 0: block.ProtoBlock.header:type_name -> block.ProtoHeader
@@ -1728,48 +1661,46 @@ var file_core_types_proto_block_proto_depIdxs = []int32{
 	5,  // 3: block.ProtoBody.uncles:type_name -> block.ProtoHeaders
 	4,  // 4: block.ProtoBody.etxs:type_name -> block.ProtoTransactions
 	6,  // 5: block.ProtoBody.manifest:type_name -> block.ProtoManifest
-	19, // 6: block.ProtoHeader.parent_hash:type_name -> common.ProtoHash
-	19, // 7: block.ProtoHeader.uncle_hash:type_name -> common.ProtoHash
-	19, // 8: block.ProtoHeader.root:type_name -> common.ProtoHash
-	19, // 9: block.ProtoHeader.tx_hash:type_name -> common.ProtoHash
-	19, // 10: block.ProtoHeader.etx_hash:type_name -> common.ProtoHash
-	19, // 11: block.ProtoHeader.etx_rollup_hash:type_name -> common.ProtoHash
-	19, // 12: block.ProtoHeader.manifest_hash:type_name -> common.ProtoHash
-	19, // 13: block.ProtoHeader.receipt_hash:type_name -> common.ProtoHash
-	20, // 14: block.ProtoHeader.location:type_name -> common.ProtoLocation
-	19, // 15: block.ProtoHeader.mix_hash:type_name -> common.ProtoHash
+	18, // 6: block.ProtoHeader.parent_hash:type_name -> common.ProtoHash
+	18, // 7: block.ProtoHeader.uncle_hash:type_name -> common.ProtoHash
+	18, // 8: block.ProtoHeader.root:type_name -> common.ProtoHash
+	18, // 9: block.ProtoHeader.tx_hash:type_name -> common.ProtoHash
+	18, // 10: block.ProtoHeader.etx_hash:type_name -> common.ProtoHash
+	18, // 11: block.ProtoHeader.etx_rollup_hash:type_name -> common.ProtoHash
+	18, // 12: block.ProtoHeader.manifest_hash:type_name -> common.ProtoHash
+	18, // 13: block.ProtoHeader.receipt_hash:type_name -> common.ProtoHash
+	19, // 14: block.ProtoHeader.location:type_name -> common.ProtoLocation
+	18, // 15: block.ProtoHeader.mix_hash:type_name -> common.ProtoHash
 	7,  // 16: block.ProtoTransaction.access_list:type_name -> block.ProtoAccessList
 	7,  // 17: block.ProtoTransaction.etx_access_list:type_name -> block.ProtoAccessList
-	19, // 18: block.ProtoTransaction.originating_tx_hash:type_name -> common.ProtoHash
+	18, // 18: block.ProtoTransaction.originating_tx_hash:type_name -> common.ProtoHash
 	3,  // 19: block.ProtoTransactions.transactions:type_name -> block.ProtoTransaction
 	2,  // 20: block.ProtoHeaders.headers:type_name -> block.ProtoHeader
-	19, // 21: block.ProtoManifest.manifest:type_name -> common.ProtoHash
+	18, // 21: block.ProtoManifest.manifest:type_name -> common.ProtoHash
 	8,  // 22: block.ProtoAccessList.access_tuples:type_name -> block.ProtoAccessTuple
-	19, // 23: block.ProtoAccessTuple.storage_key:type_name -> common.ProtoHash
-	19, // 24: block.ProtoReceiptForStorage.tx_hash:type_name -> common.ProtoHash
-	21, // 25: block.ProtoReceiptForStorage.contract_address:type_name -> common.ProtoAddress
+	18, // 23: block.ProtoAccessTuple.storage_key:type_name -> common.ProtoHash
+	18, // 24: block.ProtoReceiptForStorage.tx_hash:type_name -> common.ProtoHash
+	20, // 25: block.ProtoReceiptForStorage.contract_address:type_name -> common.ProtoAddress
 	12, // 26: block.ProtoReceiptForStorage.logs:type_name -> block.ProtoLogsForStorage
 	4,  // 27: block.ProtoReceiptForStorage.etxs:type_name -> block.ProtoTransactions
 	9,  // 28: block.ProtoReceiptsForStorage.receipts:type_name -> block.ProtoReceiptForStorage
-	21, // 29: block.ProtoLogForStorage.address:type_name -> common.ProtoAddress
-	19, // 30: block.ProtoLogForStorage.topics:type_name -> common.ProtoHash
+	20, // 29: block.ProtoLogForStorage.address:type_name -> common.ProtoAddress
+	18, // 30: block.ProtoLogForStorage.topics:type_name -> common.ProtoHash
 	11, // 31: block.ProtoLogsForStorage.logs:type_name -> block.ProtoLogForStorage
 	2,  // 32: block.ProtoPendingHeader.header:type_name -> block.ProtoHeader
 	14, // 33: block.ProtoPendingHeader.termini:type_name -> block.ProtoTermini
-	19, // 34: block.ProtoTermini.dom_termini:type_name -> common.ProtoHash
-	19, // 35: block.ProtoTermini.sub_termini:type_name -> common.ProtoHash
+	18, // 34: block.ProtoTermini.dom_termini:type_name -> common.ProtoHash
+	18, // 35: block.ProtoTermini.sub_termini:type_name -> common.ProtoHash
 	16, // 36: block.ProtoEtxSet.etx_set:type_name -> block.ProtoEtxSetEntry
 	3,  // 37: block.ProtoEtxSetEntry.etx:type_name -> block.ProtoTransaction
-	19, // 38: block.ProtoEtxSetEntry.etx_hash:type_name -> common.ProtoHash
+	18, // 38: block.ProtoEtxSetEntry.etx_hash:type_name -> common.ProtoHash
 	2,  // 39: block.ProtoPendingEtxs.header:type_name -> block.ProtoHeader
 	4,  // 40: block.ProtoPendingEtxs.etxs:type_name -> block.ProtoTransactions
-	2,  // 41: block.ProtoPendingEtxsRollup.header:type_name -> block.ProtoHeader
-	6,  // 42: block.ProtoPendingEtxsRollup.manifest:type_name -> block.ProtoManifest
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	41, // [41:41] is the sub-list for method output_type
+	41, // [41:41] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_core_types_proto_block_proto_init() }
@@ -1994,18 +1925,6 @@ func file_core_types_proto_block_proto_init() {
 				return nil
 			}
 		}
-		file_core_types_proto_block_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ProtoPendingEtxsRollup); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
 	}
 	file_core_types_proto_block_proto_msgTypes[0].OneofWrappers = []interface{}{}
 	file_core_types_proto_block_proto_msgTypes[1].OneofWrappers = []interface{}{}
@@ -2014,14 +1933,13 @@ func file_core_types_proto_block_proto_init() {
 	file_core_types_proto_block_proto_msgTypes[13].OneofWrappers = []interface{}{}
 	file_core_types_proto_block_proto_msgTypes[16].OneofWrappers = []interface{}{}
 	file_core_types_proto_block_proto_msgTypes[17].OneofWrappers = []interface{}{}
-	file_core_types_proto_block_proto_msgTypes[18].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_core_types_proto_block_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -126,3 +126,49 @@ func TestInboundEtxsStorage(t *testing.T) {
 		t.Fatalf("Deleted InboundEtxs returned: %v", entry)
 	}
 }
+
+// Tests pending etx storage and retrieval operations.
+func TestPendingEtxsStorage(t *testing.T) {
+	db := NewMemoryDatabase()
+	location := common.Location{0, 0}
+	pendingEtxs := types.PendingEtxs{Header: types.EmptyHeader(), Etxs: []types.Transactions{}}
+
+	pendingEtxs.Header.SetCoinbase(common.Bytes20ToAddress([20]byte{0x01}, location))
+
+	to := common.BytesToAddress([]byte{0x01}, common.Location{0, 0})
+	inner := &types.InternalTx{
+		ChainID:    new(big.Int).SetUint64(1),
+		Nonce:      uint64(0),
+		GasTipCap:  new(big.Int).SetUint64(0),
+		GasFeeCap:  new(big.Int).SetUint64(0),
+		Gas:        uint64(0),
+		To:         &to,
+		Value:      new(big.Int).SetUint64(0),
+		Data:       []byte{0x04},
+		AccessList: types.AccessList{},
+		V:          new(big.Int).SetUint64(0),
+		R:          new(big.Int).SetUint64(0),
+		S:          new(big.Int).SetUint64(0),
+	}
+	tx := types.NewTx(inner)
+	pendingEtxs.Etxs = append(pendingEtxs.Etxs, types.Transactions{tx})
+
+	hash := pendingEtxs.Header.Hash()
+	if entry := ReadPendingEtxs(db, hash, location); entry != nil {
+		t.Fatalf("Non existent inbound etxs returned: %v", entry)
+	}
+	t.Log("pendingEtxs stored", pendingEtxs)
+	// Write and verify the inboundEtxs in the database
+	WritePendingEtxs(db, pendingEtxs)
+	if entry := ReadPendingEtxs(db, hash, location); entry == nil {
+		t.Fatalf("Stored PendingEtxs not found with hash %s", hash)
+	} else {
+		t.Log("pendingetxs", entry)
+		reflect.DeepEqual(pendingEtxs, entry)
+	}
+	// Delete the pendingEtxs and verify the execution
+	DeletePendingEtxs(db, hash)
+	if entry := ReadPendingEtxs(db, hash, location); entry != nil {
+		t.Fatalf("Deleted PendingEtxs returned: %v", entry)
+	}
+}
