@@ -30,6 +30,7 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rlp"
+	"google.golang.org/protobuf/proto"
 )
 
 // ReadCanonicalHash retrieves the hash assigned to a canonical block number.
@@ -335,8 +336,8 @@ func deleteHeaderWithoutNumber(db ethdb.KeyValueWriter, hash common.Hash, number
 	}
 }
 
-// ReadBodyRLP retrieves the block body (transactions and uncles) in RLP encoding.
-func ReadBodyRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue {
+// ReadBodyRLP retrieves the block body (transactions and uncles) in protobuf encoding.
+func ReadBodyProtoBuf(db ethdb.Reader, hash common.Hash, number uint64) []byte {
 	// First try to look up the data in ancient database. Extra hash
 	// comparison is necessary since ancient database only maintains
 	// the canonical data.
@@ -404,17 +405,23 @@ func HasBody(db ethdb.Reader, hash common.Hash, number uint64) bool {
 }
 
 // ReadBody retrieves the block body corresponding to the hash.
-func ReadBody(db ethdb.Reader, hash common.Hash, number uint64) *types.Body {
-	data := ReadBodyRLP(db, hash, number)
+func ReadBody(db ethdb.Reader, hash common.Hash, number uint64, location common.Location) *types.Body {
+	data := ReadBodyProtoBuf(db, hash, number)
 	if len(data) == 0 {
 		return nil
 	}
+	protoBody := new(types.ProtoBody)
+	err := proto.Unmarshal(data, protoBody)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal body")
+	}
 	body := new(types.Body)
-	if err := rlp.Decode(bytes.NewReader(data), body); err != nil {
+	err = body.ProtoDecode(protoBody, location)
+	if err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
 			"err":  err,
-		}).Error("Invalid block body RLP")
+		}).Error("Invalid block body Proto")
 		return nil
 	}
 	return body
@@ -422,9 +429,13 @@ func ReadBody(db ethdb.Reader, hash common.Hash, number uint64) *types.Body {
 
 // WriteBody stores a block body into the database.
 func WriteBody(db ethdb.KeyValueWriter, hash common.Hash, number uint64, body *types.Body) {
-	data, err := rlp.EncodeToBytes(body)
+	protoBody, err := body.ProtoEncode()
 	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to RLP encode body")
+		log.Global.WithField("err", err).Fatal("Failed to proto encode body")
+	}
+	data, err := proto.Marshal(protoBody)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Marshal body")
 	}
 	WriteBodyRLP(db, hash, number, data)
 }

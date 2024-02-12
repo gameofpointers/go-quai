@@ -8,10 +8,14 @@ import "common/proto_common.proto";
 // This file defines all the ProtoBuf definitions related to core
 message ProtoBlock {
   optional ProtoHeader header = 1;
-  optional ProtoTransactions txs = 2;
-  optional ProtoHeaders uncles = 3;
-  optional ProtoTransactions etxs = 4;
-  optional ProtoManifest manifest = 5;
+  optional ProtoBody body = 2;
+}
+
+message ProtoBody {
+  optional ProtoTransactions txs = 1;
+  optional ProtoHeaders uncles = 2;
+  optional ProtoTransactions etxs = 3;
+  optional ProtoManifest manifest = 4;
 }
 
 message ProtoHeader {

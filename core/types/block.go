@@ -784,10 +784,83 @@ func (h *Header) EmptyReceipts() bool {
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
 type Body struct {
-	Transactions    []*Transaction
+	Transactions    Transactions
 	Uncles          []*Header
-	ExtTransactions []*Transaction
+	ExtTransactions Transactions
 	SubManifest     BlockManifest
+}
+
+// ProtoEncode serializes b into the Quai Proto Body format
+func (b *Body) ProtoEncode() (*ProtoBody, error) {
+	protoTransactions, err := b.Transactions.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+	protoExtTransactions, err := b.ExtTransactions.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+	protoUncles := &ProtoHeaders{}
+	for _, unc := range b.Uncles {
+		protoUncle, err := unc.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		protoUncles.Headers = append(protoUncles.Headers, protoUncle)
+	}
+	protoManifest, err := b.SubManifest.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProtoBody{
+		Txs:      protoTransactions,
+		Uncles:   protoUncles,
+		Etxs:     protoExtTransactions,
+		Manifest: protoManifest,
+	}, nil
+}
+
+// ProtoDecode deserializes the ProtoBody into the Body format
+func (b *Body) ProtoDecode(protoBody *ProtoBody, location common.Location) error {
+	if protoBody.Txs == nil {
+		return errors.New("missing required field 'Txs' in Body")
+	}
+	if protoBody.Uncles == nil {
+		return errors.New("missing required field 'Uncles' in Body")
+	}
+	if protoBody.Etxs == nil {
+		return errors.New("missing required field 'Etxs' in Body")
+	}
+	if protoBody.Manifest == nil {
+		return errors.New("missing required field 'Manifest' in Body")
+	}
+
+	b.Transactions = Transactions{}
+	err := b.Transactions.ProtoDecode(protoBody.GetTxs(), location)
+	if err != nil {
+		return err
+	}
+	b.ExtTransactions = Transactions{}
+	err = b.ExtTransactions.ProtoDecode(protoBody.GetEtxs(), location)
+	if err != nil {
+		return err
+	}
+	b.SubManifest = BlockManifest{}
+	err = b.SubManifest.ProtoDecode(protoBody.GetManifest())
+	if err != nil {
+		return err
+	}
+	b.Uncles = make([]*Header, len(protoBody.GetUncles().GetHeaders()))
+	for i, protoUncle := range protoBody.GetUncles().GetHeaders() {
+		uncle := &Header{}
+		err = uncle.ProtoDecode(protoUncle)
+		if err != nil {
+			return err
+		}
+		b.Uncles[i] = uncle
+	}
+	return nil
 }
 
 // Block represents an entire block in the Quai blockchain.
@@ -943,32 +1016,13 @@ func (b *Block) ProtoEncode() (*ProtoBlock, error) {
 	if err != nil {
 		return nil, err
 	}
-	protoTransactions, err := b.Transactions().ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	protoExtTransactions, err := b.ExtTransactions().ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	protoUncles := &ProtoHeaders{}
-	for _, unc := range b.Uncles() {
-		protoUncle, err := unc.ProtoEncode()
-		if err != nil {
-			return nil, err
-		}
-		protoUncles.Headers = append(protoUncles.Headers, protoUncle)
-	}
-	protoManifest, err := b.SubManifest().ProtoEncode()
+	protoBody, err := b.Body().ProtoEncode()
 	if err != nil {
 		return nil, err
 	}
 	protoBlock := &ProtoBlock{
-		Header:   protoHeader,
-		Txs:      protoTransactions,
-		Etxs:     protoExtTransactions,
-		Manifest: protoManifest,
-		Uncles:   protoUncles,
+		Header: protoHeader,
+		Body:   protoBody,
 	}
 	return protoBlock, nil
 }
@@ -980,31 +1034,15 @@ func (b *Block) ProtoDecode(protoBlock *ProtoBlock, location common.Location) er
 	if err != nil {
 		return err
 	}
-	b.transactions = Transactions{}
-	err = b.transactions.ProtoDecode(protoBlock.GetTxs(), location)
+	body := &Body{}
+	err = body.ProtoDecode(protoBlock.GetBody(), location)
 	if err != nil {
 		return err
 	}
-	b.extTransactions = Transactions{}
-	err = b.extTransactions.ProtoDecode(protoBlock.GetEtxs(), location)
-	if err != nil {
-		return err
-	}
-	b.subManifest = BlockManifest{}
-	err = b.subManifest.ProtoDecode(protoBlock.GetManifest())
-	if err != nil {
-		return err
-	}
-	b.uncles = make([]*Header, len(protoBlock.GetUncles().GetHeaders()))
-	for i, protoUncle := range protoBlock.GetUncles().GetHeaders() {
-		uncle := &Header{}
-		err = uncle.ProtoDecode(protoUncle)
-		if err != nil {
-			return err
-		}
-		b.uncles[i] = uncle
-	}
-
+	b.transactions = body.Transactions
+	b.extTransactions = body.ExtTransactions
+	b.uncles = body.Uncles
+	b.subManifest = body.SubManifest
 	return nil
 }
 
