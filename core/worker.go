@@ -413,7 +413,7 @@ func (w *worker) LoadPendingBlockBody() {
 		if key == types.EmptyBodyHash {
 			w.pendingBlockBody.Add(key, &types.Body{})
 		} else {
-			w.pendingBlockBody.Add(key, rawdb.ReadPbCacheBody(w.workerDb, key))
+			w.pendingBlockBody.Add(key, rawdb.ReadPbCacheBody(w.workerDb, key, w.hc.NodeLocation()))
 		}
 		// Remove the entry from the database so that body is not accumulated over multiple stops
 		rawdb.DeletePbCacheBody(w.workerDb, key)
@@ -949,7 +949,7 @@ func (w *worker) prepareWork(genParams *generateParams, block *types.Block) (*en
 func (w *worker) fillTransactions(interrupt *int32, env *environment, block *types.Block) {
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
-	etxSet := rawdb.ReadEtxSet(w.hc.bc.db, block.Hash(), block.NumberU64(w.hc.NodeCtx()))
+	etxSet := rawdb.ReadEtxSet(w.hc.bc.db, block.Hash(), block.NumberU64(w.hc.NodeCtx()), w.hc.NodeLocation())
 	if etxSet == nil {
 		return
 	}
