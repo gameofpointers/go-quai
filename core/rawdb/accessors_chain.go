@@ -1341,9 +1341,13 @@ func DeleteBadHashesList(db ethdb.KeyValueWriter) {
 
 // WriteInboundEtxs stores the inbound etxs for a given dom block hashes
 func WriteInboundEtxs(db ethdb.KeyValueWriter, hash common.Hash, inboundEtxs types.Transactions) {
-	data, err := rlp.EncodeToBytes(inboundEtxs)
+	protoInboundEtxs, err := inboundEtxs.ProtoEncode()
 	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to RLP encode inbound etxs")
+		log.Global.WithField("err", err).Fatal("Failed to proto encode inbound etxs")
+	}
+	data, err := proto.Marshal(protoInboundEtxs)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Marshal inbound etxs")
 	}
 	if err := db.Put(inboundEtxsKey(hash), data); err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to store badHashesList")
@@ -1351,18 +1355,24 @@ func WriteInboundEtxs(db ethdb.KeyValueWriter, hash common.Hash, inboundEtxs typ
 }
 
 // ReadInboundEtxs reads the inbound etxs from the database
-func ReadInboundEtxs(db ethdb.Reader, hash common.Hash) types.Transactions {
+func ReadInboundEtxs(db ethdb.Reader, hash common.Hash, location common.Location) types.Transactions {
 	// Try to look up the data in leveldb.
-	data, _ := db.Get(inboundEtxsKey(hash))
-	if len(data) == 0 {
+	data, err := db.Get(inboundEtxsKey(hash))
+	if err != nil {
 		return nil
 	}
+	protoInboundEtxs := new(types.ProtoTransactions)
+	err = proto.Unmarshal(data, protoInboundEtxs)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal inbound etxs")
+	}
 	inboundEtxs := types.Transactions{}
-	if err := rlp.Decode(bytes.NewReader(data), &inboundEtxs); err != nil {
+	err = inboundEtxs.ProtoDecode(protoInboundEtxs, location)
+	if err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
 			"err":  err,
-		}).Error("Invalid inbound etxs RLP")
+		}).Error("Invalid inbound etxs Proto")
 		return nil
 	}
 	return inboundEtxs

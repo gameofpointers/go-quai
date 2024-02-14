@@ -686,7 +686,7 @@ func (p *StateProcessor) StateAtBlock(block *types.Block, reexec uint64, base *s
 		if etxSet == nil {
 			return nil, errors.New("etxSet set is nil in StateProcessor")
 		}
-		inboundEtxs := rawdb.ReadInboundEtxs(p.hc.bc.db, current.Hash())
+		inboundEtxs := rawdb.ReadInboundEtxs(p.hc.bc.db, current.Hash(), p.hc.NodeLocation())
 		etxSet.Update(inboundEtxs, current.NumberU64(nodeCtx), nodeLocation)
 
 		currentBlock := rawdb.ReadBlock(p.hc.bc.db, current.Hash(), current.NumberU64(nodeCtx), p.hc.NodeLocation())

@@ -457,7 +457,7 @@ func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.Header) error
 	}
 	var inboundEtxs types.Transactions
 	if order < nodeCtx {
-		inboundEtxs = rawdb.ReadInboundEtxs(hc.headerDb, header.Hash())
+		inboundEtxs = rawdb.ReadInboundEtxs(hc.headerDb, header.Hash(), hc.NodeLocation())
 	}
 	return hc.AppendBlock(block, inboundEtxs)
 }
