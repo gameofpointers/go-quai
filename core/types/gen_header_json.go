@@ -183,7 +183,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		copy(h.location, dec.Location)
 	}
 	coinbase := common.Bytes20ToAddress(*dec.Coinbase, h.location)
-	h.SetCoinbase(coinbase)
+  	h.SetCoinbase(coinbase)
 	h.SetRoot(*dec.Root)
 	h.SetTxHash(*dec.TxHash)
 	h.SetReceiptHash(*dec.ReceiptHash)

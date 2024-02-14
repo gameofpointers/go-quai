@@ -22,6 +22,19 @@ type Address struct {
 
 type AddressBytes [20]byte
 
+func (a *AddressBytes) UnmarshalJSON(input []byte) error {
+	var temp [AddressLength]byte
+	if err := hexutil.UnmarshalFixedJSON(reflect.TypeOf(AddressBytes{}), input, temp[:]); err != nil {
+		return err
+	}
+	copy(a[:], temp[:])
+	return nil
+}
+
+func (a AddressBytes) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a[:])
+}
+
 type AddressData interface {
 	Bytes() []byte
 	Hash() Hash
