@@ -141,7 +141,12 @@ func (hc *HeaderChain) CollectSubRollups(b *types.Block) ([]types.Transactions, 
 			var pendingEtxs []types.Transactions
 			// Look for pending ETXs first in pending ETX cache, then in database
 			if res, ok := hc.pendingEtxs.Get(hash); ok && res != nil {
-				pendingEtxs = res.([]types.Transactions)
+				pEtxs, ok := res.(types.PendingEtxs)
+				if ok {
+					pendingEtxs = pEtxs.Etxs
+				} else {
+					return nil, ErrPendingEtxNotFound
+				}
 			} else if res := rawdb.ReadPendingEtxs(hc.headerDb, hash, hc.NodeLocation()); res != nil {
 				pendingEtxs = res.Etxs
 			} else {
@@ -439,11 +444,10 @@ func (hc *HeaderChain) findCommonAncestor(header *types.Header) *types.Header {
 }
 
 func (hc *HeaderChain) AddPendingEtxs(pEtxs types.PendingEtxs) error {
-	if !pEtxs.IsValid(trie.NewStackTrie(nil), hc.NodeCtx()) {
-		hc.logger.Info("PendingEtx is not valid")
+	if pEtxs.Header.Hash() != hc.config.GenesisHash && !pEtxs.IsValid(trie.NewStackTrie(nil), hc.NodeCtx()) {
 		return ErrPendingEtxNotValid
 	}
-	hc.logger.WithField("block", pEtxs.Header.Hash()).Debug("Received pending ETXs")
+	hc.logger.WithField("block", pEtxs.Header.Hash()).Info("Received pending ETXs")
 	// Only write the pending ETXs if we have not seen them before
 	if !hc.pendingEtxs.Contains(pEtxs.Header.Hash()) {
 		// Write to pending ETX database

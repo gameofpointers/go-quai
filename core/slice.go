@@ -240,7 +240,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 	// confirmed ETXs If this is not a coincident block, we need to build up the
 	// list of confirmed ETXs using the subordinate manifest In either case, if
 	// we are a dominant node, we need to collect the ETX rollup from our sub.
-	if !domOrigin && nodeCtx != common.ZONE_CTX {
+	if !domOrigin {
 		cachedInboundEtxs, exists := sl.inboundEtxsCache.Get(block.Hash())
 		if exists && cachedInboundEtxs != nil {
 			newInboundEtxs = cachedInboundEtxs.(types.Transactions)
@@ -264,7 +264,14 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			}
 			sl.inboundEtxsCache.Add(block.Hash(), newInboundEtxs)
 		}
+	} else if nodeCtx < common.ZONE_CTX {
+		subRollups, err := sl.hc.CollectSubRollups(block)
+		if err != nil {
+			return nil, false, false, err
+		}
+		subRollup = subRollups[nodeCtx+1]
 	}
+
 	time5 := common.PrettyDuration(time.Since(start))
 
 	time6 := common.PrettyDuration(time.Since(start))
@@ -1155,7 +1162,7 @@ func (sl *Slice) init(genesis *Genesis) error {
 		sl.hc.SetCurrentHeader(genesisHeader)
 
 		// Create empty pending ETX entry for genesis block -- genesis may not emit ETXs
-		emptyPendingEtxs := []types.Transactions{}
+		emptyPendingEtxs := []types.Transactions{types.Transactions{}, types.Transactions{}, types.Transactions{}}
 		sl.hc.AddPendingEtxs(types.PendingEtxs{genesisHeader, emptyPendingEtxs})
 
 		err := sl.hc.AddBloom(types.Bloom{}, genesisHeader.Hash())

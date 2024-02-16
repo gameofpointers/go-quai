@@ -47,17 +47,17 @@ type PendingEtxs struct {
 
 func (p *PendingEtxs) IsValid(hasher TrieHasher, nodeCtx int) bool {
 	if p == nil || p.Header == nil || p.Etxs == nil {
-		log.Global.WithField("p", p).Info("PendingEtx: p/p.Header/p.Etxs is nil")
 		return false
 	}
 	if len(p.Etxs) < common.HierarchyDepth {
 		return false
 	}
 	// pending ETXs must have originated from our subordinate context.
-	singletonCtx := nodeCtx + 1
+	singletonCtx := nodeCtx
 	rollupCtx := singletonCtx + 1
 	// singletonCtx must exist and must match hash
 	if singletonCtx >= len(p.Etxs) || DeriveSha(p.Etxs[singletonCtx], hasher) != p.Header.EtxHash() {
+		log.Global.Warn(singletonCtx, len(p.Etxs), DeriveSha(p.Etxs[singletonCtx], hasher), p.Header.EtxHash())
 		return false
 	}
 	// rollupCtx may not exist (i.e. if we are a region node), but if it is, the rollup hash must match
