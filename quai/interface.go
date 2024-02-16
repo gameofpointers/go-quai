@@ -9,7 +9,6 @@ import (
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 
-	"github.com/dominant-strategies/go-quai/trie"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -34,10 +33,6 @@ type ConsensusAPI interface {
 
 	LookupBlockHashByNumber(*big.Int, common.Location) *common.Hash
 
-	// Asks the consensus backend to lookup a trie node by hash and location,
-	// and return the data in the trie node.
-	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
-
 	// GetBackend gets the backend for the given location
 	GetBackend(nodeLocation common.Location) *quaiapi.Backend
 
@@ -55,6 +50,11 @@ type ConsensusAPI interface {
 
 	// WriteGenesisBlock adds the genesis block to the database and also writes the block to the disk
 	WriteGenesisBlock(*types.Block, common.Location)
+
+	// Asks the consensus backend to lookup a trie node by hash and location,
+	// and return the data in the trie node.
+	// and return the RLP encoded data in the trie node.
+	LookupTrieNode(hash common.Hash, location common.Location) ([]byte, error)
 }
 
 // The networking backend will implement the following interface to enable consensus to communicate with other nodes.

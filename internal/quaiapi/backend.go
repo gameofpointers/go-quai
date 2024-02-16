@@ -101,6 +101,7 @@ type Backend interface {
 	AddGenesisPendingEtxs(block *types.Block)
 	SubscribeExpansionEvent(ch chan<- core.ExpansionEvent) event.Subscription
 	WriteGenesisBlock(block *types.Block, location common.Location)
+	TrieNodeByHash(hash common.Hash) ([]byte, error)
 
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error
