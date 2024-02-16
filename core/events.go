@@ -41,10 +41,13 @@ type ChainSideEvent struct {
 	ResetUncles bool
 }
 
-type ChainHeadEvent struct {
+type ExpansionEvent struct {
 	Block *types.Block
 }
 
-type ExpansionEvent struct {
-	Block *types.Block
+type ChainHeadEvent struct{ Block *types.Block }
+
+// SnapSyncStartEvent represents a request to start the snap sync process.
+type SnapSyncStartEvent struct {
+	BlockNumber uint64 // The block number from which to start snap syncing
 }
