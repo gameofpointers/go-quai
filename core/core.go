@@ -433,6 +433,22 @@ func (c *Core) SyncTargetEntropy() (*big.Int, *big.Int) {
 	}
 }
 
+// TriggerSnapSync triggers snap sync at the zone level
+func (c *Core) TriggerSnapSync(header *types.Header) {
+	if header == nil {
+		log.Global.Warn("TriggerSnapSync called with nil header")
+		return
+	}
+
+	if nodeCtx := c.NodeLocation().Context(); nodeCtx != common.ZONE_CTX {
+		for _, subClient := range c.sl.subClients {
+			subClient.TriggerSnapSync(context.Background(), header)
+		}
+	} else {
+		c.triggerSnapSyncStart(header.Number(c.sl.NodeCtx()).Uint64())
+	}
+}
+
 // addToAppendQueue adds a block to the append queue
 func (c *Core) addToAppendQueue(block *types.Block) error {
 	nodeCtx := c.NodeLocation().Context()
@@ -625,8 +641,15 @@ func (c *Core) WriteBlock(block *types.Block) {
 	if nodeCtx == common.PRIME_CTX {
 		if block != nil {
 			c.SetSyncTarget(block.Header())
+			if c.shouldStartSnapSync(block) {
+				c.TriggerSnapSync(block.Header())
+			}
 		}
 	}
+}
+
+func (c *Core) shouldStartSnapSync(block *types.Block) bool {
+	panic("TODO: implement")
 }
 
 func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
