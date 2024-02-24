@@ -199,6 +199,7 @@ func (pm *BasicPeerManager) removePeerFromTopic(peerID p2p.PeerID, location stri
 			return db.Delete(pm.ctx, key)
 		}
 	}
+
 	return nil
 }
 
