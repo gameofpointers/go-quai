@@ -6,7 +6,6 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 
-	"github.com/dominant-strategies/go-quai/trie"
 	"github.com/libp2p/go-libp2p/core"
 )
 
@@ -28,7 +27,7 @@ type ConsensusAPI interface {
 
 	// Asks the consensus backend to lookup a trie node by hash and location,
 	// and return the data in the trie node.
-	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
+	GetTrieNode(hash common.Hash, location common.Location) ([]byte, error)
 }
 
 // The networking backend will implement the following interface to enable consensus to communicate with other nodes.

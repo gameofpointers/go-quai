@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"errors"
 	"io"
 	"math/big"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
 	"github.com/dominant-strategies/go-quai/trie"
+	"github.com/pkg/errors"
 )
 
 // QuaiProtocolHandler handles all the incoming requests and responds with corresponding data
@@ -69,19 +69,19 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 	switch query.(type) {
 	case *common.Hash:
 		log.Global.WithFields(log.Fields{
-			"requestID": id,
+			"requestID":   id,
 			"decodedType": decodedType,
-			"location":  loc,
-			"hash":      query,
-			"peer":      stream.Conn().RemotePeer(),
+			"location":    loc,
+			"hash":        query,
+			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by hash to handle")
 	case *big.Int:
 		log.Global.WithFields(log.Fields{
-			"requestID": id,
+			"requestID":   id,
 			"decodedType": decodedType,
-			"location":  loc,
-			"hash":      query,
-			"peer":      stream.Conn().RemotePeer(),
+			"location":    loc,
+			"hash":        query,
+			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by number to handle")
 	default:
 		log.Global.Errorf("unsupported request input data field type: %T", query)
@@ -228,13 +228,22 @@ func handleBlockNumberRequest(id uint32, loc common.Location, number *big.Int, s
 }
 
 func handleTrieNodeRequest(id uint32, loc common.Location, hash common.Hash, stream network.Stream, node QuaiP2PNode) error {
-	trieNode := node.GetTrieNode(hash, loc)
-	if trieNode == nil {
-		log.Global.Tracef("trie node not found")
-		return nil
+	trieNode, err := node.GetTrieNode(hash, loc)
+	if err != nil {
+		return errors.Wrapf(err, "error getting trie node for hash %s", hash)
 	}
+
+	if trieNode == nil {
+		return errors.Errorf("trie node not found for hash %s", hash)
+	}
+
+	trieNodeResp := &trie.TrieNodeResponse{
+		NodeHash: hash,
+		NodeData: trieNode,
+	}
+
 	log.Global.Tracef("trie node found")
-	data, err := pb.EncodeQuaiResponse(id, loc, trieNode)
+	data, err := pb.EncodeQuaiResponse(id, loc, trieNodeResp)
 	if err != nil {
 		return err
 	}
