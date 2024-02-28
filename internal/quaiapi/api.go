@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
@@ -1553,14 +1552,12 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // The sender is responsible for signing the transaction and using the correct nonce.
 func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input hexutil.Bytes) (common.Hash, error) {
 	tx := new(types.Transaction)
-	protoTransaction := new(types.ProtoTransaction)
-	err := proto.Unmarshal(input, protoTransaction)
-	if err != nil {
+	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
-	err = tx.ProtoDecode(protoTransaction, s.b.NodeLocation())
-	if err != nil {
-		return common.Hash{}, err
+	// Set To address to Internal if it was accidentally unmarshalled as External (or vice-versa)
+	if tx.Type() != types.QiTxType {
+		tx.SetTo(common.BytesToAddress(tx.To().Bytes(), s.b.NodeLocation()))
 	}
 	if tx.Type() != types.QiTxType {
 		if tx.To() != nil && tx.To().IsInQiLedgerScope() { // change after adding Quai->Qi conversion tx type
