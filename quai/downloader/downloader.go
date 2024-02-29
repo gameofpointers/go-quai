@@ -35,7 +35,7 @@ func (d *Downloader) StartSnapSync(loc common.Location, blockNumber uint64) erro
 		return errors.Errorf("failed to fetch block header %d: %v", blockNumber, err)
 	}
 
-	err = d.f.fetchStateTrie(header.Hash(), header.Root())
+	err = d.f.fetchStateTrie(header.Hash(), header.EVMRoot())
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch state trie")
 	}
