@@ -1188,7 +1188,7 @@ func (c *Core) Get(hash common.Hash) *types.Transaction {
 }
 
 func (c *Core) Nonce(addr common.Address) uint64 {
-	internal, err := addr.InternalAddress()
+	internal, err := addr.InternalAndQuaiAddress()
 	if err != nil {
 		return 0
 	}
@@ -1204,7 +1204,7 @@ func (c *Core) Content() (map[common.InternalAddress]types.Transactions, map[com
 }
 
 func (c *Core) ContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
-	internal, err := addr.InternalAddress()
+	internal, err := addr.InternalAndQuaiAddress()
 	if err != nil {
 		return nil, nil
 	}
