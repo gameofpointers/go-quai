@@ -1262,6 +1262,12 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 	// set the gas limit ceil
 	setGasLimitCeil(cfg)
 
+	// if cfg.PprofFlag {
+	if viper.IsSet(PprofFlag.Name) {
+		log.Global.Info("Starting pprof server")
+		EnablePprof()
+	}
+
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()
 	if err == nil {
