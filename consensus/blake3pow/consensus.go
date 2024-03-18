@@ -573,8 +573,6 @@ func (blake3pow *Blake3pow) Finalize(chain consensus.ChainHeaderReader, header *
 				continue
 			}
 		}
-
-		core.AddGenesisUtxos(state, nodeLocation, blake3pow.logger)
 	}
 	header.Header().SetUTXORoot(state.UTXORoot())
 	header.Header().SetEVMRoot(state.IntermediateRoot(true))
