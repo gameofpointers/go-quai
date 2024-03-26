@@ -391,6 +391,8 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		sl.hc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 	}
 
+	sl.logger.Info("Chain head feed sent the event")
+
 	// Relay the new pendingHeader
 	sl.relayPh(block, pendingHeaderWithTermini, domOrigin, block.Location(), subReorg)
 
