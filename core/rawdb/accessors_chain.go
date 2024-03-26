@@ -415,7 +415,7 @@ func ReadPbCacheBody(db ethdb.Reader, hash common.Hash) *types.WorkObject {
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal body")
 	}
 	body := new(types.WorkObject)
-	body.ProtoDecode(protoWorkObject)
+	body.ProtoDecode(protoWorkObject, db.Location())
 	if err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
@@ -428,7 +428,7 @@ func ReadPbCacheBody(db ethdb.Reader, hash common.Hash) *types.WorkObject {
 
 // WritePbCacheBody stores a block body into the database.
 func WritePbCacheBody(db ethdb.KeyValueWriter, hash common.Hash, body *types.WorkObject) {
-	protoBody, err := body.ProtoEncode()
+	protoBody, err := body.ProtoEncode(types.PhObject)
 	if err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to proto encode body")
 	}
@@ -550,8 +550,6 @@ func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash, woType int) *types.
 	switch woType {
 	case types.BlockObject:
 		key = blockWorkObjectHeaderKey(hash)
-	case types.TxObject:
-		key = txWorkObjectHeaderKey(hash)
 	case types.PhObject:
 		key = phWorkObjectHeaderKey(hash)
 	}
@@ -582,8 +580,6 @@ func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObject
 	switch woType {
 	case types.BlockObject:
 		key = blockWorkObjectHeaderKey(hash)
-	case types.TxObject:
-		key = txWorkObjectHeaderKey(hash)
 	case types.PhObject:
 		key = phWorkObjectHeaderKey(hash)
 	}
@@ -606,8 +602,6 @@ func DeleteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, woType in
 	switch woType {
 	case types.BlockObject:
 		key = blockWorkObjectHeaderKey(hash)
-	case types.TxObject:
-		key = txWorkObjectHeaderKey(hash)
 	case types.PhObject:
 		key = phWorkObjectHeaderKey(hash)
 	}
@@ -622,12 +616,11 @@ func ReadWorkObject(db ethdb.Reader, hash common.Hash, woType int) *types.WorkOb
 	if workObjectHeader == nil {
 		return nil
 	}
-	workObjectBody := ReadWorkObjectBody(db, hash, workObjectHeader.Location())
+	workObjectBody := ReadWorkObjectBody(db, hash)
 	if workObjectBody == nil {
 		return nil
 	}
-	tx, _, _, _ := ReadTransaction(db, workObjectHeader.TxHash())
-	return types.NewWorkObject(workObjectHeader, workObjectBody, tx) //TODO: mmtx transaction
+	return types.NewWorkObject(workObjectHeader, workObjectBody, &types.Transaction{}, woType) //TODO: mmtx transaction
 }
 
 // WriteWorkObject writes the work object of the terminus hash.
@@ -661,7 +654,7 @@ func WriteWorkObjects(db ethdb.KeyValueWriter, workObjects types.WorkObjects, wo
 }
 
 // ReadWorkObjectBody retreive's the work object body stored in hash.
-func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Location) *types.WorkObjectBody {
+func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash) *types.WorkObjectBody {
 	key := workObjectBodyKey(hash)
 	data, _ := db.Get(key)
 	if len(data) == 0 {
@@ -673,7 +666,7 @@ func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Locat
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal work object body")
 	}
 	workObjectBody := new(types.WorkObjectBody)
-	err = workObjectBody.ProtoDecode(protoWorkObjectBody, location)
+	err = workObjectBody.ProtoDecode(protoWorkObjectBody, db.Location())
 	if err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
@@ -975,7 +968,7 @@ const badWorkObjectToKeep = 10
 type badWorkObject struct {
 	woHeader *types.WorkObjectHeader
 	woBody   *types.WorkObjectBody
-	tx       types.Transaction
+	tx       *types.Transaction
 }
 
 // ProtoEncode returns the protobuf encoding of the bad workObject.
@@ -1059,7 +1052,7 @@ func ReadBadWorkObject(db ethdb.Reader, hash common.Hash) *types.WorkObject {
 	}
 	for _, bad := range *badWorkObjects {
 		if bad.woHeader.Hash() == hash {
-			return types.NewWorkObject(bad.woHeader, bad.woBody, types.NewEmptyTx()) //TODO: mmtx transaction
+			return types.NewWorkObject(bad.woHeader, bad.woBody, bad.tx, types.BlockObject) //TODO: mmtx transaction
 		}
 	}
 	return nil
@@ -1200,17 +1193,17 @@ func DeleteEtxSet(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
 	}
 }
 
-func ReadETX(db ethdb.Reader, hash common.Hash, location common.Location) *types.Transaction {
+func ReadETX(db ethdb.Reader, hash common.Hash) *types.WorkObject {
 	data, _ := db.Get(etxKey(hash))
 	if len(data) == 0 {
 		return nil
 	}
-	protoEtx := new(types.ProtoTransaction)
+	protoEtx := new(types.ProtoWorkObject)
 	if err := proto.Unmarshal(data, protoEtx); err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal etx")
 	}
-	etx := new(types.Transaction)
-	if err := etx.ProtoDecode(protoEtx, location); err != nil {
+	etx := new(types.WorkObject)
+	if err := etx.ProtoDecode(protoEtx, db.Location()); err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
 			"err":  err,
@@ -1268,7 +1261,7 @@ func ReadPendingEtxs(db ethdb.Reader, hash common.Hash) *types.PendingEtxs {
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal pending etxs")
 	}
 	pendingEtxs := new(types.PendingEtxs)
-	if err := pendingEtxs.ProtoDecode(protoPendingEtxs); err != nil {
+	if err := pendingEtxs.ProtoDecode(protoPendingEtxs, db.Location()); err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
 			"err":  err,
@@ -1422,7 +1415,7 @@ func ReadBloom(db ethdb.Reader, hash common.Hash) *types.Bloom {
 func WriteBloom(db ethdb.KeyValueWriter, hash common.Hash, bloom types.Bloom) {
 	data, err := bloom.ProtoEncode()
 	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to Proto encode pending etxs")
+		log.Global.WithField("err", err).Fatal("Failed to Proto encode bloom")
 	}
 	WriteBloomProto(db, hash, data)
 }
@@ -1471,8 +1464,8 @@ func DeleteBadHashesList(db ethdb.KeyValueWriter) {
 }
 
 // WriteInboundEtxs stores the inbound etxs for a given dom block hashes
-func WriteInboundEtxs(db ethdb.KeyValueWriter, hash common.Hash, inboundEtxs types.Transactions) {
-	protoInboundEtxs, err := inboundEtxs.ProtoEncode()
+func WriteInboundEtxs(db ethdb.KeyValueWriter, hash common.Hash, inboundEtxs types.WorkObjects) {
+	protoInboundEtxs, err := inboundEtxs.ProtoEncode(types.EtxObject)
 	if err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to proto encode inbound etxs")
 	}

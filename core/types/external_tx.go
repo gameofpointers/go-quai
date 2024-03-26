@@ -41,16 +41,16 @@ func (p *PendingEtxsRollup) IsValid(hasher TrieHasher) bool {
 		log.Global.WithField("p", p).Info("PendingEtxRollup: p/p.Header/p.EtxRollup is nil")
 		return false
 	}
-	return DeriveSha(p.EtxsRollup, hasher) == p.Header.EtxRollupHash()
+	return DeriveSha(p.EtxsRollup.Bytes(EtxObject), hasher) == p.Header.EtxRollupHash()
 }
 
 // ProtoEncode encodes the PendingEtxsRollup to protobuf format.
 func (p *PendingEtxsRollup) ProtoEncode() (*ProtoPendingEtxsRollup, error) {
-	header, err := p.Header.ProtoEncode()
+	header, err := p.Header.ProtoEncode(PEtxObject)
 	if err != nil {
 		return nil, err
 	}
-	etxRollup, err := p.EtxsRollup.ProtoEncode()
+	etxRollup, err := p.EtxsRollup.ProtoEncode(EtxObject)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (p *PendingEtxsRollup) ProtoDecode(protoPendingEtxsRollup *ProtoPendingEtxs
 		return errors.New("header is nil in ProtoDecode")
 	}
 	p.Header = new(WorkObject)
-	err := p.Header.ProtoDecode(protoPendingEtxsRollup.GetHeader())
+	err := p.Header.ProtoDecode(protoPendingEtxsRollup.GetHeader(), location)
 	if err != nil {
 		return err
 	}
@@ -96,16 +96,16 @@ func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
 		log.Global.WithField("p", p).Info("PendingEtx: p/p.Header/p.Etxs is nil")
 		return false
 	}
-	return DeriveSha(p.Etxs, hasher) == p.Header.EtxHash()
+	return DeriveSha(p.Etxs.Bytes(EtxObject), hasher) == p.Header.EtxHash()
 }
 
 // ProtoEncode encodes the PendingEtxs to protobuf format.
 func (p *PendingEtxs) ProtoEncode() (*ProtoPendingEtxs, error) {
-	header, err := p.Header.ProtoEncode()
+	header, err := p.Header.ProtoEncode(PEtxObject)
 	if err != nil {
 		return nil, err
 	}
-	etxs, err := p.Etxs.ProtoEncode()
+	etxs, err := p.Etxs.ProtoEncode(EtxObject)
 	if err != nil {
 		return nil, err
 	}
@@ -116,17 +116,17 @@ func (p *PendingEtxs) ProtoEncode() (*ProtoPendingEtxs, error) {
 }
 
 // ProtoDecode decodes the protobuf to a PendingEtxs representation.
-func (p *PendingEtxs) ProtoDecode(protoPendingEtxs *ProtoPendingEtxs) error {
+func (p *PendingEtxs) ProtoDecode(protoPendingEtxs *ProtoPendingEtxs, location common.Location) error {
 	if protoPendingEtxs.Header == nil {
 		return errors.New("header is nil in ProtoDecode")
 	}
 	p.Header = new(WorkObject)
-	err := p.Header.ProtoDecode(protoPendingEtxs.GetHeader())
+	err := p.Header.ProtoDecode(protoPendingEtxs.GetHeader(), location)
 	if err != nil {
 		return err
 	}
 	p.Etxs = WorkObjects{}
-	err = p.Etxs.ProtoDecode(protoPendingEtxs.GetEtxs(), p.Header.Location())
+	err = p.Etxs.ProtoDecode(protoPendingEtxs.GetEtxs(), location)
 	if err != nil {
 		return err
 	}

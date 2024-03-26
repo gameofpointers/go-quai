@@ -423,7 +423,7 @@ func (s *PublicBlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context,
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index], types.NewEmptyTx(), s.b.NodeCtx())
+		block = types.NewWorkObjectWithHeader(uncles[index], &types.Transaction{}, s.b.NodeCtx(), types.BlockObject)
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -443,7 +443,7 @@ func (s *PublicBlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, b
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index], types.NewEmptyTx(), s.b.NodeCtx())
+		block = types.NewWorkObjectWithHeader(uncles[index], uncles[index].Tx(), s.b.NodeCtx(), types.BlockObject)
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -1505,6 +1505,9 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.WorkObject) (co
 	if !b.ProcessingState() {
 		return common.Hash{}, errors.New("submitTransaction call can only be made on chain processing the state")
 	}
+	// Any time a transaction is ingressed, reset the work object body
+	tx.SetBody(nil)
+
 	if tx.Type() == types.QiTxType {
 		if err := b.SendTx(ctx, tx); err != nil {
 			return common.Hash{}, err
@@ -1556,7 +1559,7 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 	if err != nil {
 		return common.Hash{}, err
 	}
-	err = tx.ProtoDecode(protoTransaction)
+	err = tx.ProtoDecode(protoTransaction, s.b.NodeLocation())
 	if err != nil {
 		return common.Hash{}, err
 	}

@@ -108,7 +108,7 @@ type Engine interface {
 	//
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
-	Finalize(chain ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction,
+	Finalize(chain ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.WorkObject,
 		uncles []*types.WorkObject)
 
 	// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block

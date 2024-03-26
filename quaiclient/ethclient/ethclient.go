@@ -145,14 +145,14 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		}
 	}
 	// Fill the sender cache of transactions in the block.
-	txs := make([]*types.Transaction, len(body.Transactions))
+	txs := make([]*types.WorkObject, len(body.Transactions))
 	for i, tx := range body.Transactions {
 		if tx.From != nil {
 			setSenderFromServer(tx.tx, *tx.From, body.Hash)
 		}
 		txs[i] = tx.tx
 	}
-	etxs := make([]*types.Transaction, len(body.ExtTransactions))
+	etxs := make([]*types.WorkObject, len(body.ExtTransactions))
 	for i, etx := range body.ExtTransactions {
 		etxs[i] = etx.tx
 	}
@@ -165,7 +165,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		}
 		txs[i] = tx.tx
 	}
-	return types.NewWorkObject(head.WorkObjectHeader(), types.NewWorkObjectBody(head, txs, etxs, uncles, manifest, nil, nil, 0), types.NewEmptyTx()), nil //TODO: mmtx don't know nodeCtx
+	return types.NewWorkObject(head.WorkObjectHeader(), types.NewWorkObjectBody(head, txs, etxs, uncles, manifest, nil, nil, 0), nil, types.BlockObject), nil
 }
 
 // HeaderByHash returns the block header with the given hash.
@@ -190,7 +190,7 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.H
 }
 
 type rpcTransaction struct {
-	tx *types.Transaction
+	tx *types.WorkObject
 	txExtraInfo
 }
 
@@ -208,7 +208,7 @@ func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
 }
 
 // TransactionByHash returns the transaction with the given hash.
-func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx *types.Transaction, isPending bool, err error) {
+func (ec *Client) TransactionByHash(ctx context.Context, hash common.Hash) (tx *types.WorkObject, isPending bool, err error) {
 	var json *rpcTransaction
 	err = ec.c.CallContext(ctx, &json, "eth_getTransactionByHash", hash)
 	if err != nil {
@@ -257,7 +257,7 @@ func (ec *Client) TransactionCount(ctx context.Context, blockHash common.Hash) (
 }
 
 // TransactionInBlock returns a single transaction at index in the given block.
-func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash, index uint) (*types.Transaction, error) {
+func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash, index uint) (*types.WorkObject, error) {
 	var json *rpcTransaction
 	err := ec.c.CallContext(ctx, &json, "eth_getTransactionByBlockHashAndIndex", blockHash, hexutil.Uint64(index))
 	if err != nil {
@@ -499,7 +499,7 @@ func (ec *Client) EstimateGas(ctx context.Context, msg quai.CallMsg) (uint64, er
 // If the transaction was a contract creation use the TransactionReceipt method to get the
 // contract address after the transaction has been mined.
 func (ec *Client) SendTransaction(ctx context.Context, tx *types.WorkObject) error {
-	protoTx, err := tx.ProtoEncode()
+	protoTx, err := tx.ProtoEncode(types.TxObject)
 	if err != nil {
 		return err
 	}

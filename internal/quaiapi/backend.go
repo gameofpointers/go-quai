@@ -99,7 +99,7 @@ type Backend interface {
 	SendTx(ctx context.Context, signedTx *types.WorkObject) error
 	SendRemoteTx(tx *types.WorkObject) error
 	GetTransaction(ctx context.Context, txHash common.Hash) (*types.WorkObject, common.Hash, uint64, uint64, error)
-	GetPoolTransactions() (types.WorkObject, error)
+	GetPoolTransactions() (types.WorkObjects, error)
 	GetPoolTransaction(txHash common.Hash) *types.WorkObject
 	GetPoolNonce(ctx context.Context, addr common.Address) (uint64, error)
 	Stats() (pending int, queued int)

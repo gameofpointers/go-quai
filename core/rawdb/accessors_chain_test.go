@@ -131,10 +131,10 @@ func TestWorkObjectStorage(t *testing.T) {
 
 	// Create a test header to move around the database and make sure it's really new
 	woBody := &types.WorkObjectBody{}
-	woBody.SetTransactions([]*types.Transaction{types.NewEmptyTx()})
-	woBody.SetExtTransactions([]*types.Transaction{types.NewEmptyTx()})
+	woBody.SetTransactions([]*types.WorkObject{})
+	woBody.SetExtTransactions([]*types.WorkObject{})
 	woBody.SetHeader(types.EmptyHeader(2).Header())
-	header := types.NewWorkObject(types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), types.EmptyRootHash, types.BlockNonce{23}, common.LocationFromAddressBytes([]byte{0x01, 0x01})), woBody, types.NewEmptyTx())
+	header := types.NewWorkObject(types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), types.EmptyRootHash, types.BlockNonce{23}, common.LocationFromAddressBytes([]byte{0x01, 0x01})), woBody, &types.Transaction{})
 
 	if entry := ReadWorkObject(db, header.Hash(), types.BlockObject); entry != nil {
 		t.Fatalf("Non existent header returned: %v", entry)

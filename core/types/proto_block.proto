@@ -121,6 +121,16 @@ message ProtoReceiptsForStorage {
   repeated ProtoReceiptForStorage receipts = 1;
 }
 
+message ProtoReceiptConsensus {
+  bytes post_state_or_status = 1;
+  uint64 cumulative_gas_used = 2;
+  bytes bloom = 3;
+  ProtoLogsForStorage logs = 4;
+  ProtoWorkObjects etxs = 5;
+}
+
+message ProtoReceiptsConsensus { repeated ProtoReceiptConsensus receipts = 1; }
+
 message ProtoLogForStorage {
   common.ProtoAddress address = 1;
   repeated common.ProtoHash topics = 2;
@@ -139,9 +149,7 @@ message ProtoTermini {
   repeated common.ProtoHash sub_termini = 2;
 }
 
-message ProtoEtxSet {
-  optional bytes etx_hashes = 1;
-}
+message ProtoEtxSet { optional bytes etx_hashes = 1; }
 
 message ProtoPendingEtxs {
   optional ProtoWorkObject header = 1;

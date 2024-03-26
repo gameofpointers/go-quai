@@ -5,7 +5,6 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
@@ -17,8 +16,8 @@ const (
 )
 
 // gets the name of the topic for the given type of data
-func TopicName(location common.Location, data interface{}) (string, error) {
-	switch data.(type) {
+func TopicName(location common.Location, data interface{}, datatype interface{}) (string, error) {
+	switch datatype.(type) {
 	case *types.WorkObject:
 		return strings.Join([]string{location.Name(), C_workObjectType}, "/"), nil
 	case common.Hash:
@@ -28,17 +27,4 @@ func TopicName(location common.Location, data interface{}) (string, error) {
 	default:
 		return "", ErrUnsupportedType
 	}
-}
-
-func getTopicType(topic string) string {
-	return topic[strings.LastIndex(topic, "/")+1:]
-}
-
-// lists our peers which provide the associated topic
-func (g *PubsubManager) PeersForTopic(location common.Location, data interface{}) ([]peer.ID, error) {
-	topicName, err := TopicName(location, data)
-	if err != nil {
-		return nil, err
-	}
-	return g.topics[topicName].ListPeers(), nil
 }

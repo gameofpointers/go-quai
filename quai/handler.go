@@ -100,7 +100,7 @@ func (h *handler) txBroadcastLoop() {
 		select {
 		case event := <-h.txsCh:
 			for _, tx := range event.Txs {
-				err := h.p2pBackend.Broadcast(h.nodeLocation, tx)
+				err := h.p2pBackend.Broadcast(h.nodeLocation, tx, &types.Transaction{})
 				if err != nil {
 					log.Global.Error("Error broadcasting transaction hash", tx.Hash(), err)
 				}

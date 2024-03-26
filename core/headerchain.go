@@ -174,7 +174,7 @@ func (hc *HeaderChain) CollectSubRollup(b *types.WorkObject) (types.WorkObjects,
 		}
 		// Rolluphash is specifically for zone rollup, which can only be validated by region
 		if nodeCtx == common.REGION_CTX {
-			if subRollupHash := types.DeriveSha(subRollup, trie.NewStackTrie(nil)); subRollupHash != b.EtxRollupHash() {
+			if subRollupHash := types.DeriveSha(subRollup.Bytes(types.EtxObject), trie.NewStackTrie(nil)); subRollupHash != b.EtxRollupHash() {
 				return nil, errors.New("sub rollup does not match sub rollup hash")
 			}
 		}
@@ -292,7 +292,7 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		if manifest == nil {
 			return errors.New("manifest not found for parent")
 		}
-		if header.ManifestHash(nodeCtx) != types.DeriveSha(manifest, trie.NewStackTrie(nil)) {
+		if header.ManifestHash(nodeCtx) != types.DeriveSha(manifest.Bytes(), trie.NewStackTrie(nil)) {
 			return errors.New("manifest does not match hash")
 		}
 	}

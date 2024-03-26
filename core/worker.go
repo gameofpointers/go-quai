@@ -545,7 +545,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 
 	if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 		if coinbase.IsInQiLedgerScope() {
-			work.txs = append(work.txs, types.NewWorkObjectWithHeader(work.wo, types.NewTx(&types.QiTx{}), common.ZONE_CTX)) // placeholder for coinbase
+			work.txs = append(work.txs, types.NewWorkObjectWithHeader(work.wo, types.NewTx(&types.QiTx{}), common.ZONE_CTX, types.TxObject)) // placeholder for coinbase
 		}
 		// Fill pending transactions from the txpool
 		w.adjustGasLimit(nil, work, block)
@@ -955,7 +955,8 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 		proposedWoHeader := types.NewWorkObjectHeader(header.Hash(), header.ParentHash(nodeCtx), header.Number(nodeCtx), header.Difficulty(), types.EmptyRootHash, header.Nonce(), header.Location())
 		proposedWoBody := types.NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, nodeCtx)
-		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, types.NewEmptyTx())
+		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, &types.Transaction{}, types.PhObject)
+		log.Global.Warnf("parent utxo root %v", parent.UTXORoot())
 		env, err := w.makeEnv(parent, proposedWo, w.coinbase)
 		if err != nil {
 			w.logger.WithField("err", err).Error("Failed to create sealing context")
@@ -991,7 +992,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	} else {
 		proposedWoHeader := types.NewWorkObjectHeader(header.Hash(), header.ParentHash(nodeCtx), header.Number(nodeCtx), header.Difficulty(), types.EmptyRootHash, header.Nonce(), header.Location())
 		proposedWoBody := types.NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, nodeCtx)
-		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, types.NewEmptyTx())
+		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, &types.Transaction{}, types.PhObject)
 		return &environment{wo: proposedWo}, nil
 	}
 
@@ -1015,7 +1016,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment, block *typ
 			if (hash == common.Hash{}) { // no more ETXs
 				break
 			}
-			entry := rawdb.ReadWorkObject(w.hc.bc.db, hash, types.TxObject)
+			entry := rawdb.ReadETX(w.hc.bc.db, hash)
 			if entry == nil {
 				log.Global.Errorf("ETX %s not found in the database!", hash.String())
 				break
@@ -1084,7 +1085,7 @@ func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 		// write the manifest into the disk
 		rawdb.WriteManifest(w.workerDb, header.Hash(), manifest)
 	}
-	manifestHash := types.DeriveSha(manifest, trie.NewStackTrie(nil))
+	manifestHash := types.DeriveSha(manifest.Bytes(), trie.NewStackTrie(nil))
 
 	return manifestHash
 }
@@ -1112,7 +1113,7 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *typ
 				}
 				etxRollup = append(etxRollup, parent.ExtTransactions()...)
 			}
-			etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
+			etxRollupHash := types.DeriveSha(etxRollup.Bytes(types.EtxObject), trie.NewStackTrie(nil))
 			wo.Header().SetEtxRollupHash(etxRollupHash)
 		}
 	}
@@ -1215,7 +1216,7 @@ func (w *worker) processQiTx(tx *types.WorkObject, env *environment) error {
 	}
 	var ETXRCount int
 	var ETXPCount int
-	etxs := make([]*types.Transaction, 0)
+	etxs := make([]*types.WorkObject, 0)
 	totalQitOut := big.NewInt(0)
 	utxosCreate := make(map[types.OutPoint]*types.UtxoEntry)
 	for txOutIdx, txOut := range tx.TxOut() {
@@ -1259,7 +1260,11 @@ func (w *worker) processQiTx(tx *types.WorkObject, env *environment) error {
 			// We should require some kind of extra fee here
 			etxInner := types.ExternalTx{Value: big.NewInt(int64(txOut.Denomination)), To: &toAddr, Sender: common.ZeroAddress(location), OriginatingTxHash: tx.Hash(), ETXIndex: uint16(txOutIdx), Gas: params.TxGas, ChainID: w.chainConfig.ChainID}
 			etx := types.NewTx(&etxInner)
-			etxs = append(etxs, etx)
+
+			woHeader := types.NewWorkObjectHeader(common.Hash{}, common.Hash{}, nil, nil, etx.Hash(), types.BlockNonce{}, w.hc.NodeLocation())
+			etxWorkObject := types.NewWorkObject(woHeader, nil, etx, types.TxObject)
+
+			etxs = append(etxs, etxWorkObject)
 			w.logger.Debug("Added UTXO ETX to block")
 		} else {
 			// This output creates a normal UTXO
@@ -1342,12 +1347,12 @@ func createCoinbaseTxWithFees(header *types.WorkObject, fees *big.Int, state *st
 		TxOut: outs,
 	}
 	tx := types.NewTx(qiTx)
+	// Wrap this in a WorkObject
+	wo := types.NewWorkObjectWithHeader(header, tx, common.ZONE_CTX, types.TxObject)
 	for i, out := range qiTx.TxOut {
 		// this may be unnecessary
-		state.CreateUTXO(tx.Hash(), uint16(i), types.NewUtxoEntry(&out))
+		state.CreateUTXO(wo.Hash(), uint16(i), types.NewUtxoEntry(&out))
 	}
 
-	// Wrap this in a WorkObject
-	wo := types.NewWorkObjectWithHeader(header, tx, common.ZONE_CTX)
 	return wo, nil
 }

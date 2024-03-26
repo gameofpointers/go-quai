@@ -464,7 +464,7 @@ func (progpow *Progpow) Prepare(chain consensus.ChainHeaderReader, header *types
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject) {
+func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.WorkObject, uncles []*types.WorkObject) {
 	nodeLocation := progpow.config.NodeLocation
 	nodeCtx := progpow.config.NodeLocation.Context()
 	// Accumulate any block and uncle rewards and commit the final state root
@@ -500,7 +500,7 @@ func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *type
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
+func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.WorkObject, uncles []*types.WorkObject, etxs []*types.WorkObject, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := progpow.NodeLocation().Context()
 
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
@@ -508,8 +508,8 @@ func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, h
 		progpow.Finalize(chain, header, state, txs, uncles)
 	}
 
-	// Header seems complete, assemble into a block and return
-	return types.NewWorkObject(header.WorkObjectHeader(), header.Body(), types.NewEmptyTx()), nil
+	// Header seems complete, assemble into a block and returntypes.Tra
+	return types.NewWorkObject(header.WorkObjectHeader(), header.Body(), nil, types.BlockObject), nil
 }
 
 func (progpow *Progpow) NodeLocation() common.Location {

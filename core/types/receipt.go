@@ -29,6 +29,7 @@ import (
 	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rlp"
+	"google.golang.org/protobuf/proto"
 )
 
 //go:generate gencodec -type Receipt -field-override receiptMarshaling -out gen_receipt_json.go
@@ -241,7 +242,7 @@ func (r *ReceiptForStorage) ProtoEncode() (*ProtoReceiptForStorage, error) {
 		CumulativeGasUsed: r.CumulativeGasUsed,
 		ContractAddress:   r.ContractAddress.ProtoEncode(),
 	}
-	protoEtxs, err := r.Etxs.ProtoEncode()
+	protoEtxs, err := r.Etxs.ProtoEncode(EtxObject)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +284,7 @@ func (r *ReceiptForStorage) ProtoDecode(protoReceipt *ProtoReceiptForStorage, lo
 	}
 	for _, protoEtx := range protoReceipt.Etxs.GetWorkObjects() {
 		etx := new(WorkObject)
-		err := etx.ProtoDecode(protoEtx)
+		err := etx.ProtoDecode(protoEtx, location)
 		if err != nil {
 			return err
 		}
@@ -344,6 +345,55 @@ func decodeStoredReceiptRLP(r *ReceiptForStorage, blob []byte) error {
 	}
 	r.Bloom = CreateBloom(Receipts{(*Receipt)(r)})
 
+	return nil
+}
+
+func (r *Receipt) ProtoEncode() (*ProtoReceiptConsensus, error) {
+	ProtoReceiptConsensus := &ProtoReceiptConsensus{
+		PostStateOrStatus: (*Receipt)(r).statusEncoding(),
+		CumulativeGasUsed: r.CumulativeGasUsed,
+		Bloom:             r.Bloom.Bytes(),
+	}
+	protoEtxs, err := r.Etxs.ProtoEncode(EtxObject)
+	if err != nil {
+		return nil, err
+	}
+	ProtoReceiptConsensus.Etxs = protoEtxs
+
+	protoLogs := &ProtoLogsForStorage{}
+	protoLogs.Logs = make([]*ProtoLogForStorage, len(r.Logs))
+	for i, log := range r.Logs {
+		protoLog := (*LogForStorage)(log).ProtoEncode()
+		protoLogs.Logs[i] = protoLog
+	}
+	return ProtoReceiptConsensus, nil
+}
+
+func (r *Receipt) ProtoDecode(protoReceipt *ProtoReceiptConsensus, location common.Location) error {
+	if protoReceipt == nil {
+		return errors.New("protoReceipt is nil in ProtoDecode")
+	}
+	if err := (*Receipt)(r).setStatus(protoReceipt.PostStateOrStatus); err != nil {
+		return err
+	}
+	r.CumulativeGasUsed = protoReceipt.CumulativeGasUsed
+	r.Bloom.SetBytes(protoReceipt.Bloom)
+	for _, protoLog := range protoReceipt.Logs.GetLogs() {
+		log := new(LogForStorage)
+		err := log.ProtoDecode(protoLog, location)
+		if err != nil {
+			return err
+		}
+		r.Logs = append(r.Logs, (*Log)(log))
+	}
+	for _, protoEtx := range protoReceipt.Etxs.GetWorkObjects() {
+		etx := new(WorkObject)
+		err := etx.ProtoDecode(protoEtx, location)
+		if err != nil {
+			return err
+		}
+		r.Etxs = append(r.Etxs, etx)
+	}
 	return nil
 }
 
@@ -412,4 +462,40 @@ func (r Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, num
 		}
 	}
 	return nil
+}
+
+func (rs *Receipts) ProtoEncode() (*ProtoReceiptsConsensus, error) {
+	protoReceipts := make([]*ProtoReceiptConsensus, len(*rs))
+	for i, r := range *rs {
+		protoReceipt, err := r.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		protoReceipts[i] = protoReceipt
+	}
+	return &ProtoReceiptsConsensus{Receipts: protoReceipts}, nil
+}
+
+func (rs *Receipts) ProtoDecode(protoReceipts *ProtoReceiptsConsensus, location common.Location) error {
+	for _, protoReceipt := range protoReceipts.Receipts {
+		receipt := new(Receipt)
+		err := receipt.ProtoDecode(protoReceipt, location)
+		if err != nil {
+			return err
+		}
+		*rs = append(*rs, receipt)
+	}
+	return nil
+}
+
+func (rs Receipts) Bytes() common.Bytes {
+	protoReceipts, err := rs.ProtoEncode()
+	if err != nil {
+		return nil
+	}
+	marshaledReceipts, err := proto.Marshal(protoReceipts)
+	if err != nil {
+		return nil
+	}
+	return marshaledReceipts
 }

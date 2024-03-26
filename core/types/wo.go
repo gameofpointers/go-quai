@@ -54,10 +54,26 @@ type WorkObjectBody struct {
 const (
 	BlockObject = iota
 	TxObject
+	EtxObject
+	PEtxObject
 	PhObject
 )
 
 type WorkObjects []*WorkObject
+
+func (wo WorkObjects) Bytes(kind int) common.Bytes {
+	protoWorkObject, err := wo.ProtoEncode(kind)
+	if err != nil {
+		log.Global.Error("error encoding work object to proto")
+		return nil
+	}
+	data, err := proto.Marshal(protoWorkObject)
+	if err != nil {
+		log.Global.Error("error marshalling work object")
+		return nil
+	}
+	return data
+}
 
 func (wo *WorkObject) Header() *Header {
 	return wo.woBody.header
@@ -88,18 +104,30 @@ func (wo *WorkObject) NumberU64(nodeCtx int) uint64 {
 }
 
 func (wo *WorkObject) Transactions() WorkObjects {
+	if wo.woBody == nil {
+		return nil
+	}
 	return wo.woBody.transactions
 }
 
 func (wo *WorkObject) ExtTransactions() WorkObjects {
+	if wo.woBody == nil {
+		return nil
+	}
 	return wo.woBody.ExtTransactions()
 }
 
 func (wo *WorkObject) Uncles() WorkObjects {
+	if wo.woBody == nil {
+		return nil
+	}
 	return wo.woBody.uncles
 }
 
 func (wo *WorkObject) Manifest() BlockManifest {
+	if wo.woBody == nil {
+		return nil
+	}
 	return wo.woBody.manifest
 }
 
@@ -395,12 +423,7 @@ func (wo *WorkObject) EncodeRLP(w io.Writer) error {
 }
 
 func (wo *WorkObject) Size() common.StorageSize {
-	if size := wo.size.Load(); size != nil {
-		if val, ok := size.(common.StorageSize); ok {
-			return val
-		}
-	}
-	return -1
+	return 0
 }
 
 func (wo *WorkObject) Type() uint8 {
@@ -567,25 +590,49 @@ func (wo *WorkObject) TxType() byte {
 	return wo.tx.Type()
 }
 
-func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx *Transaction) *WorkObject {
-	newWo := &WorkObject{
-		woHeader: woHeader,
-		woBody:   woBody,
-		tx:       tx,
+func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx *Transaction, objectType int) *WorkObject {
+	switch objectType {
+	case TxObject:
+		newWo := &WorkObject{
+			woHeader: woHeader,
+			tx:       tx,
+		}
+		return newWo
+	case EtxObject:
+		newWo := &WorkObject{
+			tx: tx,
+		}
+		return newWo
+	case PEtxObject:
+		newWoBody := &WorkObjectBody{header: woBody.header}
+		newWo := &WorkObject{
+			woHeader: woHeader,
+			woBody:   newWoBody,
+			tx:       tx,
+		}
+		return newWo
+	default:
+		// For now both the PhObject and Block object will follow the same rules
+		newWo := &WorkObject{
+			woHeader: woHeader,
+			woBody:   woBody,
+			tx:       tx,
+		}
+		if woBody != nil {
+			newWo.SetHeader(woBody.Header())
+			newWo.SetTransactions(woBody.Transactions())
+			newWo.SetExtTransactions(woBody.ExtTransactions())
+			newWo.SetUncles(woBody.Uncles())
+			newWo.SetManifest(woBody.Manifest())
+		}
+		return newWo
 	}
-	newWo.SetHeader(woBody.Header())
-	newWo.SetTransactions(woBody.Transactions())
-	newWo.SetExtTransactions(woBody.ExtTransactions())
-	newWo.SetUncles(woBody.Uncles())
-	newWo.SetManifest(woBody.Manifest())
-	return newWo
 }
 
 func NewBlock(header *WorkObject, txs []*WorkObject, uncles []*WorkObject, etxs WorkObjects, subManifest BlockManifest, receipts []*Receipt, hasher TrieHasher, nodeCtx int) *WorkObject {
 	b := &WorkObject{
 		woHeader: CopyWorkObjectHeader(header.woHeader),
 		woBody:   &WorkObjectBody{},
-		tx:       NewEmptyTx(),
 	}
 
 	b.woBody.header = CopyHeader(header.Header())
@@ -593,15 +640,17 @@ func NewBlock(header *WorkObject, txs []*WorkObject, uncles []*WorkObject, etxs 
 	if len(txs) == 0 {
 		b.woBody.header.SetTxHash(EmptyRootHash)
 	} else {
-		b.woBody.header.SetTxHash(DeriveSha(WorkObjects(txs), hasher))
 		b.woBody.transactions = make(WorkObjects, len(txs))
-		copy(b.woBody.transactions, txs)
+		for i := range txs {
+			b.woBody.transactions[i] = CopyWorkObject(txs[i])
+		}
+		b.woBody.header.SetTxHash(DeriveSha(WorkObjects(txs).Bytes(TxObject), hasher))
 	}
 
 	if len(receipts) == 0 {
 		b.woBody.header.SetReceiptHash(EmptyRootHash)
 	} else {
-		b.woBody.header.SetReceiptHash(DeriveSha(Receipts(receipts), hasher))
+		b.woBody.header.SetReceiptHash(DeriveSha(Receipts(receipts).Bytes(), hasher))
 	}
 
 	if len(uncles) == 0 {
@@ -617,7 +666,7 @@ func NewBlock(header *WorkObject, txs []*WorkObject, uncles []*WorkObject, etxs 
 	if len(etxs) == 0 {
 		b.woBody.header.SetEtxHash(EmptyRootHash)
 	} else {
-		b.woBody.header.SetEtxHash(DeriveSha(WorkObjects(etxs), hasher))
+		b.woBody.header.SetEtxHash(DeriveSha(WorkObjects(etxs).Bytes(EtxObject), hasher))
 		b.woBody.extTransactions = make(WorkObjects, len(etxs))
 		copy(b.woBody.extTransactions, etxs)
 	}
@@ -627,7 +676,7 @@ func NewBlock(header *WorkObject, txs []*WorkObject, uncles []*WorkObject, etxs 
 	// the subordinate's manifest hash.
 	subManifestHash := EmptyRootHash
 	if len(subManifest) != 0 {
-		subManifestHash = DeriveSha(subManifest, hasher)
+		subManifestHash = DeriveSha(subManifest.Bytes(), hasher)
 		b.woBody.manifest = make(BlockManifest, len(subManifest))
 		copy(b.woBody.manifest, subManifest)
 	}
@@ -639,10 +688,10 @@ func NewBlock(header *WorkObject, txs []*WorkObject, uncles []*WorkObject, etxs 
 	return b
 }
 
-func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int) *WorkObject {
+func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, objectType int) *WorkObject {
 	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.Number(common.ZONE_CTX), header.woHeader.difficulty, header.woHeader.txHash, header.woHeader.nonce, header.Location())
 	woBody := NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, nodeCtx)
-	return NewWorkObject(woHeader, woBody, tx)
+	return NewWorkObject(woHeader, woBody, tx, objectType)
 }
 
 func CopyWorkObject(wo *WorkObject) *WorkObject {
@@ -651,53 +700,142 @@ func CopyWorkObject(wo *WorkObject) *WorkObject {
 		woBody:   CopyWorkObjectBody(wo.woBody),
 		tx:       wo.tx,
 	}
-	newWo.SetHeader(wo.Header())
+	// woBody is nil in the case of this work object being a transaction
+	if wo.woBody != nil {
+		newWo.SetHeader(wo.Header())
+	}
 	return newWo
 }
 func (wo *WorkObject) RPCMarshalWorkObject() map[string]interface{} {
-	result := map[string]interface{}{
-		"woHeader": wo.woHeader.RPCMarshalWorkObjectHeader(),
-		"woBody":   wo.woBody.RPCMarshalWorkObjectBody(),
-		"tx":       wo.tx,
+	result := make(map[string]interface{})
+	if wo.woHeader != nil {
+		result["woHeader"] = wo.woHeader.RPCMarshalWorkObjectHeader()
+	}
+	if wo.woBody != nil {
+		result["woBody"] = wo.woBody.RPCMarshalWorkObjectBody()
+	}
+	if wo.tx != nil && wo.tx.inner != nil {
+		result["tx"] = wo.tx
 	}
 	return result
 }
 
-func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
-	header, err := wo.woHeader.ProtoEncode()
-	if err != nil {
-		return nil, err
+func (wo *WorkObject) ProtoEncode(kind int) (*ProtoWorkObject, error) {
+	switch kind {
+	case TxObject: // Only need to encode the work object header and the tx
+		header, err := wo.woHeader.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		tx, err := wo.tx.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		return &ProtoWorkObject{
+			WoHeader: header,
+			Tx:       tx,
+		}, nil
+	case EtxObject: // Only encode the etx
+		tx, err := wo.tx.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		return &ProtoWorkObject{
+			Tx: tx,
+		}, nil
+	case PEtxObject:
+		header, err := wo.woHeader.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		bodyHeader, err := wo.woBody.header.ProtoEncode()
+		if err != nil {
+			return nil, errors.New("error encoding work object body header")
+		}
+		return &ProtoWorkObject{
+			WoHeader: header,
+			WoBody:   &ProtoWorkObjectBody{Header: bodyHeader},
+		}, nil
+
+	default: // In the case of block and ph object, we encode work object header and body and tx
+		header, err := wo.woHeader.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		body, err := wo.woBody.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		// TODO: this needs to be enabled after the coinbase tx
+		// tx, err := wo.tx.ProtoEncode()
+		// if err != nil {
+		// 	return nil, err
+		// }
+		return &ProtoWorkObject{
+			WoHeader: header,
+			WoBody:   body,
+			// Tx:       tx,
+		}, nil
 	}
-	body, err := wo.woBody.ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	tx, err := wo.tx.ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
-	return &ProtoWorkObject{
-		WoHeader: header,
-		WoBody:   body,
-		Tx:       tx,
-	}, nil
 }
 
-func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject) error {
-	wo.woHeader = new(WorkObjectHeader)
-	err := wo.woHeader.ProtoDecode(data.GetWoHeader())
-	if err != nil {
-		return err
+func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Location) error {
+	var kind int
+	if data.WoHeader == nil && data.WoBody == nil {
+		kind = EtxObject
+	} else if data.WoHeader != nil && data.WoBody == nil {
+		kind = TxObject
+	} else if data.WoBody != nil && data.WoBody.Header != nil && data.WoBody.Transactions == nil {
+		kind = PEtxObject
+	} else {
+		kind = BlockObject
 	}
-	wo.woBody = new(WorkObjectBody)
-	err = wo.woBody.ProtoDecode(data.GetWoBody(), wo.woHeader.Location())
-	if err != nil {
-		return err
-	}
-	wo.tx = new(Transaction)
-	err = wo.tx.ProtoDecode(data.GetTx(), wo.woHeader.Location())
-	if err != nil {
-		return err
+
+	switch kind {
+	case TxObject:
+		wo.woHeader = new(WorkObjectHeader)
+		err := wo.woHeader.ProtoDecode(data.GetWoHeader())
+		if err != nil {
+			return err
+		}
+		wo.tx = new(Transaction)
+		err = wo.tx.ProtoDecode(data.GetTx(), location)
+		if err != nil {
+			return err
+		}
+	case EtxObject:
+		wo.tx = new(Transaction)
+		err := wo.tx.ProtoDecode(data.GetTx(), location)
+		if err != nil {
+			return err
+		}
+	case PEtxObject:
+		wo.woHeader = new(WorkObjectHeader)
+		err := wo.woHeader.ProtoDecode(data.GetWoHeader())
+		if err != nil {
+			return err
+		}
+		wo.woBody = new(WorkObjectBody)
+		bodyHeader := new(Header)
+		bodyHeader.ProtoDecode(data.GetWoBody().Header, location)
+		wo.woBody.SetHeader(bodyHeader)
+
+	default:
+		wo.woHeader = new(WorkObjectHeader)
+		err := wo.woHeader.ProtoDecode(data.GetWoHeader())
+		if err != nil {
+			return err
+		}
+		wo.woBody = new(WorkObjectBody)
+		err = wo.woBody.ProtoDecode(data.GetWoBody(), location)
+		if err != nil {
+			return err
+		}
+		// wo.tx = new(Transaction)
+		// err = wo.tx.ProtoDecode(data.GetTx(), location)
+		// if err != nil {
+		// 	return err
+		// }
 	}
 	return nil
 }
@@ -803,7 +941,7 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		"number":     (*hexutil.Big)(wh.Number()),
 		"difficulty": (*hexutil.Big)(wh.Difficulty()),
 		"nonce":      wh.Nonce(),
-		"location":   wh.Location(),
+		"location":   hexutil.Bytes(wh.Location()),
 		"txHash":     wh.TxHash(),
 		"mixHash":    wh.MixHash(),
 	}
@@ -940,6 +1078,10 @@ func (wb *WorkObjectBody) SetManifest(manifest BlockManifest) {
 	copy(wb.manifest, manifest)
 }
 
+func NewWorkObjectBodyWithHeader(header *Header) *WorkObjectBody {
+	return &WorkObjectBody{header: CopyHeader(header)}
+}
+
 func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, uncles []*WorkObject, subManifest BlockManifest, receipts []*Receipt, hasher TrieHasher, nodeCtx int) *WorkObjectBody {
 	wb := &WorkObjectBody{header: CopyHeader(header.Body().header)}
 
@@ -947,7 +1089,7 @@ func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, 
 	if len(txs) == 0 {
 		wb.header.SetTxHash(EmptyRootHash)
 	} else {
-		wb.header.SetTxHash(DeriveSha(WorkObjects(txs), hasher))
+		wb.header.SetTxHash(DeriveSha(WorkObjects(txs).Bytes(TxObject), hasher))
 		wb.transactions = make(WorkObjects, len(txs))
 		copy(wb.transactions, txs)
 	}
@@ -955,7 +1097,7 @@ func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, 
 	if len(receipts) == 0 {
 		wb.header.SetReceiptHash(EmptyRootHash)
 	} else {
-		wb.header.SetReceiptHash(DeriveSha(Receipts(receipts), hasher))
+		wb.header.SetReceiptHash(DeriveSha(Receipts(receipts).Bytes(), hasher))
 	}
 
 	if len(uncles) == 0 {
@@ -971,7 +1113,7 @@ func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, 
 	if len(etxs) == 0 {
 		wb.header.SetEtxHash(EmptyRootHash)
 	} else {
-		wb.header.SetEtxHash(DeriveSha(WorkObjects(etxs), hasher))
+		wb.header.SetEtxHash(DeriveSha(WorkObjects(etxs).Bytes(EtxObject), hasher))
 		wb.extTransactions = make(WorkObjects, len(etxs))
 		copy(wb.extTransactions, etxs)
 	}
@@ -981,7 +1123,7 @@ func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, 
 	// the subordinate's manifest hash.
 	subManifestHash := EmptyRootHash
 	if len(subManifest) != 0 {
-		subManifestHash = DeriveSha(subManifest, hasher)
+		subManifestHash = DeriveSha(subManifest.Bytes(), hasher)
 		wb.manifest = make(BlockManifest, len(subManifest))
 		copy(wb.manifest, subManifest)
 	}
@@ -995,6 +1137,9 @@ func NewWorkObjectBody(header *WorkObject, txs []*WorkObject, etxs WorkObjects, 
 }
 
 func CopyWorkObjectBody(wb *WorkObjectBody) *WorkObjectBody {
+	if wb == nil {
+		return nil
+	}
 	cpy := &WorkObjectBody{header: CopyHeader(wb.header)}
 	cpy.SetTransactions(wb.Transactions())
 	cpy.SetExtTransactions(wb.ExtTransactions())
@@ -1019,19 +1164,19 @@ func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
 		return nil, err
 	}
 
-	protoTransactions, err := wb.transactions.ProtoEncode()
+	protoTransactions, err := wb.transactions.ProtoEncode(TxObject)
 	if err != nil {
 		return nil, err
 	}
 
-	protoExtTransactions, err := wb.extTransactions.ProtoEncode()
+	protoExtTransactions, err := wb.extTransactions.ProtoEncode(EtxObject)
 	if err != nil {
 		return nil, err
 	}
 
 	protoUncles := &ProtoWorkObjects{}
 	for _, unc := range wb.uncles {
-		protoUncle, err := unc.ProtoEncode()
+		protoUncle, err := unc.ProtoEncode(BlockObject)
 		if err != nil {
 			return nil, err
 		}
@@ -1071,7 +1216,7 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 	wb.uncles = make([]*WorkObject, len(data.GetUncles().GetWorkObjects()))
 	for i, protoUncle := range data.GetUncles().GetWorkObjects() {
 		uncle := &WorkObject{}
-		err = uncle.ProtoDecode(protoUncle)
+		err = uncle.ProtoDecode(protoUncle, location)
 		if err != nil {
 			return err
 		}
@@ -1088,12 +1233,25 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 
 func (wb *WorkObjectBody) RPCMarshalWorkObjectBody() map[string]interface{} {
 	result := map[string]interface{}{
-		"header":          wb.header.RPCMarshalHeader(),
-		"transactions":    wb.Transactions(),
-		"extTransactions": wb.ExtTransactions(),
-		"uncles":          wb.Uncles(),
-		"manifest":        wb.Manifest(),
+		"header":   wb.header.RPCMarshalHeader(),
+		"manifest": wb.Manifest(),
 	}
+	workedTxs := make([]map[string]interface{}, len(wb.Transactions()))
+	for i, tx := range wb.Transactions() {
+		workedTxs[i] = tx.RPCMarshalWorkObject()
+	}
+	result["transactions"] = workedTxs
+	workedEtxs := make([]map[string]interface{}, len(wb.ExtTransactions()))
+	for i, etx := range wb.ExtTransactions() {
+		workedEtxs[i] = etx.RPCMarshalWorkObject()
+	}
+	result["extTransactions"] = workedEtxs
+	workedUncles := make([]map[string]interface{}, len(wb.Uncles()))
+	for i, uncle := range wb.Uncles() {
+		workedUncles[i] = uncle.RPCMarshalWorkObject()
+	}
+	result["uncles"] = workedUncles
+
 	return result
 }
 
@@ -1140,11 +1298,11 @@ func (wos WorkObjects) EncodeIndex(i int, w *bytes.Buffer) {
 	tx.Tx().encodeTyped(w)
 }
 
-func (wos WorkObjects) ProtoEncode() (*ProtoWorkObjects, error) {
+func (wos WorkObjects) ProtoEncode(kind int) (*ProtoWorkObjects, error) {
 	protoWorkObjects := &ProtoWorkObjects{}
 	protoWorkObjects.WorkObjects = make([]*ProtoWorkObject, len(wos))
 	for i, wo := range wos {
-		protoWo, err := wo.ProtoEncode()
+		protoWo, err := wo.ProtoEncode(kind)
 		if err != nil {
 			return nil, err
 		}
@@ -1156,7 +1314,7 @@ func (wos WorkObjects) ProtoEncode() (*ProtoWorkObjects, error) {
 func (wos *WorkObjects) ProtoDecode(data *ProtoWorkObjects, location common.Location) error {
 	for _, protoWo := range data.WorkObjects {
 		wo := &WorkObject{}
-		err := wo.ProtoDecode(protoWo)
+		err := wo.ProtoDecode(protoWo, location)
 		if err != nil {
 			return err
 		}

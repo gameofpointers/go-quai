@@ -377,7 +377,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, etxSet *types.EtxSet) 
 
 	time4 := common.PrettyDuration(time.Since(start))
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.hc, block, statedb, block.Transactions().Txs(), block.Uncles())
+	p.engine.Finalize(p.hc, block, statedb, block.Transactions(), block.Uncles())
 	time5 := common.PrettyDuration(time.Since(start))
 
 	p.logger.WithFields(log.Fields{
@@ -576,7 +576,7 @@ func ProcessQiTx(tx *types.WorkObject, updateState bool, currentHeader *types.Wo
 
 			// We should require some kind of extra fee here
 			etxInner := types.ExternalTx{Value: big.NewInt(int64(txOut.Denomination)), To: &toAddr, Sender: common.ZeroAddress(location), OriginatingTxHash: tx.Hash(), ETXIndex: uint16(txOutIdx), Gas: params.TxGas, ChainID: &chainId}
-			etx := types.NewWorkObject(currentHeader.WorkObjectHeader(), currentHeader.Body(), types.NewTx(&etxInner))
+			etx := types.NewWorkObject(currentHeader.WorkObjectHeader(), nil, types.NewTx(&etxInner), types.TxObject)
 			etxs = append(etxs, etx)
 			log.Global.Debug("Added UTXO ETX to ETX list")
 		} else {
@@ -674,6 +674,7 @@ func (p *StateProcessor) Apply(batch ethdb.Batch, block *types.WorkObject, newIn
 	if err != nil {
 		return nil, err
 	}
+	log.Global.Warnf("utxo root %v", utxoRoot)
 	triedb := p.stateCache.TrieDB()
 	time7 := common.PrettyDuration(time.Since(start))
 	var time8 common.PrettyDuration

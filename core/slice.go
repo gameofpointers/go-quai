@@ -334,7 +334,7 @@ func (sl *Slice) Append(header *types.WorkObject, domPendingHeader *types.WorkOb
 		if order < nodeCtx {
 			// Store the inbound etxs for dom blocks that did not get picked and use
 			// it in the future if dom switch happens
-			rawdb.WriteWorkObjects(sl.sliceDb, newInboundEtxs, types.TxObject, nodeCtx)
+			rawdb.WriteInboundEtxs(sl.sliceDb, block.Hash(), newInboundEtxs)
 		}
 
 		setHead = sl.poem(sl.engine.TotalLogS(block), sl.engine.TotalLogS(sl.hc.CurrentHeader()))
@@ -636,9 +636,7 @@ func (sl *Slice) readPhCache(hash common.Hash) (types.PendingHeader, bool) {
 
 // Write the phCache
 func (sl *Slice) writePhCache(hash common.Hash, pendingHeader types.PendingHeader) {
-	if pendingHeader.WorkObject().Tx() == nil {
-		pendingHeader.WorkObject().SetTx(types.NewEmptyTx())
-	}
+	pendingHeader.WorkObject().SetLocation(sl.NodeLocation())
 	sl.miner.worker.AddPendingWorkObjectBody(pendingHeader.WorkObject())
 	sl.phCache.Add(hash, pendingHeader)
 	rawdb.WritePendingHeader(sl.sliceDb, hash, pendingHeader)
@@ -1246,7 +1244,7 @@ func (sl *Slice) ConstructLocalMinedBlock(wo *types.WorkObject) (*types.WorkObje
 			return nil, ErrBodyNotFound
 		}
 	} else {
-		pendingBlockBody = types.NewWorkObject(wo.WorkObjectHeader(), wo.Body(), types.NewEmptyTx())
+		pendingBlockBody = types.NewWorkObject(wo.WorkObjectHeader(), types.NewWorkObjectBodyWithHeader(wo.Header()), nil, types.PhObject)
 	}
 	// Load uncles because they are not included in the block response.
 	txs := make([]*types.WorkObject, len(pendingBlockBody.Transactions()))
@@ -1266,11 +1264,13 @@ func (sl *Slice) ConstructLocalMinedBlock(wo *types.WorkObject) (*types.WorkObje
 	for i, blockHash := range pendingBlockBody.Manifest() {
 		subManifest[i] = blockHash
 	}
-	pendingBlockBody.SetTransactions(txs)
-	pendingBlockBody.SetUncles(uncles)
-	pendingBlockBody.SetExtTransactions(etxs)
-	pendingBlockBody.SetManifest(subManifest)
-	block := types.NewWorkObject(wo.WorkObjectHeader(), pendingBlockBody.Body(), types.NewEmptyTx())
+	if pendingBlockBody.Body() != nil {
+		pendingBlockBody.SetTransactions(txs)
+		pendingBlockBody.SetUncles(uncles)
+		pendingBlockBody.SetExtTransactions(etxs)
+		pendingBlockBody.SetManifest(subManifest)
+	}
+	block := types.NewWorkObject(wo.WorkObjectHeader(), pendingBlockBody.Body(), nil, types.BlockObject)
 
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
@@ -1305,13 +1305,12 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.SetGasLimit(header.GasLimit())
 		combinedPendingHeader.SetGasUsed(header.GasUsed())
 		combinedPendingHeader.SetExtra(header.Extra())
+		combinedPendingHeader.Body().SetTransactions(header.Transactions())
+		combinedPendingHeader.Body().SetExtTransactions(header.ExtTransactions())
+		combinedPendingHeader.Body().SetUncles(header.Uncles())
+		combinedPendingHeader.Body().SetManifest(header.SubManifest())
 	}
-
 	combinedPendingHeader.SetHeader(combinedPendingHeader.Header())
-	combinedPendingHeader.Body().SetTransactions(header.Transactions())
-	combinedPendingHeader.Body().SetExtTransactions(header.ExtTransactions())
-	combinedPendingHeader.Body().SetUncles(header.Uncles())
-	combinedPendingHeader.Body().SetManifest(header.SubManifest())
 
 	return combinedPendingHeader
 }

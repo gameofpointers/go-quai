@@ -88,10 +88,11 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 		// TODO: Verify the Block before writing it
 		// TODO: Determine if the block information was lively or stale and rate
 		// the peer accordingly
+		log.Global.Warnf("Receiving block at the dp2p backend %v, %v", block.Hash(), block.Location())
 		backend.WriteBlock(&block)
 	case types.Header:
 	case types.Transaction:
-		tx := data.(types.Transaction)
+		tx := data.(types.WorkObject)
 		backend := *qbe.GetBackend(nodeLocation)
 		if backend == nil {
 			log.Global.Error("no backend found")

@@ -102,7 +102,7 @@ func DeleteTxLookupEntries(db ethdb.KeyValueWriter, hashes []common.Hash) {
 
 // ReadTransaction retrieves a specific transaction from the database, along with
 // its added positional metadata.
-func ReadTransaction(db ethdb.Reader, hash common.Hash) (*types.Transaction, common.Hash, uint64, uint64) {
+func ReadTransaction(db ethdb.Reader, hash common.Hash) (*types.WorkObject, common.Hash, uint64, uint64) {
 	blockNumber := ReadTxLookupEntry(db, hash)
 	if blockNumber == nil {
 		return nil, common.Hash{}, 0, 0
@@ -121,7 +121,7 @@ func ReadTransaction(db ethdb.Reader, hash common.Hash) (*types.Transaction, com
 	}
 	for txIndex, tx := range body.Transactions() {
 		if tx.Hash() == hash {
-			return tx.Tx(), blockHash, *blockNumber, uint64(txIndex)
+			return tx, blockHash, *blockNumber, uint64(txIndex)
 		}
 	}
 	log.Global.WithFields(log.Fields{

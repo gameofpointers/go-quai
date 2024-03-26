@@ -105,7 +105,7 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 
 	switch data := data.(type) {
 	case *types.WorkObject:
-		protoWorkObject, err := data.ProtoEncode()
+		protoWorkObject, err := data.ProtoEncode(types.BlockObject)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +142,7 @@ func DecodeQuaiResponse(respMsg *QuaiResponseMessage) (uint32, interface{}, erro
 	case *QuaiResponseMessage_WorkObject:
 		protoWorkObject := respMsg.GetWorkObject()
 		block := &types.WorkObject{}
-		err := block.ProtoDecode(protoWorkObject)
+		err := block.ProtoDecode(protoWorkObject, *sourceLocation)
 		if err != nil {
 			return id, nil, err
 		}
@@ -162,17 +162,19 @@ func DecodeQuaiResponse(respMsg *QuaiResponseMessage) (uint32, interface{}, erro
 }
 
 // Converts a custom go type to a proto type and marhsals it into a protobuf message
-func ConvertAndMarshal(data interface{}) ([]byte, error) {
-	switch data := data.(type) {
+func ConvertAndMarshal(data interface{}, datatype interface{}) ([]byte, error) {
+	switch datatype.(type) {
 	case *types.WorkObject:
+		data := data.(*types.WorkObject)
 		log.Global.Tracef("marshalling block: %+v", data)
-		protoBlock, err := data.ProtoEncode()
+		protoBlock, err := data.ProtoEncode(types.BlockObject)
 		if err != nil {
 			return nil, err
 		}
 		return proto.Marshal(protoBlock)
 	case *types.Header:
 		log.Global.Tracef("marshalling header: %+v", data)
+		data := data.(*types.Header)
 		protoHeader, err := data.ProtoEncode()
 		if err != nil {
 			return nil, err
@@ -180,13 +182,15 @@ func ConvertAndMarshal(data interface{}) ([]byte, error) {
 		return proto.Marshal(protoHeader)
 	case *types.Transaction:
 		log.Global.Tracef("marshalling transaction: %+v", data)
-		protoTransaction, err := data.ProtoEncode()
+		data := data.(*types.WorkObject)
+		protoTransaction, err := data.ProtoEncode(types.TxObject)
 		if err != nil {
 			return nil, err
 		}
 		return proto.Marshal(protoTransaction)
 	case common.Hash:
 		log.Global.Tracef("marshalling hash: %+v", data)
+		data := data.(common.Hash)
 		protoHash := data.ProtoEncode()
 		return proto.Marshal(protoHash)
 	default:
@@ -207,7 +211,7 @@ func UnmarshalAndConvert(data []byte, sourceLocation common.Location, dataPtr *i
 		if protoWorkObject.WoHeader.Location == nil {
 			return errors.New("location is nil")
 		}
-		err = workObject.ProtoDecode(protoWorkObject)
+		err = workObject.ProtoDecode(protoWorkObject, sourceLocation)
 		if err != nil {
 			return err
 		}
@@ -227,12 +231,12 @@ func UnmarshalAndConvert(data []byte, sourceLocation common.Location, dataPtr *i
 		*dataPtr = *header
 		return nil
 	case *types.Transaction:
-		protoTransaction := &types.ProtoTransaction{}
+		protoTransaction := &types.ProtoWorkObject{}
 		err := proto.Unmarshal(data, protoTransaction)
 		if err != nil {
 			return err
 		}
-		transaction := types.NewEmptyTx()
+		transaction := &types.WorkObject{}
 		err = transaction.ProtoDecode(protoTransaction, sourceLocation)
 		if err != nil {
 			return err

@@ -310,7 +310,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockNumberAndIndex(ctx context.Cont
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index], types.NewEmptyTx(), s.b.NodeCtx()) //TODO: mmtx add transaction
+		block = types.NewWorkObjectWithHeader(uncles[index], uncles[index].Tx(), s.b.NodeCtx(), types.BlockObject) //TODO: mmtx add transaction
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -330,7 +330,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index], types.NewEmptyTx(), s.b.NodeCtx())
+		block = types.NewWorkObjectWithHeader(uncles[index], uncles[index].Tx(), s.b.NodeCtx(), types.BlockObject)
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	pendBlock, _ := s.b.PendingBlockAndReceipts()
@@ -344,7 +344,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found in pending block")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index], types.NewEmptyTx(), s.b.NodeCtx())
+		block = types.NewWorkObjectWithHeader(uncles[index], uncles[index].Tx(), s.b.NodeCtx(), types.BlockObject)
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -491,15 +491,15 @@ func RPCMarshalBlock(block *types.WorkObject, inclTx bool, fullTx bool, nodeLoca
 	fields["size"] = hexutil.Uint64(block.Size())
 
 	if inclTx {
-		formatTx := func(tx *types.Transaction) (interface{}, error) {
+		formatTx := func(tx *types.WorkObject) (interface{}, error) {
 			return tx.Hash(), nil
 		}
 		formatEtx := formatTx
 		if fullTx {
-			formatTx = func(tx *types.Transaction) (interface{}, error) {
+			formatTx = func(tx *types.WorkObject) (interface{}, error) {
 				return newRPCTransactionFromBlockHash(block, tx.Hash(), false, nodeLocation), nil
 			}
-			formatEtx = func(tx *types.Transaction) (interface{}, error) {
+			formatEtx = func(tx *types.WorkObject) (interface{}, error) {
 				return newRPCTransactionFromBlockHash(block, tx.Hash(), true, nodeLocation), nil
 			}
 		}
@@ -606,7 +606,7 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 	nodeCtx := s.b.NodeCtx()
 	if b.ManifestHash(nodeCtx+1) == types.EmptyRootHash {
 		return nil, errors.New("cannot fill empty subordinate manifest")
-	} else if subManifestHash := types.DeriveSha(b.SubManifest(), trie.NewStackTrie(nil)); subManifestHash == b.ManifestHash(nodeCtx+1) {
+	} else if subManifestHash := types.DeriveSha(b.SubManifest().Bytes(), trie.NewStackTrie(nil)); subManifestHash == b.ManifestHash(nodeCtx+1) {
 		// If the manifest hashes match, nothing to do
 		return b, nil
 	} else {
@@ -628,11 +628,10 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 		if len(subManifest) == 0 {
 			return nil, errors.New("reconstructed sub manifest is empty")
 		}
-		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest, trie.NewStackTrie(nil)) {
+		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest.Bytes(), trie.NewStackTrie(nil)) {
 			return nil, errors.New("reconstructed sub manifest does not match manifest hash")
 		}
-		return types.NewWorkObject(b.WorkObjectHeader(), types.NewWorkObjectBody(b, b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, nil, trie.NewStackTrie(nil), nodeCtx), types.NewEmptyTx()), nil
-		//return types.NewBlockWithHeader(b.Header()).WithBody(b.Transactions(), b.Uncles(), b.ExtTransactions(), subManifest), nil
+		return types.NewWorkObject(b.WorkObjectHeader(), types.NewWorkObjectBody(b, b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, nil, trie.NewStackTrie(nil), nodeCtx), &types.Transaction{}, types.BlockObject), nil
 	}
 }
 
@@ -665,6 +664,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 	}
 	// Broadcast the block and announce chain insertion event
 	if block.Header() != nil {
+		log.Global.Warnf("Broadcasting block into the network %v, %v", block.Hash(), s.b.NodeLocation())
 		err := s.b.BroadcastBlock(block, s.b.NodeLocation())
 		if err != nil {
 			log.Global.WithField("err", err).Error("Error broadcasting block")
@@ -684,7 +684,7 @@ type tdBlock struct {
 	DomPendingHeader *types.WorkObject   `json:"domPendingHeader"`
 	DomTerminus      common.Hash         `json:"domTerminus"`
 	DomOrigin        bool                `json:"domOrigin"`
-	NewInboundEtxs   types.Transactions  `json:"newInboundEtxs"`
+	NewInboundEtxs   types.WorkObjects   `json:"newInboundEtxs"`
 }
 
 func (s *PublicBlockChainQuaiAPI) Append(ctx context.Context, raw json.RawMessage) (map[string]interface{}, error) {
@@ -787,7 +787,7 @@ func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, r
 	if err := json.Unmarshal(raw, &pendingHeader); err != nil {
 		return err
 	}
-	return s.b.NewGenesisPendingHeader(types.NewWorkObject(pendingHeader.WoHeader, pendingHeader.WoBody, types.NewEmptyTx()))
+	return s.b.NewGenesisPendingHeader(types.NewWorkObject(pendingHeader.WoHeader, pendingHeader.WoBody, &types.Transaction{}, types.PhObject))
 }
 
 func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (map[string]interface{}, error) {
@@ -835,8 +835,8 @@ func (s *PublicBlockChainQuaiAPI) SendPendingEtxsToDom(ctx context.Context, raw 
 }
 
 type SendPendingEtxsRollupToDomArgs struct {
-	Header     *types.WorkObject  `json:"header"`
-	EtxsRollup types.Transactions `json:"etxsrollup"`
+	Header     *types.WorkObject `json:"header"`
+	EtxsRollup types.WorkObjects `json:"etxsrollup"`
 }
 
 func (s *PublicBlockChainQuaiAPI) SendPendingEtxsRollupToDom(ctx context.Context, raw json.RawMessage) error {

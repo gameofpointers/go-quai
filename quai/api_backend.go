@@ -347,7 +347,8 @@ func (b *QuaiAPIBackend) GetTransaction(ctx context.Context, txHash common.Hash)
 	if nodeCtx != common.ZONE_CTX {
 		return nil, common.Hash{}, 0, 0, errors.New("getTransaction can only be called in zone chain")
 	}
-	tx, blockHash, blockNumber, index := rawdb.ReadWorkObject(b.quai.ChainDb(), txHash, types.TxObject)
+	// TODO: Need to get the block number, and block hash
+	tx, blockHash, blockNumber, index := rawdb.ReadTransaction(b.quai.ChainDb(), txHash)
 	if tx == nil {
 		return nil, common.Hash{}, 0, 0, errors.New("transaction not found")
 	}
@@ -366,7 +367,7 @@ func (b *QuaiAPIBackend) Stats() (pending int, queued int) {
 	return b.quai.core.Stats()
 }
 
-func (b *QuaiAPIBackend) TxPoolContent() (map[common.InternalAddress]types.Transactions, map[common.InternalAddress]types.Transactions) {
+func (b *QuaiAPIBackend) TxPoolContent() (map[common.InternalAddress]types.WorkObjects, map[common.InternalAddress]types.WorkObjects) {
 	nodeCtx := b.quai.core.NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
 		return nil, nil
@@ -374,7 +375,7 @@ func (b *QuaiAPIBackend) TxPoolContent() (map[common.InternalAddress]types.Trans
 	return b.quai.core.Content()
 }
 
-func (b *QuaiAPIBackend) TxPoolContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
+func (b *QuaiAPIBackend) TxPoolContentFrom(addr common.Address) (types.WorkObjects, types.WorkObjects) {
 	nodeCtx := b.quai.core.NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
 		return nil, nil
@@ -465,7 +466,7 @@ func (b *QuaiAPIBackend) StateAtTransaction(ctx context.Context, block *types.Wo
 	return b.quai.core.StateAtTransaction(block, txIndex, reexec)
 }
 
-func (b *QuaiAPIBackend) Append(header *types.WorkObject, manifest types.BlockManifest, domPendingHeader *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (b *QuaiAPIBackend) Append(header *types.WorkObject, manifest types.BlockManifest, domPendingHeader *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.WorkObjects) (types.WorkObjects, bool, bool, error) {
 	return b.quai.core.Append(header, manifest, domPendingHeader, domTerminus, domOrigin, newInboundEtxs)
 }
 
@@ -561,5 +562,5 @@ func (b *QuaiAPIBackend) GetSlicesRunning() []common.Location {
 // /////// P2P ///////////////
 // ///////////////////////////
 func (b *QuaiAPIBackend) BroadcastBlock(block *types.WorkObject, location common.Location) error {
-	return b.quai.p2p.Broadcast(location, block)
+	return b.quai.p2p.Broadcast(location, block, &types.WorkObject{})
 }

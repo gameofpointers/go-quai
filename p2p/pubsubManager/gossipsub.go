@@ -58,7 +58,7 @@ func (g *PubsubManager) Start(receiveCb func(peer.ID, interface{}, common.Locati
 // subscribe to broadcasts of the given type of data
 func (g *PubsubManager) Subscribe(location common.Location, datatype interface{}) error {
 	// build topic name
-	topicName, err := TopicName(location, datatype)
+	topicName, err := TopicName(location, datatype, datatype)
 	if err != nil {
 		return err
 	}
@@ -110,12 +110,12 @@ func (g *PubsubManager) Subscribe(location common.Location, datatype interface{}
 }
 
 // broadcasts data to subscribing peers
-func (g *PubsubManager) Broadcast(location common.Location, datatype interface{}) error {
-	topicName, err := TopicName(location, datatype)
+func (g *PubsubManager) Broadcast(location common.Location, data interface{}, datatype interface{}) error {
+	topicName, err := TopicName(location, data, datatype)
 	if err != nil {
 		return err
 	}
-	protoData, err := pb.ConvertAndMarshal(datatype)
+	protoData, err := pb.ConvertAndMarshal(data, datatype)
 	if err != nil {
 		return err
 	}

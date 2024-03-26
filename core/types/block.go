@@ -195,7 +195,7 @@ func EmptyHeader(nodeCtx int) *WorkObject {
 	wo.woBody.SetTransactions([]*WorkObject{})
 	wo.woBody.SetExtTransactions([]*WorkObject{})
 	wo.woBody.SetManifest(BlockManifest{})
-	return NewWorkObjectWithHeader(wo, &Transaction{}, nodeCtx)
+	return NewWorkObjectWithHeader(wo, &Transaction{}, nodeCtx, BlockObject)
 }
 
 // DecodeRLP decodes the Quai header format into h.
@@ -895,7 +895,7 @@ func CopyPendingHeader(ph *PendingHeader) *PendingHeader {
 
 // ProtoEncode serializes h into the Quai Proto PendingHeader format
 func (ph PendingHeader) ProtoEncode() (*ProtoPendingHeader, error) {
-	protoWorkObject, err := ph.WorkObject().ProtoEncode()
+	protoWorkObject, err := ph.WorkObject().ProtoEncode(PhObject)
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +909,7 @@ func (ph PendingHeader) ProtoEncode() (*ProtoPendingHeader, error) {
 // ProtoEncode deserializes the ProtoHeader into the Header format
 func (ph *PendingHeader) ProtoDecode(protoPendingHeader *ProtoPendingHeader, location common.Location) error {
 	ph.wo = &WorkObject{}
-	err := ph.wo.ProtoDecode(protoPendingHeader.GetWo())
+	err := ph.wo.ProtoDecode(protoPendingHeader.GetWo(), location)
 	if err != nil {
 		return err
 	}
@@ -1114,6 +1114,19 @@ func (m BlockManifest) Len() int { return len(m) }
 // EncodeIndex encodes the i'th blockhash to w.
 func (m BlockManifest) EncodeIndex(i int, w *bytes.Buffer) {
 	rlp.Encode(w, m[i])
+}
+
+// Bytes returns the proto encoded bytes version of the BlockManifest
+func (m BlockManifest) Bytes() common.Bytes {
+	protoManifest, err := m.ProtoEncode()
+	if err != nil {
+		return nil
+	}
+	manifestData, err := proto.Marshal(protoManifest)
+	if err != nil {
+		return nil
+	}
+	return manifestData
 }
 
 // Size returns the approximate memory used by all internal contents. It is used

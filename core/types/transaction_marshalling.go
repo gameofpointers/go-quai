@@ -68,6 +68,9 @@ type txJSON struct {
 // MarshalJSON marshals as JSON with a hash.
 func (t *Transaction) MarshalJSON() ([]byte, error) {
 	var enc txJSON
+	if t == nil || t.inner == nil {
+		return json.Marshal(enc)
+	}
 	// These are set for all tx types.
 	enc.Hash = t.Hash()
 	enc.Type = hexutil.Uint64(t.Type())
@@ -131,6 +134,11 @@ func (t *Transaction) UnmarshalJSON(input []byte) error {
 	var dec txJSON
 	if err := json.Unmarshal(input, &dec); err != nil {
 		return err
+	}
+
+	// If there was no transaction in the work object, then this returns
+	if len(input) == 0 {
+		return nil
 	}
 
 	// Decode / verify fields according to transaction type.

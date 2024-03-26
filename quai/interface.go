@@ -50,7 +50,7 @@ type NetworkingAPI interface {
 
 	// Method to broadcast data to the network
 	// Specify location and the data to send
-	Broadcast(common.Location, interface{}) error
+	Broadcast(common.Location, interface{}, interface{}) error
 
 	// Method to request data from the network
 	// Specify location, data hash, and data type to request

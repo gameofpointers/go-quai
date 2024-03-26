@@ -265,5 +265,7 @@ func (args *TransactionArgs) CalculateQiTxGas() (hexutil.Uint64, error) {
 	}
 
 	tx := types.NewTx(qiTx)
-	return hexutil.Uint64(types.CalculateQiTxGas(tx)), nil
+	// TODO: pass in a work header
+	txWorkObject := types.NewWorkObject(nil, nil, tx, types.TxObject)
+	return hexutil.Uint64(types.CalculateQiTxGas(txWorkObject)), nil
 }

@@ -30,14 +30,9 @@ func TestEncodeDecodeRequest(t *testing.T) {
 			expectedType: reflect.TypeOf(common.Hash{}),
 		},
 		{
-			name:         "Block",
-			input:        &types.Block{},
-			expectedType: reflect.TypeOf(&types.Block{}),
-		},
-		{
-			name:         "Transaction",
-			input:        types.NewEmptyTx(),
-			expectedType: reflect.TypeOf(types.NewEmptyTx()),
+			name:         "WorkObject",
+			input:        &types.WorkObject{},
+			expectedType: reflect.TypeOf(&types.WorkObject{}),
 		},
 		{
 			name:         "Header",

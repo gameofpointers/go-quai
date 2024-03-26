@@ -256,7 +256,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		Number     *hexutil.Big    `json:"number" gencoden:"required"`
 		Difficulty *hexutil.Big    `json:"difficulty" gencoden:"required"`
 		TxHash     common.Hash     `json:"txHash" gencoden:"required"`
-		Location   common.Location `json:"location" gencoden:"required"`
+		Location   hexutil.Bytes `json:"location" gencoden:"required"`
 		MixHash	common.Hash     `json:"mixHash" gencoden:"required"`
 		Nonce      BlockNonce      `json:"nonce" gencoden:"required"`
 	}
@@ -305,6 +305,11 @@ func (wb *WorkObjectBody) UnmarshalJSON(input []byte) error {
 		ExtTransactions WorkObjects`json:"extTransactions" gencoden:"required"`
 		Uncles WorkObjects `json:"uncles" gencoden:"required"`
 		Manifest BlockManifest `json:"manifest" gencoden:"required"`
+	}
+
+	// This can be true in the case of work object as a mined transaction
+	if len(input) == 0 {
+		return nil
 	}
 
 	err := json.Unmarshal(input, &dec)

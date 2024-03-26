@@ -285,7 +285,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.WorkObject {
 		head.SetParentHash(common.Hash{}, i)
 	}
 
-	return types.NewWorkObjectWithHeader(head, types.NewEmptyTx(), g.Config.Location.Context())
+	return types.NewWorkObjectWithHeader(head, nil, g.Config.Location.Context(), types.BlockObject)
 }
 
 // Commit writes the block and state of a genesis specification to the database.

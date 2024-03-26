@@ -634,8 +634,10 @@ func (evm *EVM) CreateETX(toAddr common.Address, fromAddr common.Address, gas ui
 	etxInner := types.ExternalTx{Value: value, To: &toAddr, Sender: fromAddr, OriginatingTxHash: evm.Hash, ETXIndex: uint16(index), Gas: evm.ETXGasLimit, Data: evm.ETXData, AccessList: evm.ETXAccessList, ChainID: evm.chainConfig.ChainID}
 	etx := types.NewTx(&etxInner)
 
+	etxWorkObject := types.NewWorkObject(nil, nil, etx, types.TxObject)
+
 	evm.ETXCacheLock.Lock()
-	evm.ETXCache = append(evm.ETXCache, etx)
+	evm.ETXCache = append(evm.ETXCache, etxWorkObject)
 	evm.ETXCacheLock.Unlock()
 
 	return []byte{}, gas - params.ETXGas, nil

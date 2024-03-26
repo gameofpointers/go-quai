@@ -31,6 +31,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/rlp"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -593,4 +594,14 @@ func GenerateLocations(maxRegions, zonesPerRegion int) []Location {
 	}
 
 	return locations
+}
+
+type Bytes []byte
+
+// Len returns the length of s.
+func (bs Bytes) Len() int { return len(bs) }
+
+// EncodeIndex encodes the i'th byte to w.
+func (bs Bytes) EncodeIndex(i int, w *bytes.Buffer) {
+	rlp.Encode(w, bs[i])
 }

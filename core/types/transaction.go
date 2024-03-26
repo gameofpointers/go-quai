@@ -72,25 +72,25 @@ func NewTx(inner TxData) *Transaction {
 	return tx
 }
 
-func NewEmptyTx() *Transaction {
-	// Create a new transaction
-	to := common.BytesToAddress([]byte{0x01}, common.Location{0, 0})
-	inner := &InternalTx{
-		ChainID:    new(big.Int).SetUint64(1),
-		Nonce:      uint64(0),
-		GasTipCap:  new(big.Int).SetUint64(0),
-		GasFeeCap:  new(big.Int).SetUint64(0),
-		Gas:        uint64(0),
-		To:         &to,
-		Value:      new(big.Int).SetUint64(0),
-		Data:       []byte{0x04},
-		AccessList: AccessList{},
-		V:          new(big.Int).SetUint64(0),
-		R:          new(big.Int).SetUint64(0),
-		S:          new(big.Int).SetUint64(0),
-	}
-	return NewTx(inner)
-}
+// func NewEmptyTx() *Transaction {
+// 	// Create a new transaction
+// 	to := common.BytesToAddress([]byte{0x01}, common.Location{0, 0})
+// 	inner := &InternalTx{
+// 		ChainID:    new(big.Int).SetUint64(1),
+// 		Nonce:      uint64(0),
+// 		GasTipCap:  new(big.Int).SetUint64(0),
+// 		GasFeeCap:  new(big.Int).SetUint64(0),
+// 		Gas:        uint64(0),
+// 		To:         &to,
+// 		Value:      new(big.Int).SetUint64(0),
+// 		Data:       []byte{0x04},
+// 		AccessList: AccessList{},
+// 		V:          new(big.Int).SetUint64(0),
+// 		R:          new(big.Int).SetUint64(0),
+// 		S:          new(big.Int).SetUint64(0),
+// 	}
+// 	return NewTx(inner)
+// }
 
 // SetInner sets the inner transaction data of a transaction.
 func (tx *Transaction) SetInner(inner TxData) {
@@ -139,6 +139,10 @@ func (tx *Transaction) ProtoEncode() (*ProtoTransaction, error) {
 		return nil, errors.New("transaction input to ProtoEncode is nil")
 	}
 	protoTx := &ProtoTransaction{}
+
+	if tx.inner == nil {
+		return protoTx, nil
+	}
 
 	// Encoding common fields to all the tx types
 	txType := uint64(tx.Type())

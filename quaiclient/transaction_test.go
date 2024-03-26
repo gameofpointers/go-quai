@@ -43,8 +43,8 @@ func TestTX(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to convert private key to ECDSA: %v", err)
 	}
-	toAddress[0] = common.HexToAddress("0x0047f9CEa7662C567188D58640ffC48901cde02a", toLocation[0])
-	toPrivKey[0], err = goCrypto.ToECDSA(common.FromHex("0x86f3731e698525a27530d4da6d1ae826303bb9b813ee718762b4c3524abddac5"))
+	toAddress[0] = common.HexToAddress("0x011ae0a1Bd5B71b4F16F8FdD3AEF278C3D042449", toLocation[0])
+	toPrivKey[0], err = goCrypto.ToECDSA(common.FromHex("0x5d217b44a6a8a6cf1c45866d4ab06f9bd639bd4813c5a0e6d2c8aa61351ab559"))
 	if err != nil {
 		t.Fatalf("Failed to convert private key to ECDSA: %v", err)
 	}
@@ -121,6 +121,7 @@ func TestTX(t *testing.T) {
 			t.Fail()
 		}
 
+		wo.SetBody(nil)
 		wo.SetTx(tx)
 		wo.WorkObjectHeader().SetTxHash(tx.Hash())
 
