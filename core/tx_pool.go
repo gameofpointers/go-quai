@@ -149,10 +149,8 @@ type blockChain interface {
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
-	Locals    []common.InternalAddress // Addresses that should be treated by default as local
-	NoLocals  bool                     // Whether local transaction handling should be disabled
-	Journal   string                   // Journal of local transactions to survive node restarts
-	Rejournal time.Duration            // Time interval to regenerate the local transaction journal
+	Locals   []common.InternalAddress // Addresses that should be treated by default as local
+	NoLocals bool                     // Whether local transaction handling should be disabled
 
 	PriceLimit uint64 // Minimum gas price to enforce for acceptance into the pool
 	PriceBump  uint64 // Minimum price bump percentage to replace an already existing transaction (nonce)
@@ -170,9 +168,6 @@ type TxPoolConfig struct {
 // DefaultTxPoolConfig contains the default configurations for the transaction
 // pool.
 var DefaultTxPoolConfig = TxPoolConfig{
-	Journal:   "transactions.rlp",
-	Rejournal: time.Hour,
-
 	PriceLimit: 1,
 	PriceBump:  10,
 
@@ -190,13 +185,6 @@ var DefaultTxPoolConfig = TxPoolConfig{
 // unreasonable or unworkable.
 func (config *TxPoolConfig) sanitize(logger *log.Logger) TxPoolConfig {
 	conf := *config
-	if conf.Rejournal < time.Second {
-		logger.WithFields(log.Fields{
-			"provided": conf.Rejournal,
-			"updated":  time.Second,
-		}).Warn("Sanitizing invalid txpool journal time")
-		conf.Rejournal = time.Second
-	}
 	if conf.PriceLimit < 1 {
 		logger.WithFields(log.Fields{
 			"provided": conf.PriceLimit,
@@ -272,7 +260,6 @@ type TxPool struct {
 	currentMaxGas uint64         // Current gas limit for transaction caps
 
 	locals         *accountSet                                                 // Set of local transaction to exempt from eviction rules
-	journal        *txJournal                                                  // Journal of local transaction to back up to disk
 	utxoPool       map[common.Hash]*types.TxWithMinerFee                       // Utxo pool to store utxo transactions
 	pending        map[common.InternalAddress]*txList                          // All currently processable transactions
 	queue          map[common.InternalAddress]*txList                          // Queued but non-processable transactions
@@ -375,18 +362,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.wg.Add(1)
 	go pool.scheduleReorgLoop()
 
-	// If local transactions and journaling is enabled, load from disk
-	if !config.NoLocals && config.Journal != "" {
-		pool.journal = newTxJournal(config.Journal, logger)
-
-		if err := pool.journal.load(pool.AddLocals); err != nil {
-			logger.WithField("err", err).Warn("Failed to load transaction journal")
-		}
-		if err := pool.journal.rotate(pool.local()); err != nil {
-			logger.WithField("err", err).Warn("Failed to rotate transaction journal")
-		}
-	}
-
 	// Subscribe events from blockchain and start the main event loop.
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
 	pool.wg.Add(1)
@@ -403,15 +378,13 @@ func (pool *TxPool) loop() {
 
 	var (
 		// Start the stats reporting and transaction eviction tickers
-		report  = time.NewTicker(statsReportInterval)
-		evict   = time.NewTicker(evictionInterval)
-		journal = time.NewTicker(pool.config.Rejournal)
+		report = time.NewTicker(statsReportInterval)
+		evict  = time.NewTicker(evictionInterval)
 		// Track the previous head headers for transaction reorgs
 		head = pool.chain.CurrentBlock()
 	)
 	defer report.Stop()
 	defer evict.Stop()
-	defer journal.Stop()
 
 	for {
 		select {
@@ -463,16 +436,6 @@ func (pool *TxPool) loop() {
 				}
 			}
 			pool.mu.Unlock()
-
-		// Handle local transaction journal rotation
-		case <-journal.C:
-			if pool.journal != nil {
-				pool.mu.Lock()
-				if err := pool.journal.rotate(pool.local()); err != nil {
-					pool.logger.WithField("err", err).Warn("Failed to rotate local tx journal")
-				}
-				pool.mu.Unlock()
-			}
 		}
 	}
 }
@@ -486,9 +449,6 @@ func (pool *TxPool) Stop() {
 	pool.chainHeadSub.Unsubscribe()
 	pool.wg.Wait()
 
-	if pool.journal != nil {
-		pool.journal.close()
-	}
 	pool.logger.Info("Transaction pool stopped")
 }
 
@@ -841,7 +801,6 @@ func (pool *TxPool) add(tx *types.WorkObject, local bool) (replaced bool, err er
 		}
 		pool.all.Add(tx, isLocal)
 		pool.priced.Put(tx, isLocal)
-		pool.journalTx(internal, tx)
 		pool.queueTxEvent(tx)
 		pool.logger.WithFields(log.Fields{
 			"hash": hash,
@@ -867,7 +826,6 @@ func (pool *TxPool) add(tx *types.WorkObject, local bool) (replaced bool, err er
 	if isLocal {
 		localGauge.Add(1)
 	}
-	pool.journalTx(internal, tx)
 	pool.queueTxEvent(tx)
 	pool.logger.WithFields(log.Fields{
 		"hash": hash,
@@ -922,18 +880,6 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.WorkObject, local bool
 		pool.beats[internal] = time.Now()
 	}
 	return old != nil, nil
-}
-
-// journalTx adds the specified transaction to the local disk journal if it is
-// deemed to have been sent from a local account.
-func (pool *TxPool) journalTx(from common.InternalAddress, tx *types.WorkObject) {
-	// Only journal if it's enabled and the transaction is local
-	if pool.journal == nil || !pool.locals.contains(from) {
-		return
-	}
-	if err := pool.journal.insert(tx); err != nil {
-		pool.logger.WithField("err", err).Warn("Failed to journal local transaction")
-	}
 }
 
 // promoteTx adds a transaction to the pending (processable) list of transactions

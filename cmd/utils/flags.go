@@ -107,8 +107,6 @@ var NodeFlags = []Flag{
 var TXPoolFlags = []Flag{
 	TxPoolLocalsFlag,
 	TxPoolNoLocalsFlag,
-	TxPoolJournalFlag,
-	TxPoolRejournalFlag,
 	TxPoolPriceLimitFlag,
 	TxPoolPriceBumpFlag,
 	TxPoolAccountSlotsFlag,
@@ -323,18 +321,6 @@ var (
 		Name:  c_TXPoolPrefix + "nolocals",
 		Value: false,
 		Usage: "Disables price exemptions for locally submitted transactions" + generateEnvDoc(c_TXPoolPrefix+"nolocals"),
-	}
-
-	TxPoolJournalFlag = Flag{
-		Name:  c_TXPoolPrefix + "journal",
-		Value: core.DefaultTxPoolConfig.Journal,
-		Usage: "Disk journal for local transaction to survive node restarts" + generateEnvDoc(c_TXPoolPrefix+"journal"),
-	}
-
-	TxPoolRejournalFlag = Flag{
-		Name:  c_TXPoolPrefix + "rejournal",
-		Value: core.DefaultTxPoolConfig.Rejournal,
-		Usage: "Time interval to regenerate the local transaction journal" + generateEnvDoc(c_TXPoolPrefix+"rejournal"),
 	}
 
 	TxPoolPriceLimitFlag = Flag{
@@ -1059,12 +1045,6 @@ func setTxPool(cfg *core.TxPoolConfig, nodeLocation common.Location) {
 	}
 	if viper.IsSet(TxPoolNoLocalsFlag.Name) {
 		cfg.NoLocals = viper.GetBool(TxPoolNoLocalsFlag.Name)
-	}
-	if viper.IsSet(TxPoolJournalFlag.Name) {
-		cfg.Journal = viper.GetString(TxPoolJournalFlag.Name)
-	}
-	if viper.IsSet(TxPoolRejournalFlag.Name) {
-		cfg.Rejournal = viper.GetDuration(TxPoolRejournalFlag.Name)
 	}
 	if viper.IsSet(TxPoolPriceLimitFlag.Name) {
 		cfg.PriceLimit = viper.GetUint64(TxPoolPriceLimitFlag.Name)
