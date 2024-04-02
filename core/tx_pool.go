@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/big"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -36,6 +35,8 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/sirupsen/logrus"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
+
+	deadlock "github.com/sasha-s/go-deadlock"
 )
 
 const (
@@ -264,8 +265,8 @@ type TxPool struct {
 	txFeed      event.Feed
 	scope       event.SubscriptionScope
 	signer      types.Signer
-	mu          sync.RWMutex
-	utxoMu      sync.RWMutex
+	mu          deadlock.RWMutex
+	utxoMu      deadlock.RWMutex
 
 	currentState  *state.StateDB // Current state in the blockchain head
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
@@ -281,7 +282,7 @@ type TxPool struct {
 	priced         *txPricedList                                               // All transactions sorted by price
 	senders        *orderedmap.OrderedMap[common.Hash, common.InternalAddress] // Tx hash to sender lookup cache (async populated)
 	sendersCh      chan newSender                                              // Channel for async senders cache goroutine
-	SendersMutex   sync.RWMutex                                                // Mutex for senders map
+	SendersMutex   deadlock.RWMutex                                            // Mutex for senders map
 	localTxsCount  int                                                         // count of txs in last 1 min. Purely for logging purpose
 	remoteTxsCount int                                                         // count of txs in last 1 min. Purely for logging purpose
 
@@ -293,8 +294,8 @@ type TxPool struct {
 	reqPromoteCh    chan *accountSet
 	queueTxEventCh  chan *types.Transaction
 	reorgDoneCh     chan chan struct{}
-	reorgShutdownCh chan struct{}  // requests shutdown of scheduleReorgLoop
-	wg              sync.WaitGroup // tracks loop, scheduleReorgLoop
+	reorgShutdownCh chan struct{}      // requests shutdown of scheduleReorgLoop
+	wg              deadlock.WaitGroup // tracks loop, scheduleReorgLoop
 
 	logger *log.Logger
 }
@@ -2058,7 +2059,7 @@ func (as *accountSet) merge(other *accountSet) {
 // to build upper-level structure.
 type txLookup struct {
 	slots   int
-	lock    sync.RWMutex
+	lock    deadlock.RWMutex
 	locals  map[common.Hash]*types.Transaction
 	remotes map[common.Hash]*types.Transaction
 }
