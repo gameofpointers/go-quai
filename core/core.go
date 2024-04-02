@@ -639,11 +639,10 @@ func (c *Core) WriteBlock(block *types.Block) {
 
 	if nodeCtx == common.PRIME_CTX {
 		if block != nil {
-			c.SetSyncTarget(block.Header())
-			if c.shouldStartSnapSync(block) {
-				log.Global.Debugf("Starting snap sync for block %d", block.NumberU64(c.NodeCtx()))
-				c.TriggerSnapSync(block.Header())
-			}
+			// c.SetSyncTarget(block.Header())
+			// if c.shouldStartSnapSync(block) {
+			// 	c.TriggerSnapSync(block.Header())
+			// }
 		}
 	}
 }
