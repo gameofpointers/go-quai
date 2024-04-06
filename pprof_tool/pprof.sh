@@ -20,13 +20,16 @@ names=("all")
 # Create the new folder in traces
 mkdir -p "traces/$folder"
 
-# Loop over the ports
-for i in ${!ports[@]}
-do
-    port=${ports[$i]}
-    name=${names[$i]}
+while true; do
+    # Loop over the ports
+    for i in ${!ports[@]}
+    do
+        port=${ports[$i]}
+        name=${names[$i]}
 
-    # Run the go tool pprof command for each port
-    echo "Running pprof for port $port"
-    curl http://localhost:$port/debug/pprof/goroutine -o "traces/$folder/$name"_"$port"_goroutine.pb.gz
+        timestamp=$(date +"%Y%m%d-%H%M%S")
+        # Run the go tool pprof command for each port
+        echo "Running pprof for port $port"
+        curl http://localhost:$port/debug/pprof/goroutine -o "traces/$folder/$name"_"$timestamp_"$port"_goroutine.pb.gz
+    done
 done
