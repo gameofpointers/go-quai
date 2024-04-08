@@ -1188,7 +1188,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 		// Store the interlink hashes in the database
 		rawdb.WriteInterlinkHashes(w.workerDb, parent.Hash(), interlinkHashes)
-		interlinkRootHash := types.DeriveSha(interlinkHashes, trie.NewStackTrie(nil))
+		interlinkRootHash := types.DeriveSha(interlinkHashes.Bytes(), trie.NewStackTrie(nil))
 		newWo.Header().SetInterlinkRootHash(interlinkRootHash)
 	}
 
@@ -1339,7 +1339,7 @@ func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 		// write the manifest into the disk
 		rawdb.WriteManifest(w.workerDb, header.Hash(), manifest)
 	}
-	manifestHash := types.DeriveSha(manifest, trie.NewStackTrie(nil))
+	manifestHash := types.DeriveSha(manifest.Bytes(), trie.NewStackTrie(nil))
 
 	return manifestHash
 }
@@ -1372,7 +1372,7 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 				}
 				etxRollup = append(etxRollup, parent.ExtTransactions()...)
 			}
-			etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
+			etxRollupHash := types.DeriveSha(etxRollup.Bytes(), trie.NewStackTrie(nil))
 			wo.Header().SetEtxRollupHash(etxRollupHash)
 		}
 	}

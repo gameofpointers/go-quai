@@ -74,13 +74,13 @@ func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 		if len(block.Uncles()) != 0 {
 			return fmt.Errorf("region body has non zero uncles")
 		}
-		subManifestHash := types.DeriveSha(block.Manifest(), trie.NewStackTrie(nil))
+		subManifestHash := types.DeriveSha(block.Manifest().Bytes(), trie.NewStackTrie(nil))
 		if subManifestHash == types.EmptyRootHash || subManifestHash != header.ManifestHash(nodeCtx+1) {
 			// If we have a subordinate chain, it is impossible for the subordinate manifest to be empty
 			return ErrBadSubManifest
 		}
 		if nodeCtx == common.PRIME_CTX {
-			interlinkRootHash := types.DeriveSha(block.InterlinkHashes(), trie.NewStackTrie(nil))
+			interlinkRootHash := types.DeriveSha(block.InterlinkHashes().Bytes(), trie.NewStackTrie(nil))
 			if interlinkRootHash != header.InterlinkRootHash() {
 				return ErrBadInterlink
 			}
@@ -93,10 +93,10 @@ func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 		if hash := types.CalcUncleHash(block.Uncles()); hash != header.UncleHash() {
 			return fmt.Errorf("uncle root hash mismatch: have %x, want %x", hash, header.UncleHash())
 		}
-		if hash := types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)); hash != header.TxHash() {
+		if hash := types.DeriveSha(block.Transactions().Bytes(), trie.NewStackTrie(nil)); hash != header.TxHash() {
 			return fmt.Errorf("transaction root hash mismatch: have %x, want %x", hash, header.TxHash())
 		}
-		if hash := types.DeriveSha(block.ExtTransactions(), trie.NewStackTrie(nil)); hash != header.EtxHash() {
+		if hash := types.DeriveSha(block.ExtTransactions().Bytes(), trie.NewStackTrie(nil)); hash != header.EtxHash() {
 			return fmt.Errorf("external transaction root hash mismatch: have %x, want %x", hash, header.EtxHash())
 		}
 	}
@@ -117,7 +117,7 @@ func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.S
 	time2 := common.PrettyDuration(time.Since(start))
 	time3 := common.PrettyDuration(time.Since(start))
 	// Tre receipt Trie's root (R = (Tr [[H1, R1], ... [Hn, Rn]]))
-	receiptSha := types.DeriveSha(receipts, trie.NewStackTrie(nil))
+	receiptSha := types.DeriveSha(receipts.Bytes(), trie.NewStackTrie(nil))
 	if receiptSha != header.ReceiptHash() {
 		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash(), receiptSha)
 	}
@@ -143,7 +143,7 @@ func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.S
 
 	// Confirm the ETXs emitted by the transactions in this block exactly match the
 	// ETXs given in the block body
-	if etxHash := types.DeriveSha(emittedEtxs, trie.NewStackTrie(nil)); etxHash != header.EtxHash() {
+	if etxHash := types.DeriveSha(emittedEtxs.Bytes(), trie.NewStackTrie(nil)); etxHash != header.EtxHash() {
 		return fmt.Errorf("invalid etx hash (remote: %x local: %x)", header.EtxHash(), etxHash)
 	}
 	// Confirm the ETX set used by the block matches the ETX set given in the block body

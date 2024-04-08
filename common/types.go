@@ -32,6 +32,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/rlp"
+	"google.golang.org/protobuf/proto"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -231,6 +232,15 @@ func (h Hashes) Len() int { return len(h) }
 
 func (h Hashes) EncodeIndex(i int, w *bytes.Buffer) {
 	rlp.Encode(w, h[i])
+}
+
+func (h Hashes) Bytes() Bytes {
+	protoHashes := h.ProtoEncode()
+	data, err := proto.Marshal(protoHashes)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 /////////// Address
@@ -635,4 +645,14 @@ func NewChainsAdded(expansionNumber uint8) []Location {
 		}
 	}
 	return newChains
+}
+
+type Bytes []byte
+
+func (b Bytes) EncodeIndex(i int, w *bytes.Buffer) {
+	rlp.Encode(w, b[i])
+}
+
+func (b Bytes) Len() int {
+	return len(b)
 }

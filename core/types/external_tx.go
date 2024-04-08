@@ -38,7 +38,7 @@ func (p *PendingEtxsRollup) IsValid(hasher TrieHasher) bool {
 	if p == nil || p.Header == nil || p.EtxsRollup == nil {
 		return false
 	}
-	return DeriveSha(p.EtxsRollup, hasher) == p.Header.EtxRollupHash()
+	return DeriveSha(p.EtxsRollup.Bytes(), hasher) == p.Header.EtxRollupHash()
 }
 
 // ProtoEncode encodes the PendingEtxsRollup to protobuf format.
@@ -92,7 +92,7 @@ func (p *PendingEtxs) IsValid(hasher TrieHasher) bool {
 	if p == nil || p.Header == nil || p.Etxs == nil {
 		return false
 	}
-	return DeriveSha(p.Etxs, hasher) == p.Header.EtxHash()
+	return DeriveSha(p.Etxs.Bytes(), hasher) == p.Header.EtxHash()
 }
 
 // ProtoEncode encodes the PendingEtxs to protobuf format.

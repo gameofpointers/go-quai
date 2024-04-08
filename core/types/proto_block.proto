@@ -120,6 +120,19 @@ message ProtoReceiptsForStorage {
   repeated ProtoReceiptForStorage receipts = 1;
 }
 
+message ProtoReceiptForHashing {
+  uint64 type = 1;
+  uint64 status = 2;
+  uint64 cumulative_gas_used = 3;
+  bytes bloom = 4;
+  ProtoLogsForStorage logs = 5;
+  ProtoTransactions etxs = 6;
+}
+
+message ProtoReceiptsForHashing {
+  repeated ProtoReceiptForHashing receipts = 1;
+}
+
 message ProtoLogForStorage {
   common.ProtoAddress address = 1;
   repeated common.ProtoHash topics = 2;

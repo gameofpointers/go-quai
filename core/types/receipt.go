@@ -29,6 +29,7 @@ import (
 	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/rlp"
+	"google.golang.org/protobuf/proto"
 )
 
 //go:generate gencodec -type Receipt -field-override receiptMarshaling -out gen_receipt_json.go
@@ -202,7 +203,36 @@ func (r *Receipt) Size() common.StorageSize {
 	return size
 }
 
-// ReceiptsForStorage is a list of ReceiptForStorage.
+func (r *Receipt) ProtoEncode() (*ProtoReceiptForHashing, error) {
+	protoReceipt := &ProtoReceiptForHashing{
+		Type:              uint64(r.Type),
+		Status:            r.Status,
+		CumulativeGasUsed: r.CumulativeGasUsed,
+		Bloom:             r.Bloom.Bytes(),
+	}
+	protoLogs := &ProtoLogsForStorage{}
+	protoLogs.Logs = make([]*ProtoLogForStorage, len(r.Logs))
+	for i, log := range r.Logs {
+		protoLog := (*LogForStorage)(log).ProtoEncode()
+		protoLogs.Logs[i] = protoLog
+	}
+	protoReceipt.Logs = protoLogs
+	return protoReceipt, nil
+}
+
+func (rs Receipts) ProtoEncode() (*ProtoReceiptsForHashing, error) {
+	protoReceipts := make([]*ProtoReceiptForHashing, len(rs))
+	for i, r := range rs {
+		protoReceipt, err := r.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		protoReceipts[i] = protoReceipt
+	}
+	return &ProtoReceiptsForHashing{Receipts: protoReceipts}, nil
+}
+
+// ) ReceiptsForStorage is a list of ReceiptForStorage.
 type ReceiptsForStorage []*ReceiptForStorage
 
 // ProtoEncode converts the receipts to a protobuf representation.
@@ -412,4 +442,16 @@ func (r Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, num
 		}
 	}
 	return nil
+}
+
+func (rs Receipts) Bytes() common.Bytes {
+	protoReceipts, err := rs.ProtoEncode()
+	if err != nil {
+		return nil
+	}
+	data, err := proto.Marshal(protoReceipts)
+	if err != nil {
+		return nil
+	}
+	return data
 }

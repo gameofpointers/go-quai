@@ -1171,6 +1171,23 @@ func (m *BlockManifest) ProtoDecode(protoManifest *ProtoManifest) error {
 	return nil
 }
 
+// Bytes returns the byte representation of the block manifest.
+// This is used before deriving the root hash
+func (m BlockManifest) Bytes() common.Bytes {
+	if m == nil {
+		return nil
+	}
+	protoManifest, err := m.ProtoEncode()
+	if err != nil {
+		return nil
+	}
+	data, err := proto.Marshal(protoManifest)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
 type HashAndNumber struct {
 	Hash   common.Hash
 	Number uint64

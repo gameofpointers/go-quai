@@ -651,7 +651,7 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 	nodeCtx := s.b.NodeCtx()
 	if b.ManifestHash(nodeCtx+1) == types.EmptyRootHash {
 		return nil, errors.New("cannot fill empty subordinate manifest")
-	} else if subManifestHash := types.DeriveSha(b.Manifest(), trie.NewStackTrie(nil)); subManifestHash == b.ManifestHash(nodeCtx+1) {
+	} else if subManifestHash := types.DeriveSha(b.Manifest().Bytes(), trie.NewStackTrie(nil)); subManifestHash == b.ManifestHash(nodeCtx+1) {
 		// If the manifest hashes match, nothing to do
 		return b, nil
 	} else {
@@ -673,7 +673,7 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 		if len(subManifest) == 0 {
 			return nil, errors.New("reconstructed sub manifest is empty")
 		}
-		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest, trie.NewStackTrie(nil)) {
+		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest.Bytes(), trie.NewStackTrie(nil)) {
 			return nil, errors.New("reconstructed sub manifest does not match manifest hash")
 		}
 		return types.NewWorkObjectWithHeaderAndTx(b.WorkObjectHeader(), b.Tx()).WithBody(b.Header(), b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, b.InterlinkHashes()), nil

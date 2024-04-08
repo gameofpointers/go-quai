@@ -775,6 +775,21 @@ func (s *Transactions) ProtoDecode(transactions *ProtoTransactions, location com
 	return nil
 }
 
+func (s Transactions) Bytes() common.Bytes {
+	if s == nil {
+		return nil
+	}
+	protoTxs, err := s.ProtoEncode()
+	if err != nil {
+		return nil
+	}
+	data, err := proto.Marshal(protoTxs)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
 // FilterByLocation returns the subset of transactions with a 'to' address which
 // belongs the given chain location
 func (s Transactions) FilterToLocation(l common.Location) Transactions {

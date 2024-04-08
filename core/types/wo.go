@@ -600,7 +600,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	if len(txs) == 0 {
 		b.Header().SetTxHash(EmptyRootHash)
 	} else {
-		b.Header().SetTxHash(DeriveSha(Transactions(txs), hasher))
+		b.Header().SetTxHash(DeriveSha(Transactions(txs).Bytes(), hasher))
 		b.transactions = make(Transactions, len(txs))
 		copy(b.transactions, txs)
 	}
@@ -608,7 +608,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	if len(receipts) == 0 {
 		b.Header().SetReceiptHash(EmptyRootHash)
 	} else {
-		b.Header().SetReceiptHash(DeriveSha(Receipts(receipts), hasher))
+		b.Header().SetReceiptHash(DeriveSha(Receipts(receipts).Bytes(), hasher))
 	}
 
 	if len(uncles) == 0 {
@@ -624,7 +624,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	if len(etxs) == 0 {
 		b.Header().SetEtxHash(EmptyRootHash)
 	} else {
-		b.Header().SetEtxHash(DeriveSha(Transactions(etxs), hasher))
+		b.Header().SetEtxHash(DeriveSha(Transactions(etxs).Bytes(), hasher))
 		b.extTransactions = make(Transactions, len(etxs))
 		copy(b.extTransactions, etxs)
 	}
@@ -634,7 +634,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	// the subordinate's manifest hash.
 	subManifestHash := EmptyRootHash
 	if len(manifest) != 0 {
-		subManifestHash = DeriveSha(manifest, hasher)
+		subManifestHash = DeriveSha(manifest.Bytes(), hasher)
 		b.manifest = make(BlockManifest, len(manifest))
 		copy(b.manifest, manifest)
 	}
