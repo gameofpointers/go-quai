@@ -27,6 +27,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/bloombits"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/state"
+	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -579,4 +580,16 @@ func (b *QuaiAPIBackend) SubscribeExpansionEvent(ch chan<- core.ExpansionEvent) 
 // ///////////////////////////
 func (b *QuaiAPIBackend) BroadcastBlock(block *types.WorkObject, location common.Location) error {
 	return b.quai.p2p.Broadcast(location, block)
+}
+
+func (b *QuaiAPIBackend) ContractCode(codeHash common.Hash) ([]byte, error) {
+	return b.quai.core.ContractCode(codeHash)
+}
+
+func (b *QuaiAPIBackend) StateCache() state.Database {
+	return b.quai.core.StateCache()
+}
+
+func (b *QuaiAPIBackend) Snapshots() *snapshot.Tree {
+	return b.quai.core.Snapshots()
 }

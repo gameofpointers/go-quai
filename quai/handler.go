@@ -9,8 +9,11 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/quai/snap"
+	"github.com/dominant-strategies/go-quai/trie"
 	lru "github.com/hnlq715/golang-lru"
 )
 
@@ -38,20 +41,33 @@ type handler struct {
 	txsSub          event.Subscription
 	wg              sync.WaitGroup
 	quitCh          chan struct{}
-	logger          *log.Logger
 
 	recentBlockReqCache *lru.Cache // cache the latest requests on a 1 min timer
+
+	logger *log.Logger
+
+	// snapsync fields
+	snapSync       bool
+	stateDB        ethdb.Database  // Database to state sync into (and deduplicate via)
+	stateBloom     *trie.SyncBloom // Bloom filter for fast trie node and contract code existence checks
+	snapSyncer     *snap.Syncer
+	stateSyncStart chan *stateSync
+	syncStatsState stateSyncStats
+	syncStatsLock  sync.RWMutex // Lock protecting the sync stats fields
+
 }
 
-func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.Location, logger *log.Logger) *handler {
+func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.Location, db *ethdb.Database, logger *log.Logger) *handler {
 	handler := &handler{
 		nodeLocation: nodeLocation,
 		p2pBackend:   p2pBackend,
 		core:         core,
 		quitCh:       make(chan struct{}),
 		logger:       logger,
+		snapSyncer:   snap.NewSyncer(*db, p2pBackend, logger, nodeLocation),
 	}
 	handler.recentBlockReqCache, _ = lru.NewWithExpire(c_recentBlockReqCache, c_recentBlockReqTimeout)
+
 	return handler
 }
 
@@ -73,6 +89,8 @@ func (h *handler) Start() {
 		h.wg.Add(1)
 		go h.checkNextPrimeBlock()
 	}
+
+	go h.stateFetcher()
 }
 
 func (h *handler) Stop() {

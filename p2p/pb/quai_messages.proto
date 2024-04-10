@@ -4,8 +4,8 @@ package quaiprotocol;
 option go_package = "github.com/dominant-strategies/go-quai/p2p/pb";
 
 import "common/proto_common.proto";
-import "trie/proto_trienode.proto";
 import "core/types/proto_block.proto";
+import "quai/snap/snap_messages.proto";
 
 // GossipSub messages for broadcasting blocks and transactions
 message GossipWorkObject { block.ProtoWorkObject work_object = 1; }
@@ -14,35 +14,45 @@ message GossipTransaction { block.ProtoTransaction transaction = 1; }
 
 // QuaiRequestMessage is the main 'envelope' for QuaiProtocol request messages
 message QuaiRequestMessage {
-    uint32 id = 1;
-    common.ProtoLocation location = 2;
-    oneof data {
-        common.ProtoHash hash = 3;
-        bytes number = 4;
-    }
-    oneof request {
-        block.ProtoWorkObject work_object = 5;
-        block.ProtoTransaction transaction = 6; 
-        common.ProtoHash block_hash = 7;
-        trie.ProtoTrieNode trie_node = 8;
-    }
+  uint32 id = 1;
+  common.ProtoLocation location = 2;
+  oneof data {
+    common.ProtoHash hash = 3;
+    bytes number = 4;
+    snap.AccountRangeRequest account_range_request = 5;
+    snap.StorageRangesRequest storage_ranges_request = 6;
+    snap.ByteCodesRequest byte_codes_request = 7;
+    snap.TrieNodesRequest trie_nodes_request = 8;
+  }
+  oneof request {
+    block.ProtoWorkObject work_object = 9;
+    block.ProtoTransaction transaction = 10;
+    common.ProtoHash block_hash = 11;
+    snap.AccountRangeResponse account_range_response = 12;
+    snap.StorageRangesResponse storage_ranges_response = 13;
+    snap.ByteCodesResponse byte_codes_response = 14;
+    snap.TrieNodesResponse trie_nodes_response = 15;
+  }
 }
 
 // QuaiResponseMessage is the main 'envelope' for QuaiProtocol response messages
 message QuaiResponseMessage {
-    uint32 id = 1;
-    common.ProtoLocation location = 2;
-    oneof response {
-        block.ProtoWorkObject work_object = 3;
-        block.ProtoTransaction transaction = 4;
-        common.ProtoHash block_hash = 5;
-        trie.ProtoTrieNode trie_node = 6;
-    }
+  uint32 id = 1;
+  common.ProtoLocation location = 2;
+  oneof response {
+    block.ProtoWorkObject work_object = 3;
+    block.ProtoTransaction transaction = 4;
+    common.ProtoHash block_hash = 5;
+    snap.AccountRangeResponse account_range_response = 6;
+    snap.StorageRangesResponse storage_ranges_response = 7;
+    snap.ByteCodesResponse byte_codes_response = 8;
+    snap.TrieNodesResponse trie_nodes_response = 9;
+  }
 }
 
 message QuaiMessage {
-    oneof payload {
-        QuaiRequestMessage request = 1;
-        QuaiResponseMessage response = 2;
-    }
+  oneof payload {
+    QuaiRequestMessage request = 1;
+    QuaiResponseMessage response = 2;
+  }
 }

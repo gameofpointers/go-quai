@@ -2,16 +2,18 @@ package quai
 
 import (
 	"context"
+	"errors"
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/state"
+	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"github.com/dominant-strategies/go-quai/rpc"
-	"github.com/dominant-strategies/go-quai/trie"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -103,17 +105,12 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 			backend.SendRemoteTx(&tx)
 		}
 		// TODO: Handle the error here and mark the peers accordingly
+
 	}
 
 	// If it was a good broadcast, mark the peer as lively
 	qbe.p2pBackend.MarkLivelyPeer(sourcePeer, nodeLocation)
 	return true
-}
-
-// GetTrieNode returns the TrieNodeResponse for a given hash
-func (qbe *QuaiBackend) GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse {
-	// Example/mock implementation
-	panic("todo")
 }
 
 // Returns the current block height for the given location
@@ -232,4 +229,32 @@ func (qbe *QuaiBackend) LookupBlockHashByNumber(number *big.Int, location common
 	} else {
 		return nil
 	}
+}
+
+func (qbe *QuaiBackend) StateCache(location common.Location) state.Database {
+	backend := *qbe.GetBackend(location)
+	if backend == nil {
+		log.Global.Error("no backend found")
+		return nil
+	}
+	return backend.StateCache()
+}
+
+func (qbe *QuaiBackend) Snapshots(location common.Location) *snapshot.Tree {
+	backend := *qbe.GetBackend(location)
+	if backend == nil {
+		log.Global.Error("no backend found")
+		return nil
+	}
+	return backend.Snapshots()
+}
+
+func (qbe *QuaiBackend) ContractCode(codeHash common.Hash, location common.Location) ([]byte, error) {
+	backend := *qbe.GetBackend(location)
+	if backend == nil {
+		log.Global.Error("no backend found")
+		return nil, errors.New("no backend found")
+	}
+
+	return backend.ContractCode(codeHash)
 }

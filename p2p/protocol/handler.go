@@ -13,7 +13,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
-	"github.com/dominant-strategies/go-quai/trie"
+	"github.com/dominant-strategies/go-quai/quai/snap"
 )
 
 const numWorkers = 10    // Number of workers per stream
@@ -135,6 +135,38 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 			"number":      query,
 			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by number to handle")
+	case *snap.AccountRangeRequest:
+		log.Global.WithFields(log.Fields{
+			"requestID":           id,
+			"decodedType":         decodedType,
+			"location":            loc,
+			"accountRangeRequest": query,
+			"peer":                stream.Conn().RemotePeer(),
+		}).Debug("Received request by account range to handle")
+	case *snap.StorageRangesRequest:
+		log.Global.WithFields(log.Fields{
+			"requestID":            id,
+			"decodedType":          decodedType,
+			"location":             loc,
+			"storageRangesRequest": query,
+			"peer":                 stream.Conn().RemotePeer(),
+		}).Debug("Received request by storage ranges to handle")
+	case *snap.ByteCodesRequest:
+		log.Global.WithFields(log.Fields{
+			"requestID":        id,
+			"decodedType":      decodedType,
+			"location":         loc,
+			"byteCodesRequest": query,
+			"peer":             stream.Conn().RemotePeer(),
+		}).Debug("Received request by byte codes to handle")
+	case *snap.TrieNodesRequest:
+		log.Global.WithFields(log.Fields{
+			"requestID":        id,
+			"decodedType":      decodedType,
+			"location":         loc,
+			"trieNodesRequest": query,
+			"peer":             stream.Conn().RemotePeer(),
+		}).Debug("Received request by trie nodes to handle")
 	default:
 		log.Global.Errorf("unsupported request input data field type: %T", query)
 	}
@@ -202,11 +234,34 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 			log.Global.WithField("err", err).Error("error handling block number request")
 			return
 		}
-	case trie.TrieNodeRequest:
-		requestedHash := query.(*common.Hash)
-		err := handleTrieNodeRequest(id, loc, *requestedHash, stream, node)
+	case *snap.AccountRangeResponse:
+		accountRequest := query.(*snap.AccountRangeRequest)
+		err = handleAccountRangeRequest(id, loc, accountRequest, stream, node)
 		if err != nil {
-			log.Global.WithField("err", err).Error("error handling trie node request")
+			log.Global.WithField("err", err).Error("error handling account range request")
+			return
+		}
+	case *snap.StorageRangesResponse:
+		storageRequest := query.(*snap.StorageRangesRequest)
+		err = handleStorageRangesRequest(id, loc, storageRequest, stream, node)
+		if err != nil {
+			log.Global.WithField("err", err).Error("error handling storage ranges request")
+			return
+
+		}
+	case *snap.ByteCodesResponse:
+		byteCodesRequest := query.(*snap.ByteCodesRequest)
+		err = handleByteCodesRequest(id, loc, byteCodesRequest, stream, node)
+		if err != nil {
+			log.Global.WithField("err", err).Error("error handling byte codes request")
+			return
+		}
+	case *snap.TrieNodesResponse:
+		trieNodesRequest := query.(*snap.TrieNodesRequest)
+		err = handleTrieNodesRequest(id, loc, trieNodesRequest, stream, node)
+		if err != nil {
+			log.Global.WithField("err", err).Error("error handling trie nodes request")
+			return
 		}
 	default:
 		log.Global.WithField("request type", decodedType).Error("unsupported request data type")
@@ -310,14 +365,13 @@ func handleBlockNumberRequest(id uint32, loc common.Location, number *big.Int, s
 	return nil
 }
 
-func handleTrieNodeRequest(id uint32, loc common.Location, hash common.Hash, stream network.Stream, node QuaiP2PNode) error {
-	trieNode := node.GetTrieNode(hash, loc)
-	if trieNode == nil {
-		log.Global.Tracef("trie node not found")
+func handleAccountRangeRequest(id uint32, loc common.Location, request *snap.AccountRangeRequest, stream network.Stream, node QuaiP2PNode) error {
+	accountResponse := node.GetAccountRanges(request, loc)
+	if accountResponse == nil {
+		log.Global.Tracef("account range not found")
 		return nil
 	}
-	log.Global.Tracef("trie node found")
-	data, err := pb.EncodeQuaiResponse(id, loc, trieNode)
+	data, err := pb.EncodeQuaiResponse(id, loc, accountResponse)
 	if err != nil {
 		return err
 	}
@@ -325,6 +379,59 @@ func handleTrieNodeRequest(id uint32, loc common.Location, hash common.Hash, str
 	if err != nil {
 		return err
 	}
-	log.Global.Tracef("Sent trie node to peer %s", stream.Conn().RemotePeer())
+	return nil
+}
+
+func handleStorageRangesRequest(id uint32, loc common.Location, request *snap.StorageRangesRequest, stream network.Stream, node QuaiP2PNode) error {
+	storageResponse := node.GetStorageRanges(request, loc)
+	if storageResponse == nil {
+		log.Global.Tracef("storage ranges not found")
+		return nil
+	}
+	data, err := pb.EncodeQuaiResponse(id, loc, storageResponse)
+	if err != nil {
+		return err
+	}
+	err = common.WriteMessageToStream(stream, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func handleByteCodesRequest(id uint32, loc common.Location, request *snap.ByteCodesRequest, stream network.Stream, node QuaiP2PNode) error {
+	byteCodesResponse := node.GetByteCodes(request, loc)
+	if byteCodesResponse == nil {
+		log.Global.Tracef("byte codes not found")
+		return nil
+	}
+	data, err := pb.EncodeQuaiResponse(id, loc, byteCodesResponse)
+	if err != nil {
+		return err
+	}
+	err = common.WriteMessageToStream(stream, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func handleTrieNodesRequest(id uint32, loc common.Location, request *snap.TrieNodesRequest, stream network.Stream, node QuaiP2PNode) error {
+	trieNodesResponse, err := node.GetTrieNodes(request, loc)
+	if err != nil {
+		return err
+	}
+	if trieNodesResponse == nil {
+		log.Global.Tracef("trie nodes not found")
+		return nil
+	}
+	data, err := pb.EncodeQuaiResponse(id, loc, trieNodesResponse)
+	if err != nil {
+		return err
+	}
+	err = common.WriteMessageToStream(stream, data)
+	if err != nil {
+		return err
+	}
 	return nil
 }

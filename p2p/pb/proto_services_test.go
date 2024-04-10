@@ -67,28 +67,3 @@ func TestEncodeDecodeRequest(t *testing.T) {
 		})
 	}
 }
-
-func TestEncodeDecodeTrieResponse(t *testing.T) {
-	loc := common.Location{0, 0}
-
-	hash := &common.Hash{}
-	hash.SetBytes([]byte("mockHash"))
-
-	id := uint32(1)
-
-	trieResp := &trie.TrieNodeResponse{
-		NodeData: []byte("mockNodeData"),
-	}
-
-	// Encode the QuaiRequest
-	data, err := EncodeQuaiResponse(id, trieResp)
-	require.NoError(t, err)
-
-	// Decode the QuaiRequest
-	decodedId, decodedType, err := DecodeQuaiResponse(data, loc)
-	assert.NoError(t, err)
-	assert.Equal(t, id, decodedId)
-	decodedTrieResp, ok := decodedType.(*trie.TrieNodeResponse)
-	assert.True(t, ok)
-	assert.Equal(t, trieResp.NodeData, decodedTrieResp.NodeData)
-}

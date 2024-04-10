@@ -26,6 +26,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/bloombits"
 	"github.com/dominant-strategies/go-quai/core/state"
+	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -99,6 +100,11 @@ type Backend interface {
 	AddGenesisPendingEtxs(block *types.WorkObject)
 	SubscribeExpansionEvent(ch chan<- core.ExpansionEvent) event.Subscription
 	WriteGenesisBlock(block *types.WorkObject, location common.Location)
+
+	// APIs used for snap sync
+	StateCache() state.Database
+	Snapshots() *snapshot.Tree
+	ContractCode(codeHash common.Hash) ([]byte, error)
 
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error

@@ -948,7 +948,7 @@ func (c *Core) ExportN(w io.Writer, first uint64, last uint64) error {
 
 // Snapshots returns the blockchain snapshot tree.
 func (c *Core) Snapshots() *snapshot.Tree {
-	return nil
+	return c.sl.hc.bc.processor.snaps
 }
 
 func (c *Core) TxLookupLimit() uint64 {

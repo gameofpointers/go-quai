@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package snap;
+option go_package = "github.com/dominant-strategies/go-quai/quai/snap";
+
+import "common/proto_common.proto";
+
+// AccountRangeRequest is a request to retrieve a range of accounts from the
+// account trie, id - request id to match up responses with, root - root hash of
+// the account trie to serve, origin - hash of the first account to retrieve
+// limit - hash of the last account to retrieve
+// bytes - soft limit at which to stop returning data
+message AccountRangeRequest {
+  uint64 id = 1;
+  optional common.ProtoHash root = 2;
+  optional common.ProtoHash origin = 3;
+  optional common.ProtoHash limit = 4;
+  optional uint64 bytes = 5;
+}
+
+// AccountRangeResponse is a response to an AccountRangeRequest, id - id of the
+// request this is a response for, accounts - consecutive accounts from the trie
+// proof - list if trie nodes proving the account range
+message AccountRangeResponse {
+  uint64 id = 1;
+  repeated AccountData accounts = 2;
+  repeated bytes proof = 3;
+}
+
+message AccountData {
+  optional common.ProtoHash hash = 1; // hash of the account
+  optional bytes body = 2;            // account body in slim format
+}
+
+// StorageRangesRequest is a request to retrieve a range of storage slots from
+// the storage trie, id - request id to match up responses with, root - root
+// hash of the account trie to serve, accounts - account hashes of the storage
+// tries to serve, origin - hash of the first storage slot to retrieve ( large
+// contract mode) limit - hash of the last storage slot to retrieve ( large
+// contract mode) bytes - soft limit at which to stop returning data
+message StorageRangesRequest {
+  uint64 id = 1;
+  optional common.ProtoHash root = 2;
+  optional common.ProtoHashes accounts = 3;
+  optional bytes origin = 4;
+  optional bytes limit = 5;
+  optional uint64 bytes = 6;
+}
+
+// StorageRangesResponse represents a storage slot query response
+// id - id of the request this is a response for, slots - lists of consecutive
+// slots for the requested accounts, proof - merkle proofs for the *last* slot
+// range, if it's incomplete
+message StorageRangesResponse {
+  uint64 id = 1;
+  repeated StorageDatas slots = 2;
+  repeated bytes proof = 3;
+}
+
+// StorageData represents a single storage slot in a query response
+// hash - hash of the storage slot, body - storage slot content
+message StorageData {
+  optional common.ProtoHash hash = 1;
+  optional bytes body = 2;
+}
+
+message StorageDatas { repeated StorageData data = 1; }
+
+// ByteCodesRequest represents a contract bytecode query
+message ByteCodesRequest {
+  uint64 id = 1; // request ID to match up responses with
+  optional common.ProtoHashes hashes = 2; // code hashes to retrieve the code
+  optional uint64 bytes = 3; // soft limit at which to stop returning data
+}
+
+message ByteCodesResponse {
+  uint64 id = 1;            // request ID  if the request this is a response for
+  repeated bytes codes = 2; // requested contract bytecodes
+}
+
+message TrieNodesRequest {
+  uint64 id = 1;             // request ID to match up responses with
+  common.ProtoHash root = 2; // root hash of the account trie to serve
+  repeated ProtoTrieNodePathSet paths = 3; // trie node hashes to retrieve
+  optional uint64 bytes = 4; // soft limit at which to stop returning data
+}
+
+// TrieNodePathSet is a list of trie node paths to retrieve. A naive way to
+// represent trie nodes would be a simple list of `account || storage` path
+// segments concatenated, but that would be very wasteful on the network.
+//
+// Instead, this array special cases the first element as the path in the
+// account trie and the remaining elements as paths in the storage trie. To
+// address an account node, the slice should have a length of 1 consisting
+// of only the account path. There's no need to be able to address both an
+// account node and a storage node in the same request as it cannot happen
+// that a slot is accessed before the account path is fully expanded.
+message ProtoTrieNodePathSet {
+  repeated bytes path = 1; // list of trie node hashes
+}
+
+// TrieNodesResponse represents a state trie node query response
+message TrieNodesResponse {
+  uint64 id = 1;            // request ID this is a response for
+  repeated bytes nodes = 2; // requested state trie nodes
+}

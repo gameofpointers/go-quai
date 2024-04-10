@@ -5,11 +5,12 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/state"
+	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 
-	"github.com/dominant-strategies/go-quai/trie"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -34,10 +35,6 @@ type ConsensusAPI interface {
 
 	LookupBlockHashByNumber(*big.Int, common.Location) *common.Hash
 
-	// Asks the consensus backend to lookup a trie node by hash and location,
-	// and return the data in the trie node.
-	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
-
 	// GetBackend gets the backend for the given location
 	GetBackend(nodeLocation common.Location) *quaiapi.Backend
 
@@ -55,6 +52,15 @@ type ConsensusAPI interface {
 
 	// WriteGenesisBlock adds the genesis block to the database and also writes the block to the disk
 	WriteGenesisBlock(*types.WorkObject, common.Location)
+
+	// StateCache is the state database used while processing the block
+	StateCache(common.Location) state.Database
+
+	// snapshots is the snapshot trie
+	Snapshots(common.Location) *snapshot.Tree
+
+	// ContractCode returns the contract stored for the codeHash
+	ContractCode(common.Hash, common.Location) ([]byte, error)
 }
 
 // The networking backend will implement the following interface to enable consensus to communicate with other nodes.

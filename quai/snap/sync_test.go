@@ -27,15 +27,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/dominant-strategies/go-quai/common"
+	"github.com/ethereum/dominant-strategies/go-quai/core/rawdb"
+	"github.com/ethereum/dominant-strategies/go-quai/core/state"
+	"github.com/ethereum/dominant-strategies/go-quai/crypto"
+	"github.com/ethereum/dominant-strategies/go-quai/ethdb"
+	"github.com/ethereum/dominant-strategies/go-quai/log"
+	"github.com/ethereum/dominant-strategies/go-quai/rlp"
+	"github.com/ethereum/dominant-strategies/go-quai/trie"
 	"github.com/ethereum/go-ethereum/light"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -264,7 +264,6 @@ func createAccountRequestResponse(t *testPeer, root common.Hash, origin common.H
 	// Unless we send the entire trie, we need to supply proofs
 	// Actually, we need to supply proofs either way! This seems to be an implementation
 	// quirk in go-ethereum
-	proof := light.NewNodeSet()
 	if err := t.accountTrie.Prove(origin[:], 0, proof); err != nil {
 		t.logger.Error("Could not prove inexistence of origin", "origin", origin, "error", err)
 	}
@@ -367,7 +366,8 @@ func createStorageRequestResponse(t *testPeer, root common.Hash, accounts []comm
 	return hashes, slots, proofs
 }
 
-//  the createStorageRequestResponseAlwaysProve tests a cornercase, where it always
+//	the createStorageRequestResponseAlwaysProve tests a cornercase, where it always
+//
 // supplies the proof for the last account, even if it is 'complete'.h
 func createStorageRequestResponseAlwaysProve(t *testPeer, root common.Hash, accounts []common.Hash, bOrigin, bLimit []byte, max uint64) (hashes [][]common.Hash, slots [][][]byte, proofs [][]byte) {
 	var size uint64
@@ -401,7 +401,7 @@ func createStorageRequestResponseAlwaysProve(t *testPeer, root common.Hash, acco
 		if exit {
 			// If we're aborting, we need to prove the first and last item
 			// This terminates the response (and thus the loop)
-			proof := light.NewNodeSet()
+			proof := [][]byte{}
 			stTrie := t.storageTries[account]
 
 			// Here's a potential gotcha: when constructing the proof, we cannot

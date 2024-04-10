@@ -10,7 +10,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/p2p/requestManager"
-	"github.com/dominant-strategies/go-quai/trie"
+	"github.com/dominant-strategies/go-quai/quai/snap"
 )
 
 // interface required to join the quai protocol network
@@ -21,7 +21,11 @@ type QuaiP2PNode interface {
 	GetWorkObject(hash common.Hash, location common.Location) *types.WorkObject
 	GetHeader(hash common.Hash, location common.Location) *types.WorkObject
 	GetBlockHashByNumber(number *big.Int, location common.Location) *common.Hash
-	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
+	GetAccountRanges(accountRequest *snap.AccountRangeRequest, location common.Location) *snap.AccountRangeResponse
+	GetStorageRanges(storageRequest *snap.StorageRangesRequest, location common.Location) *snap.StorageRangesResponse
+	GetByteCodes(byteCodeRequest *snap.ByteCodesRequest, location common.Location) *snap.ByteCodesResponse
+	GetTrieNodes(trieNodeRequest *snap.TrieNodesRequest, location common.Location) (*snap.TrieNodesResponse, error)
+
 	GetRequestManager() requestManager.RequestManager
 	GetHostBackend() host.Host
 

@@ -9,7 +9,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/trie"
+	snap "github.com/dominant-strategies/go-quai/quai/snap"
 )
 
 func DecodeQuaiMessage(data []byte) (*QuaiMessage, error) {
@@ -33,6 +33,14 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 		reqMsg.Data = &QuaiRequestMessage_Hash{Hash: d.ProtoEncode()}
 	case *big.Int:
 		reqMsg.Data = &QuaiRequestMessage_Number{Number: d.Bytes()}
+	case *snap.AccountRangeRequest:
+		reqMsg.Data = &QuaiRequestMessage_AccountRangeRequest{}
+	case *snap.StorageRangesRequest:
+		reqMsg.Data = &QuaiRequestMessage_StorageRangesRequest{}
+	case *snap.ByteCodesRequest:
+		reqMsg.Data = &QuaiRequestMessage_ByteCodesRequest{}
+	case *snap.TrieNodesRequest:
+		reqMsg.Data = &QuaiRequestMessage_TrieNodesRequest{}
 	default:
 		return nil, errors.Errorf("unsupported request input data field type: %T", data)
 	}
@@ -44,8 +52,14 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 		reqMsg.Request = &QuaiRequestMessage_Transaction{}
 	case common.Hash:
 		reqMsg.Request = &QuaiRequestMessage_BlockHash{}
-	case trie.TrieNodeRequest:
-		reqMsg.Request = &QuaiRequestMessage_TrieNode{}
+	case *snap.AccountRangeResponse:
+		reqMsg.Request = &QuaiRequestMessage_AccountRangeResponse{}
+	case *snap.StorageRangesResponse:
+		reqMsg.Request = &QuaiRequestMessage_StorageRangesResponse{}
+	case *snap.ByteCodesResponse:
+		reqMsg.Request = &QuaiRequestMessage_ByteCodesResponse{}
+	case *snap.TrieNodesRequest:
+		reqMsg.Request = &QuaiRequestMessage_TrieNodesResponse{}
 	default:
 		return nil, errors.Errorf("unsupported request data type: %T", datatype)
 	}
@@ -76,6 +90,14 @@ func DecodeQuaiRequest(reqMsg *QuaiRequestMessage) (uint32, interface{}, common.
 		reqData = hash
 	case *QuaiRequestMessage_Number:
 		reqData = new(big.Int).SetBytes(d.Number)
+	case *QuaiRequestMessage_AccountRangeRequest:
+		reqData = d.AccountRangeRequest
+	case *QuaiRequestMessage_StorageRangesRequest:
+		reqData = d.StorageRangesRequest
+	case *QuaiRequestMessage_ByteCodesRequest:
+		reqData = d.ByteCodesRequest
+	case *QuaiRequestMessage_TrieNodesRequest:
+		reqData = d.TrieNodesRequest
 	}
 
 	// Decode the request type
@@ -89,8 +111,14 @@ func DecodeQuaiRequest(reqMsg *QuaiRequestMessage) (uint32, interface{}, common.
 		blockHash := &common.Hash{}
 		blockHash.ProtoDecode(t.BlockHash)
 		reqType = blockHash
-	case *QuaiRequestMessage_TrieNode:
-		reqType = trie.TrieNodeRequest{}
+	case *QuaiRequestMessage_AccountRangeResponse:
+		reqType = &snap.AccountRangeResponse{}
+	case *QuaiRequestMessage_StorageRangesResponse:
+		reqType = &snap.StorageRangesResponse{}
+	case *QuaiRequestMessage_ByteCodesResponse:
+		reqType = &snap.ByteCodesResponse{}
+	case *QuaiRequestMessage_TrieNodesResponse:
+		reqType = &snap.TrieNodesResponse{}
 	default:
 		return reqMsg.Id, nil, common.Location{}, common.Hash{}, errors.Errorf("unsupported request type: %T", reqMsg.Request)
 	}
@@ -122,12 +150,20 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 		}
 		respMsg.Response = &QuaiResponseMessage_Transaction{Transaction: protoTransaction}
 
-	case *trie.TrieNodeResponse:
-		protoTrieNode := &trie.ProtoTrieNode{ProtoNodeData: data.NodeData}
-		respMsg.Response = &QuaiResponseMessage_TrieNode{TrieNode: protoTrieNode}
-
 	case *common.Hash:
 		respMsg.Response = &QuaiResponseMessage_BlockHash{BlockHash: data.ProtoEncode()}
+
+	case *snap.AccountRangeResponse:
+		respMsg.Response = &QuaiResponseMessage_AccountRangeResponse{AccountRangeResponse: data}
+
+	case *snap.StorageRangesResponse:
+		respMsg.Response = &QuaiResponseMessage_StorageRangesResponse{StorageRangesResponse: data}
+
+	case *snap.ByteCodesResponse:
+		respMsg.Response = &QuaiResponseMessage_ByteCodesResponse{ByteCodesResponse: data}
+
+	case *snap.TrieNodesResponse:
+		respMsg.Response = &QuaiResponseMessage_TrieNodesResponse{TrieNodesResponse: data}
 
 	default:
 		return nil, errors.Errorf("unsupported response data type: %T", data)
@@ -178,10 +214,6 @@ func DecodeQuaiResponse(respMsg *QuaiResponseMessage) (uint32, interface{}, erro
 		hash := common.Hash{}
 		hash.ProtoDecode(blockHash)
 		return id, hash, nil
-	case *QuaiResponseMessage_TrieNode:
-		protoTrieNode := respMsg.GetTrieNode()
-		trieNode := &trie.TrieNodeResponse{NodeData: protoTrieNode.ProtoNodeData}
-		return id, trieNode, nil
 	default:
 		return id, nil, errors.Errorf("unsupported response type: %T", respMsg.Response)
 	}
