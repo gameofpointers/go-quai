@@ -34,13 +34,13 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 	case *big.Int:
 		reqMsg.Data = &QuaiRequestMessage_Number{Number: d.Bytes()}
 	case *snap.AccountRangeRequest:
-		reqMsg.Data = &QuaiRequestMessage_AccountRangeRequest{}
+		reqMsg.Data = &QuaiRequestMessage_AccountRangeRequest{AccountRangeRequest: data.(*snap.AccountRangeRequest)}
 	case *snap.StorageRangesRequest:
-		reqMsg.Data = &QuaiRequestMessage_StorageRangesRequest{}
+		reqMsg.Data = &QuaiRequestMessage_StorageRangesRequest{StorageRangesRequest: data.(*snap.StorageRangesRequest)}
 	case *snap.ByteCodesRequest:
-		reqMsg.Data = &QuaiRequestMessage_ByteCodesRequest{}
+		reqMsg.Data = &QuaiRequestMessage_ByteCodesRequest{ByteCodesRequest: data.(*snap.ByteCodesRequest)}
 	case *snap.TrieNodesRequest:
-		reqMsg.Data = &QuaiRequestMessage_TrieNodesRequest{}
+		reqMsg.Data = &QuaiRequestMessage_TrieNodesRequest{TrieNodesRequest: data.(*snap.TrieNodesRequest)}
 	default:
 		return nil, errors.Errorf("unsupported request input data field type: %T", data)
 	}
@@ -58,7 +58,7 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 		reqMsg.Request = &QuaiRequestMessage_StorageRangesResponse{}
 	case *snap.ByteCodesResponse:
 		reqMsg.Request = &QuaiRequestMessage_ByteCodesResponse{}
-	case *snap.TrieNodesRequest:
+	case *snap.TrieNodesResponse:
 		reqMsg.Request = &QuaiRequestMessage_TrieNodesResponse{}
 	default:
 		return nil, errors.Errorf("unsupported request data type: %T", datatype)
@@ -67,6 +67,7 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 	quaiMsg := QuaiMessage{
 		Payload: &QuaiMessage_Request{Request: &reqMsg},
 	}
+	log.Global.Errorf("//////// requesting quaiMsg %v", quaiMsg.GetRequest())
 	return proto.Marshal(&quaiMsg)
 }
 
@@ -214,6 +215,14 @@ func DecodeQuaiResponse(respMsg *QuaiResponseMessage) (uint32, interface{}, erro
 		hash := common.Hash{}
 		hash.ProtoDecode(blockHash)
 		return id, hash, nil
+	case *QuaiResponseMessage_AccountRangeResponse:
+		return id, respMsg.GetAccountRangeResponse(), nil
+	case *QuaiResponseMessage_StorageRangesResponse:
+		return id, respMsg.GetStorageRangesResponse(), nil
+	case *QuaiResponseMessage_ByteCodesResponse:
+		return id, respMsg.GetByteCodesResponse(), nil
+	case *QuaiResponseMessage_TrieNodesResponse:
+		return id, respMsg.GetTrieNodesResponse(), nil
 	default:
 		return id, nil, errors.Errorf("unsupported response type: %T", respMsg.Response)
 	}

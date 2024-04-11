@@ -243,23 +243,25 @@ func (p *P2PNode) requestAndWait(peerID peer.ID, location common.Location, data 
 }
 
 // Request a data from the network for the specified slice
-func (p *P2PNode) Request(location common.Location, requestData interface{}, responseDataType interface{}) chan interface{} {
-	resultChan := make(chan interface{}, 1)
+func (p *P2PNode) Request(location common.Location, requestData interface{}, responseDataType interface{}, resultCh chan interface{}) chan interface{} {
+	if resultCh == nil {
+		resultCh = make(chan interface{}, 1)
+	}
 	// If it is a hash, first check to see if it is contained in the caches
 	if hash, ok := requestData.(common.Hash); ok {
 		result, ok := p.cacheGet(hash, responseDataType, location)
 		if ok {
-			resultChan <- result
-			return resultChan
+			resultCh <- result
+			return resultCh
 		}
 	}
 
-	p.requestFromPeers(location, requestData, responseDataType, resultChan)
+	go p.requestFromPeers(location, requestData, responseDataType, resultCh)
 	// TODO: optimize with waitgroups or a doneChan to only query if no peers responded
 	// Right now this creates too many streams, so don't call this until we have a better solution
 	// p.queryDHT(location, requestData, responseDataType, resultChan)
 
-	return resultChan
+	return resultCh
 }
 
 func (p *P2PNode) MarkLivelyPeer(peer p2p.PeerID, location common.Location) {
@@ -336,19 +338,19 @@ func (p *P2PNode) GetHeader(hash common.Hash, location common.Location) *types.W
 
 func (p *P2PNode) GetAccountRanges(request *snap.AccountRangeRequest, location common.Location) *snap.AccountRangeResponse {
 	// Decode the account retrieval request
-	var req snap.AccountRangeRequest
-	if req.Root == nil || req.Origin == nil || req.Limit == nil || req.Bytes == nil {
+	if request.Root == nil || request.Origin == nil || request.Limit == nil || request.Bytes == nil {
+		log.Global.Error("Invalid account range request", "req", request)
 		// Invalid request, cannot serve an empty request, maybe throw an error
 		return nil
 	}
 
 	// unpack the request
-	id := req.Id
+	id := request.Id
 	var root, origin, limit common.Hash
-	root.ProtoDecode(req.Root)
-	origin.ProtoDecode(req.Origin)
-	limit.ProtoDecode(req.Limit)
-	bytesMax := *req.Bytes
+	root.ProtoDecode(request.Root)
+	origin.ProtoDecode(request.Origin)
+	limit.ProtoDecode(request.Limit)
+	bytesMax := *request.Bytes
 
 	if bytesMax > softResponseLimit {
 		bytesMax = softResponseLimit
@@ -390,13 +392,13 @@ func (p *P2PNode) GetAccountRanges(request *snap.AccountRangeRequest, location c
 	// Generate the Merkle proofs for the first and last account
 	proof := snap.NewNodeSet()
 	if err := tr.Prove(origin[:], 0, proof); err != nil {
-		log.Global.Warn("Failed to prove account range", "origin", req.Origin, "err", err)
+		log.Global.Warn("Failed to prove account range", "origin", origin, "err", err)
 		return &snap.AccountRangeResponse{Id: id}
 	}
 	if last != (common.Hash{}) {
 		if err := tr.Prove(last[:], 0, proof); err != nil {
 			log.Global.Warn("Failed to prove account range", "last", last, "err", err)
-			return &snap.AccountRangeResponse{Id: req.Id}
+			return &snap.AccountRangeResponse{Id: id}
 		}
 	}
 	var proofs [][]byte
@@ -405,7 +407,7 @@ func (p *P2PNode) GetAccountRanges(request *snap.AccountRangeRequest, location c
 	}
 	// Send back anything accumulated
 	return &snap.AccountRangeResponse{
-		Id:       req.Id,
+		Id:       id,
 		Accounts: accounts,
 		Proof:    proofs,
 	}

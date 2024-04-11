@@ -84,7 +84,7 @@ type NetworkingAPI interface {
 
 	// Method to request data from the network
 	// Specify location, data hash, and data type to request
-	Request(location common.Location, requestData interface{}, responseDataType interface{}) chan interface{}
+	Request(location common.Location, requestData interface{}, responseDataType interface{}, resultCh chan interface{}) chan interface{}
 
 	// Methods to report a peer to the P2PClient as behaving maliciously
 	// Should be called whenever a peer sends us data that is acceptably lively

@@ -24,6 +24,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common/prque"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/ethdb"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 // ErrNotRequested is returned by the trie sync when it's requested to process a
@@ -308,6 +309,7 @@ func (s *Sync) Process(result SyncResult) error {
 func (s *Sync) Commit(dbw ethdb.Batch) error {
 	// Dump the membatch into a database dbw
 	for key, value := range s.membatch.nodes {
+		log.Global.Warn("Writing Trie node into the database", key)
 		rawdb.WriteTrieNode(dbw, key, value)
 		if s.bloom != nil {
 			s.bloom.Add(key[:])

@@ -1287,7 +1287,7 @@ type PublicTransactionPoolAPI struct {
 func NewPublicTransactionPoolAPI(b Backend, nonceLock *AddrLocker) *PublicTransactionPoolAPI {
 	// The signer used by the API should always be the 'latest' known one because we expect
 	// signers to be backwards-compatible with old transactions.
-	signer := types.LatestSigner(b.ChainConfig())
+	signer := types.LatestSigner(*b.ChainConfig())
 	return &PublicTransactionPoolAPI{b, nonceLock, signer}
 }
 

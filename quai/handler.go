@@ -8,6 +8,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core"
+	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/event"
@@ -52,19 +53,22 @@ type handler struct {
 	stateBloom     *trie.SyncBloom // Bloom filter for fast trie node and contract code existence checks
 	snapSyncer     *snap.Syncer
 	stateSyncStart chan *stateSync
-	syncStatsState stateSyncStats
 	syncStatsLock  sync.RWMutex // Lock protecting the sync stats fields
-
+	snapSyncBlock  *types.WorkObject
 }
 
 func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.Location, db *ethdb.Database, logger *log.Logger) *handler {
 	handler := &handler{
-		nodeLocation: nodeLocation,
-		p2pBackend:   p2pBackend,
-		core:         core,
-		quitCh:       make(chan struct{}),
-		logger:       logger,
-		snapSyncer:   snap.NewSyncer(*db, p2pBackend, logger, nodeLocation),
+		nodeLocation:   nodeLocation,
+		p2pBackend:     p2pBackend,
+		core:           core,
+		quitCh:         make(chan struct{}),
+		logger:         logger,
+		stateDB:        *db,
+		snapSync:       false,
+		snapSyncer:     snap.NewSyncer(*db, p2pBackend, logger, nodeLocation),
+		stateSyncStart: make(chan *stateSync),
+		snapSyncBlock:  nil,
 	}
 	handler.recentBlockReqCache, _ = lru.NewWithExpire(c_recentBlockReqCache, c_recentBlockReqTimeout)
 
@@ -90,7 +94,13 @@ func (h *handler) Start() {
 		go h.checkNextPrimeBlock()
 	}
 
+	h.wg.Add(1)
 	go h.stateFetcher()
+
+	if nodeCtx == common.ZONE_CTX {
+		h.wg.Add(1)
+		go h.triggerSnapSync()
+	}
 }
 
 func (h *handler) Stop() {
@@ -116,32 +126,32 @@ func (h *handler) missingBlockLoop() {
 	}()
 	for {
 		select {
-		case blockRequest := <-h.missingBlockCh:
+		// case blockRequest := <-h.missingBlockCh:
 
-			_, exists := h.recentBlockReqCache.Get(blockRequest.Hash)
-			if !exists {
-				// Add the block request to the cache to avoid requesting the same block multiple times
-				h.recentBlockReqCache.Add(blockRequest.Hash, true)
-			} else {
-				// Don't ask for the same block multiple times within a min window
-				continue
-			}
+		// 	_, exists := h.recentBlockReqCache.Get(blockRequest.Hash)
+		// 	if !exists {
+		// 		// Add the block request to the cache to avoid requesting the same block multiple times
+		// 		h.recentBlockReqCache.Add(blockRequest.Hash, true)
+		// 	} else {
+		// 		// Don't ask for the same block multiple times within a min window
+		// 		continue
+		// 	}
 
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						h.logger.WithFields(log.Fields{
-							"error":      r,
-							"stacktrace": string(debug.Stack()),
-						}).Fatal("Go-Quai Panicked")
-					}
-				}()
-				resultCh := h.p2pBackend.Request(h.nodeLocation, blockRequest.Hash, &types.WorkObject{})
-				block := <-resultCh
-				if block != nil {
-					h.core.WriteBlock(block.(*types.WorkObject))
-				}
-			}()
+		// 	go func() {
+		// 		defer func() {
+		// 			if r := recover(); r != nil {
+		// 				h.logger.WithFields(log.Fields{
+		// 					"error":      r,
+		// 					"stacktrace": string(debug.Stack()),
+		// 				}).Fatal("Go-Quai Panicked")
+		// 			}
+		// 		}()
+		// 		resultCh := h.p2pBackend.Request(h.nodeLocation, blockRequest.Hash, &types.WorkObject{})
+		// 		block := <-resultCh
+		// 		if block != nil {
+		// 			h.core.WriteBlock(block.(*types.WorkObject))
+		// 		}
+		// 	}()
 		case <-h.missingBlockSub.Err():
 			return
 		}
@@ -211,7 +221,8 @@ func (h *handler) GetNextPrimeBlock(number *big.Int) {
 				}).Fatal("Go-Quai Panicked")
 			}
 		}()
-		resultCh := h.p2pBackend.Request(h.nodeLocation, new(big.Int).Add(number, big.NewInt(1)), common.Hash{})
+		resultCh := make(chan interface{}, 1)
+		h.p2pBackend.Request(h.nodeLocation, new(big.Int).Add(number, big.NewInt(1)), common.Hash{}, resultCh)
 		data := <-resultCh
 		// If we find a new hash for the requested block number we can check
 		// first if we already have the block in the database otherwise ask the
@@ -223,7 +234,8 @@ func (h *handler) GetNextPrimeBlock(number *big.Int) {
 				// If the blockHash for the asked number is not present in the
 				// appended database we ask the peer for the block with this hash
 				if block == nil {
-					resultCh := h.p2pBackend.Request(h.nodeLocation, blockHash, &types.WorkObject{})
+					resultCh := make(chan interface{}, 1)
+					h.p2pBackend.Request(h.nodeLocation, blockHash, &types.WorkObject{}, resultCh)
 					block := <-resultCh
 					if block != nil {
 						h.core.WriteBlock(block.(*types.WorkObject))
@@ -232,4 +244,38 @@ func (h *handler) GetNextPrimeBlock(number *big.Int) {
 			}
 		}
 	}()
+}
+
+func (h *handler) triggerSnapSync() {
+	defer h.wg.Done()
+	timer := time.NewTicker(10 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			go func() {
+				if !h.snapSync {
+					resultCh := h.p2pBackend.Request(h.nodeLocation, big.NewInt(120), &types.WorkObject{}, nil)
+					block := <-resultCh
+					if block != nil {
+						wo := block.(*types.WorkObject)
+						h.snapSyncBlock = wo
+						h.syncState(wo.EVMRoot())
+						// h.snapSync = false
+					}
+				}
+			}()
+
+			if h.snapSyncBlock != nil {
+				data := rawdb.ReadTrieNode(h.stateDB, h.snapSyncBlock.EVMRoot())
+				if len(data) > 0 {
+					log.Global.Error("Found the data in the database", data)
+				} else {
+					log.Global.Error("Data not found in the database")
+				}
+			}
+		case <-h.quitCh:
+			return
+		}
+	}
 }

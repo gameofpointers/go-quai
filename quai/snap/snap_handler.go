@@ -19,6 +19,7 @@ package snap
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/state/snapshot"
@@ -52,40 +53,53 @@ func (p *AccountRangeResponse) Unpack() ([]common.Hash, [][]byte, error) {
 
 // RequestAccountRange fetches a batch of accounts rooted in a specific account
 // trie, starting with the origin.
-func (s *Syncer) RequestAccountRange(id uint64, root common.Hash, origin, limit common.Hash, bytesMax uint64) error {
-	s.logger.Trace("Fetching range of accounts", "reqid", id, "root", root, "origin", origin, "limit", limit, "bytes", common.StorageSize(bytesMax))
+func (s *Syncer) RequestAccountRange(task *accountTask, req *accountRequest, id uint64, root common.Hash, origin, limit common.Hash, bytesMax uint64) error {
+	s.logger.Debug("Fetching range of accounts", "reqid", id, "root", root, "origin", origin, "limit", limit, "bytes", common.StorageSize(bytesMax))
 
-	resultCh := s.p2p.Request(s.nodeLocation, &AccountRangeRequest{
+	resultCh := make(chan interface{}, 1)
+	go s.p2p.Request(s.nodeLocation, &AccountRangeRequest{
 		Id:     id,
 		Root:   root.ProtoEncode(),
 		Origin: origin.ProtoEncode(),
 		Limit:  limit.ProtoEncode(),
 		Bytes:  &bytesMax,
-	}, &AccountRangeResponse{})
+	}, &AccountRangeResponse{}, resultCh)
 
-	response := <-resultCh
-	if response != nil {
-		accountRangeResponse := response.(*AccountRangeResponse)
-		if accountRangeResponse.Accounts == nil || accountRangeResponse.Proof == nil {
-			// TODO: decide what to do if the peer sent a empty response
-			return nil
-		}
-		hashes, accounts, err := accountRangeResponse.Unpack()
-		if err != nil {
-			return err
-		}
-		// Ensure the range is monotonically increasing
-		for i := 1; i < len(accountRangeResponse.Accounts); i++ {
-			if bytes.Compare(hashes[i-1][:], hashes[i][:]) >= 0 {
-				return fmt.Errorf("accounts not monotonically increasing: #%d [%x] vs #%d [%x]", i-1, hashes[i-1][:], i, hashes[i][:])
+	// Inject the request into the task to block further assignments
+	task.req = req
+	go s.listenToAccount(resultCh)
+	return nil
+}
+
+func (s *Syncer) listenToAccount(resultCh chan interface{}) error {
+	for {
+		select {
+		case response := <-resultCh:
+			if response != nil {
+				accountRangeResponse := response.(*AccountRangeResponse)
+				if accountRangeResponse.Accounts == nil || accountRangeResponse.Proof == nil {
+					// TODO: decide what to do if the peer sent a empty response
+					return nil
+				}
+				hashes, accounts, err := accountRangeResponse.Unpack()
+				if err != nil {
+					return err
+				}
+				// Ensure the range is monotonically increasing
+				for i := 1; i < len(accountRangeResponse.Accounts); i++ {
+					if bytes.Compare(hashes[i-1][:], hashes[i][:]) >= 0 {
+						return fmt.Errorf("accounts not monotonically increasing: #%d [%x] vs #%d [%x]", i-1, hashes[i-1][:], i, hashes[i][:])
+					}
+				}
+				time.Sleep(10 * time.Second)
+				s.OnAccounts(accountRangeResponse.Id, hashes, accounts, accountRangeResponse.Proof)
+				return nil
+			} else {
+				// TODO: derank the peer because it cannot serve the data
+				return nil
 			}
 		}
-		s.OnAccounts(accountRangeResponse.Id, hashes, accounts, accountRangeResponse.Proof)
-	} else {
-		// TODO: derank the peer because it cannot serve the data
-		return nil
 	}
-	return nil
 }
 
 // Unpack retrieves the storage slots from the range packet and returns them in
@@ -112,94 +126,111 @@ func (p *StorageRangesResponse) Unpack() ([][]common.Hash, [][][]byte) {
 // RequestStorageRange fetches a batch of storage slots belonging to one or more
 // accounts. If slots from only one accout is requested, an origin marker may also
 // be used to retrieve from there.
-func (s *Syncer) RequestStorageRanges(id uint64, root common.Hash, accounts []common.Hash, origin, limit []byte, bytesMax uint64) error {
+func (s *Syncer) RequestStorageRanges(task *storageTask, req *storageRequest, id uint64, root common.Hash, accounts []common.Hash, origin, limit []byte, bytesMax uint64) error {
 	if len(accounts) == 1 && origin != nil {
-		s.logger.Trace("Fetching range of large storage slots", "reqid", id, "root", root, "account", accounts[0], "origin", common.BytesToHash(origin), "limit", common.BytesToHash(limit), "bytes", common.StorageSize(bytesMax))
+		s.logger.Debug("Fetching range of large storage slots", "reqid", id, "root", root, "account", accounts[0], "origin", common.BytesToHash(origin), "limit", common.BytesToHash(limit), "bytes", common.StorageSize(bytesMax))
 	} else {
-		s.logger.Trace("Fetching ranges of small storage slots", "reqid", id, "root", root, "accounts", len(accounts), "first", accounts[0], "bytes", common.StorageSize(bytesMax))
+		s.logger.Debug("Fetching ranges of small storage slots", "reqid", id, "root", root, "accounts", len(accounts), "first", accounts[0], "bytes", common.StorageSize(bytesMax))
 	}
-	resultCh := s.p2p.Request(s.nodeLocation, &StorageRangesRequest{
+	resultCh := make(chan interface{}, 1)
+	go s.p2p.Request(s.nodeLocation, &StorageRangesRequest{
 		Id:       id,
 		Root:     root.ProtoEncode(),
 		Accounts: common.Hashes(accounts).ProtoEncode(),
 		Origin:   origin,
 		Limit:    limit,
 		Bytes:    &bytesMax,
-	}, &StorageRangesResponse{})
+	}, &StorageRangesResponse{}, resultCh)
 
-	response := <-resultCh
-	if response != nil {
-		storageRangesResponse := response.(*StorageRangesResponse)
-		if storageRangesResponse.Slots == nil || storageRangesResponse.Proof == nil {
-			// TODO: decide what to do if the peer sent a empty response
-			return nil
-		}
-		hashSet, slotSet := storageRangesResponse.Unpack()
-		// Ensure the range is monotonically increasing
-		for i := 0; i < len(storageRangesResponse.Slots); i++ {
-			for j := 1; j < len(hashSet); j++ {
-				if bytes.Compare(hashSet[i][j-1][:], hashSet[i][j][:]) >= 0 {
-					return fmt.Errorf("storage slots not monotonically increasing for account #%d: #%d [%x] vs #%d [%x]", i, j-1, hashSet[i][j-1][:], j, hashSet[i][j][:])
+	// Inject the request into the subtask to block further assignments
+	if task != nil {
+		task.req = req
+	}
+
+	for {
+		select {
+		case response := <-resultCh:
+			if response != nil {
+				storageRangesResponse := response.(*StorageRangesResponse)
+				if storageRangesResponse.Slots == nil || storageRangesResponse.Proof == nil {
+					// TODO: decide what to do if the peer sent a empty response
+					return nil
 				}
+				hashSet, slotSet := storageRangesResponse.Unpack()
+				// Ensure the range is monotonically increasing
+				for i := 0; i < len(storageRangesResponse.Slots); i++ {
+					for j := 1; j < len(hashSet); j++ {
+						if bytes.Compare(hashSet[i][j-1][:], hashSet[i][j][:]) >= 0 {
+							return fmt.Errorf("storage slots not monotonically increasing for account #%d: #%d [%x] vs #%d [%x]", i, j-1, hashSet[i][j-1][:], j, hashSet[i][j][:])
+						}
+					}
+				}
+				s.OnStorage(storageRangesResponse.Id, hashSet, slotSet, storageRangesResponse.Proof)
+			} else {
+				// TODO: derank the peer because it cannot serve the data
+				return nil
 			}
 		}
-		s.OnStorage(storageRangesResponse.Id, hashSet, slotSet, storageRangesResponse.Proof)
-	} else {
-		// TODO: derank the peer because it cannot serve the data
-		return nil
 	}
-	return nil
 }
 
 // RequestByteCodes fetches a batch of bytecodes by hash.
 func (s *Syncer) RequestByteCodes(id uint64, hashes []common.Hash, bytes uint64) error {
-	s.logger.Trace("Fetching set of byte codes", "reqid", id, "hashes", len(hashes), "bytes", common.StorageSize(bytes))
+	s.logger.Debug("Fetching set of byte codes", "reqid", id, "hashes", len(hashes), "bytes", common.StorageSize(bytes))
 
-	resultCh := s.p2p.Request(s.nodeLocation, &ByteCodesRequest{
+	resultCh := make(chan interface{}, 1)
+	go s.p2p.Request(s.nodeLocation, &ByteCodesRequest{
 		Id:     id,
 		Hashes: common.Hashes(hashes).ProtoEncode(),
 		Bytes:  &bytes,
-	}, &ByteCodesResponse{})
+	}, &ByteCodesResponse{}, resultCh)
 
-	response := <-resultCh
-	if response != nil {
-		byteCodesResponse := response.(*ByteCodesResponse)
-		if byteCodesResponse.Codes == nil {
-			return nil
+	for {
+		select {
+		case response := <-resultCh:
+			if response != nil {
+				byteCodesResponse := response.(*ByteCodesResponse)
+				if byteCodesResponse.Codes == nil {
+					return nil
+				}
+				s.onByteCodes(byteCodesResponse.Id, byteCodesResponse.Codes)
+			} else {
+				return nil
+			}
 		}
-		s.onByteCodes(byteCodesResponse.Id, byteCodesResponse.Codes)
-	} else {
-		return nil
 	}
-	return nil
 }
 
 // RequestTrieNodes fetches a batch of account or storage trie nodes rooted in
 // a specificstate trie.
 func (s *Syncer) RequestTrieNodes(id uint64, root common.Hash, paths []TrieNodePathSet, bytes uint64) error {
-	s.logger.Trace("Fetching set of trie nodes", "reqid", id, "root", root, "pathsets", len(paths), "bytes", common.StorageSize(bytes))
+	s.logger.Debug("Fetching set of trie nodes", "reqid", id, "root", root, "pathsets", len(paths), "bytes", common.StorageSize(bytes))
 
 	protoTrieNodePathSets := make([]*ProtoTrieNodePathSet, len(paths))
 	for i, path := range paths {
 		protoTrieNodePathSets[i] = path.ProtoEncode()
 	}
 
-	resultCh := s.p2p.Request(s.nodeLocation, &TrieNodesRequest{
+	resultCh := make(chan interface{}, 1)
+	go s.p2p.Request(s.nodeLocation, &TrieNodesRequest{
 		Id:    id,
 		Root:  root.ProtoEncode(),
 		Paths: protoTrieNodePathSets,
 		Bytes: &bytes,
-	}, &TrieNodesResponse{})
+	}, &TrieNodesResponse{}, resultCh)
 
-	response := <-resultCh
-	if response != nil {
-		trieNodesResponse := response.(*TrieNodesResponse)
-		if trieNodesResponse.Nodes == nil {
-			return nil
+	for {
+		select {
+		case response := <-resultCh:
+			if response != nil {
+				trieNodesResponse := response.(*TrieNodesResponse)
+				if trieNodesResponse.Nodes == nil {
+					return nil
+				}
+				s.OnTrieNodes(trieNodesResponse.Id, trieNodesResponse.Nodes)
+			} else {
+				return nil
+			}
 		}
-		s.OnTrieNodes(trieNodesResponse.Id, trieNodesResponse.Nodes)
-	} else {
-		return nil
 	}
-	return nil
 }

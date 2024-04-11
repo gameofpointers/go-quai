@@ -3,12 +3,18 @@ package quaiclient
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
+	interfaces "github.com/dominant-strategies/go-quai"
+	quai "github.com/dominant-strategies/go-quai"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/crypto"
 	goCrypto "github.com/dominant-strategies/go-quai/crypto"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
@@ -62,7 +68,7 @@ func TestTX(t *testing.T) {
 		// 	t.Fatalf("Failed to convert public key to address: %v", err)
 		// }
 
-		signer := types.LatestSigner(&PARAMS)
+		signer := types.LatestSigner(PARAMS)
 
 		wsClient, err := ethclient.Dial(wsUrl[i])
 		if err != nil {
@@ -125,4 +131,126 @@ func TestGetBalance(t *testing.T) {
 		t.Fail()
 	}
 	t.Log(balance)
+}
+
+func TestSmartContract(t *testing.T) {
+	client, err := ethclient.Dial("ws://127.0.0.1:8100")
+	if err != nil {
+		t.Fatalf("Failed to connect to the Ethereum WebSocket client: %v", err)
+	}
+	defer client.Close()
+
+	fromAddress := common.HexToAddress("0x000D8BfADBF40241101c430D25151D893c6b16D8", location)
+	privKey, err := crypto.ToECDSA(common.FromHex("0x383bd2269958a23e0391be01d255316363e2fa22269cbdc48052343346a4dcd8"))
+	if err != nil {
+		t.Fatalf("Failed to convert private key to ECDSA: %v", err)
+	}
+
+	// Check balance
+	balance, err := client.BalanceAt(context.Background(), fromAddress, nil)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("Balance of %s: %s nonce: %d\n", fromAddress.String(), balance.String(), nonce)
+
+	// Deploy QXC contract with the proper address that gives me tokens in zone 0-0
+	contract, err := hex.DecodeString(sha)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	i := uint8(0)
+	contract = append(contract, i)
+	var contractAddr common.Address
+	// Grind contract address
+	for {
+		contract[len(contract)-1] = i
+		contractAddr = crypto.CreateAddress(fromAddress, nonce, contract, location)
+		if common.IsInChainScope(contractAddr.Bytes(), location) {
+			break
+		}
+		i++
+	}
+	fmt.Println("Contract address: ", contractAddr.String())
+	fmt.Println("Took ", i, " iterations to find contract address")
+
+	signer := types.LatestSigner(PARAMS)
+
+	// Construct deployment tx
+	inner_tx := types.QuaiTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: big.NewInt(50000), Gas: 5000000, To: nil, Value: common.Big0, Data: contract}
+	tx, err := types.SignTx(types.NewTx(&inner_tx), signer, privKey)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	gas, err := client.EstimateGas(context.Background(), quai.CallMsg{From: fromAddress /*To: nil, Gas: 0, GasPrice: MAXFEE, GasFeeCap: MAXFEE, GasTipCap: MINERTIP, Value: common.Big0, */, Data: contract, AccessList: inner_tx.AccessList})
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Println("gas: ", gas)
+	protoTx, err := tx.ProtoEncode()
+	if err != nil {
+		return
+	}
+	data, err := proto.Marshal(protoTx)
+	if err != nil {
+		return
+	}
+	fmt.Printf("%+v\n", data)
+	err = client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Println("tx: ", tx.Hash().String())
+	fmt.Println(crypto.Keccak256(data))
+	fmt.Println("tx value: ", tx.Value().String())
+	//time.Sleep(5 * time.Second) // Wait for it to be mined
+	newtx, isPending, err := client.TransactionByHash(context.Background(), tx.Hash())
+	fmt.Println("newtx value: ", newtx.Value().String())
+	newProtoTx, err := newtx.ProtoEncode()
+	if err != nil {
+		return
+	}
+	data_, err := proto.Marshal(newProtoTx)
+	if err != nil {
+		return
+	}
+	fmt.Printf("%+v\n", data_)
+	fmt.Println("tx: ", newtx.Hash().String())
+	fmt.Printf("tx: %+v isPending: %v err: %v\n", tx, isPending, err)
+	receipt, err := client.TransactionReceipt(context.Background(), tx.Hash())
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("Receipt: %+v\n", receipt)
+	contractAddr = receipt.ContractAddress
+
+	// Check balance in zone 0-0
+	sig := crypto.Keccak256([]byte("testSha()"))[:4]
+	data = make([]byte, 0, 0)
+	data = append(data, sig...)
+	/*from_, err := uint256.FromHex(fromAddress.Hex())
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	temp := from_.Bytes32()
+	data = append(data, temp[:]...)*/
+
+	data, err = client.CallContract(context.Background(), interfaces.CallMsg{To: &contractAddr, Data: data}, nil)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("Balance of %s: %s\n", fromAddress.String(), new(big.Int).SetBytes(data).String())
+
 }

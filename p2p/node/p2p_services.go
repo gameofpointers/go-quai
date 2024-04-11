@@ -14,6 +14,7 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
 	"github.com/dominant-strategies/go-quai/p2p/requestManager"
+	"github.com/dominant-strategies/go-quai/quai/snap"
 )
 
 // Opens a stream to the given peer and request some data for the given hash at the given location
@@ -110,6 +111,22 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, data
 	case common.Hash:
 		if hash, ok := recvdType.(common.Hash); ok {
 			return hash, nil
+		}
+	case *snap.AccountRangeResponse:
+		if response, ok := recvdType.(*snap.AccountRangeResponse); ok {
+			return response, nil
+		}
+	case *snap.StorageRangesResponse:
+		if response, ok := recvdType.(*snap.StorageRangesResponse); ok {
+			return response, nil
+		}
+	case *snap.ByteCodesResponse:
+		if response, ok := recvdType.(*snap.ByteCodesResponse); ok {
+			return response, nil
+		}
+	case *snap.TrieNodesResponse:
+		if response, ok := recvdType.(*snap.TrieNodesResponse); ok {
+			return response, nil
 		}
 	default:
 		log.Global.Warn("peer returned unexpected type")

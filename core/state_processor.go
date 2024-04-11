@@ -1211,6 +1211,43 @@ func (p *StateProcessor) StateAtTransaction(block *types.WorkObject, txIndex int
 }
 
 func (p *StateProcessor) Stop() {
+	// Ensure that the entirety of the state snapshot is journalled to disk.
+	var snapBase common.Hash
+	if p.snaps != nil {
+		var err error
+		if snapBase, err = p.snaps.Journal(p.hc.CurrentBlock().EVMRoot()); err != nil {
+			p.logger.Error("Failed to journal state snapshot", "err", err)
+		}
+	}
+	// Ensure the state of a recent block is also stored to disk before exiting.
+	// We're writing three different states to catch different restart scenarios:
+	//  - HEAD:     So we don't need to reprocess any blocks in the general case
+	//  - HEAD-1:   So we don't do large reorgs if our HEAD becomes an uncle
+	//  - HEAD-127: So we have a hard limit on the number of blocks reexecuted
+	triedb := p.stateCache.TrieDB()
+
+	for _, offset := range []uint64{0, 1, TriesInMemory - 1} {
+		if number := p.hc.CurrentBlock().NumberU64(common.ZONE_CTX); number > offset {
+			recent := p.hc.GetBlockByNumber(number - offset)
+
+			p.logger.Info("Writing cached state to disk", "block", recent.Number(common.ZONE_CTX), "hash", recent.Hash(), "root", recent.EVMRoot())
+			if err := triedb.Commit(recent.EVMRoot(), true, nil); err != nil {
+				p.logger.Error("Failed to commit recent state trie", "err", err)
+			}
+		}
+	}
+	if snapBase != (common.Hash{}) {
+		p.logger.Info("Writing snapshot state to disk", "root", snapBase)
+		if err := triedb.Commit(snapBase, true, nil); err != nil {
+			p.logger.Error("Failed to commit recent state trie", "err", err)
+		}
+	}
+	for !p.triegc.Empty() {
+		triedb.Dereference(p.triegc.PopItem().(common.Hash))
+	}
+	if size, _ := triedb.Size(); size != 0 {
+		p.logger.Error("Dangling trie nodes after full cleanup")
+	}
 	// Ensure all live cached entries be saved into disk, so that we can skip
 	// cache warmup when node restarts.
 	if p.cacheConfig.TrieCleanJournal != "" {

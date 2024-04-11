@@ -352,7 +352,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		config:          config,
 		chainconfig:     chainconfig,
 		chain:           chain,
-		signer:          types.LatestSigner(chainconfig),
+		signer:          types.LatestSigner(*chainconfig),
 		pending:         make(map[common.InternalAddress]*txList),
 		qiPool:          make(map[common.Hash]*types.TxWithMinerFee),
 		queue:           make(map[common.InternalAddress]*txList),

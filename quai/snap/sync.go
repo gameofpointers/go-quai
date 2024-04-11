@@ -188,6 +188,7 @@ func (db *NodeSet) Logger() *log.Logger {
 	return log.Global
 }
 
+// KeyCount returns the number of nodes in the set
 func (db *NodeSet) KeyCount() int {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
@@ -250,7 +251,7 @@ func (n NodeList) DataSize() int {
 type P2P interface {
 	// Method to request data from the network
 	// Specify location, data hash, and data type to request
-	Request(location common.Location, requestData interface{}, responseDataType interface{}) chan interface{}
+	Request(location common.Location, requestData interface{}, responseDataType interface{}, resultCh chan interface{}) chan interface{}
 }
 
 // accountRequest tracks a pending account range request to ensure responses are
@@ -946,14 +947,11 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 		s.pend.Add(1)
 		go func(root common.Hash) {
 			defer s.pend.Done()
-			if err := s.RequestAccountRange(reqid, root, req.origin, req.limit, uint64(cap)); err != nil {
+			if err := s.RequestAccountRange(task, req, reqid, root, req.origin, req.limit, uint64(cap)); err != nil {
 				s.logger.Debug("Failed to request account range", "err", err)
 				s.scheduleRevertAccountRequest(req)
 			}
 		}(s.root)
-
-		// Inject the request into the task to block further assignments
-		task.req = req
 	}
 }
 
@@ -1117,16 +1115,11 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 			if subtask != nil {
 				origin, limit = req.origin[:], req.limit[:]
 			}
-			if err := s.RequestStorageRanges(reqid, root, accounts, origin, limit, uint64(cap)); err != nil {
+			if err := s.RequestStorageRanges(subtask, req, reqid, root, accounts, origin, limit, uint64(cap)); err != nil {
 				s.logger.Debug("Failed to request storage", "err", err)
 				s.scheduleRevertStorageRequest(req)
 			}
 		}(s.root)
-
-		// Inject the request into the subtask to block further assignments
-		if subtask != nil {
-			subtask.req = req
-		}
 	}
 }
 
@@ -1773,6 +1766,7 @@ func (s *Syncer) processStorageResponse(res *storageResponse) {
 		// outdated during the sync, but it can be fixed later during the
 		// snapshot generation.
 		for j := 0; j < len(res.hashes[i]); j++ {
+			log.Global.Error("writing storage snapshot", "account", account, "hash", res.hashes[i][j], "slot", res.slots[i][j])
 			rawdb.WriteStorageSnapshot(batch, account, res.hashes[i][j], res.slots[i][j])
 
 			// If we're storing large contracts, generate the trie nodes
