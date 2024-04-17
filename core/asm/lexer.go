@@ -22,6 +22,10 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	dbg "runtime/debug"
+
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 // stateFn is used through the lifetime of the
@@ -104,6 +108,14 @@ func Lex(source []byte, debug bool) <-chan token {
 		debug:  debug,
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Global.WithFields(log.Fields{
+					"error":      r,
+					"stacktrace": string(dbg.Stack()),
+				}).Error("Go-Quai Panicked")
+			}
+		}()
 		l.emit(lineStart)
 		for l.state != nil {
 			l.state = l.state(l)

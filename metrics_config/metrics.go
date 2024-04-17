@@ -3,6 +3,7 @@ package metrics_config
 import (
 	"net/http"
 	"os"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -40,6 +41,14 @@ func MetricsEnabled() bool {
 }
 
 func StartProcessMetrics() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Global.WithFields(log.Fields{
+				"error":      r,
+				"stacktrace": string(debug.Stack()),
+			}).Fatal("Go-Quai Panicked")
+		}
+	}()
 	// Short circuit if the metrics system is disabled
 	if !enabled {
 		return
@@ -95,6 +104,15 @@ func NewTimer(name string, help string) *prometheus.Timer {
 }
 
 func initializeHttpMetrics(metricsMap map[string]*prometheus.GaugeVec) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Global.WithFields(log.Fields{
+				"error":      r,
+				"stacktrace": string(debug.Stack()),
+			}).Error("Go-Quai Panicked")
+		}
+	}()
+
 	http.Handle("/metrics", promhttp.InstrumentMetricHandler(
 		prometheus.DefaultRegisterer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			updateMetrics(metricsMap)
@@ -163,21 +181,53 @@ func updateMetrics(metricsMap map[string]*prometheus.GaugeVec) {
 	wg.Add(4)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Global.WithFields(log.Fields{
+					"error":      r,
+					"stacktrace": string(debug.Stack()),
+				}).Error("Go-Quai Panicked")
+			}
+		}()
 		collectCPUMetrics(metricsMap["cpu"], proc)
 		wg.Done()
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Global.WithFields(log.Fields{
+					"error":      r,
+					"stacktrace": string(debug.Stack()),
+				}).Error("Go-Quai Panicked")
+			}
+		}()
 		collectMemoryMetrics(metricsMap["mem"], proc)
 		wg.Done()
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Global.WithFields(log.Fields{
+					"error":      r,
+					"stacktrace": string(debug.Stack()),
+				}).Error("Go-Quai Panicked")
+			}
+		}()
 		collectDiskMetrics(metricsMap["disk"])
 		wg.Done()
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Global.WithFields(log.Fields{
+					"error":      r,
+					"stacktrace": string(debug.Stack()),
+				}).Error("Go-Quai Panicked")
+			}
+		}()
 		collectNetworkingMetrics(metricsMap["net"], proc)
 		wg.Done()
 	}()
