@@ -258,6 +258,7 @@ func generateTrieRoot(db ethdb.KeyValueWriter, it Iterator, account common.Hash,
 				log.Global.WithFields(log.Fields{
 					"error":      r,
 					"stacktrace": string(debug.Stack()),
+					"account":    account,
 				}).Error("Go-Quai Panicked")
 			}
 		}()

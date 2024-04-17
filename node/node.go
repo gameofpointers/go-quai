@@ -88,7 +88,7 @@ func New(conf *Config, logger *log.Logger) (*Node, error) {
 
 	node := &Node{
 		config:        conf,
-		inprocHandler: rpc.NewServer(),
+		inprocHandler: rpc.NewServer(logger),
 		eventmux:      new(event.TypeMux),
 		stop:          make(chan struct{}),
 		databases:     make(map[*closeTrackingDB]struct{}),

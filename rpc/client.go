@@ -78,6 +78,7 @@ type Client struct {
 	idgen    func() ID // for subscriptions
 	isHTTP   bool
 	services *serviceRegistry
+	log      *log.Logger
 
 	idCounter uint32
 
@@ -112,7 +113,7 @@ type clientConn struct {
 
 func (c *Client) newClientConn(conn ServerCodec) *clientConn {
 	ctx := context.WithValue(context.Background(), clientContextKey{}, c)
-	handler := newHandler(ctx, conn, c.idgen, c.services)
+	handler := newHandler(ctx, conn, c.idgen, c.services, c.log)
 	return &clientConn{conn, handler}
 }
 
@@ -196,12 +197,12 @@ func newClient(initctx context.Context, connect reconnectFunc) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	c := initClient(conn, randomIDGenerator(), new(serviceRegistry))
+	c := initClient(conn, randomIDGenerator(), new(serviceRegistry), log.Global)
 	c.reconnectFunc = connect
 	return c, nil
 }
 
-func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry) *Client {
+func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry, log *log.Logger) *Client {
 	_, isHTTP := conn.(*httpConn)
 	c := &Client{
 		idgen:       idgen,
@@ -217,6 +218,7 @@ func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry) *C
 		reqInit:     make(chan *requestOp),
 		reqSent:     make(chan error, 1),
 		reqTimeout:  make(chan *requestOp),
+		log:         log,
 	}
 	if !isHTTP {
 		go c.dispatch(conn)

@@ -71,7 +71,7 @@ type callProc struct {
 	notifiers []*Notifier
 }
 
-func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry) *handler {
+func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, logger *log.Logger) *handler {
 	rootCtx, cancelRoot := context.WithCancel(connCtx)
 	h := &handler{
 		reg:            reg,
@@ -83,6 +83,7 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 		cancelRoot:     cancelRoot,
 		allowSubscribe: true,
 		serverSubs:     make(map[ID]*Subscription),
+		log:            logger,
 	}
 	h.unsubscribeCb = newCallback(reflect.Value{}, reflect.ValueOf(h.unsubscribe))
 	return h
@@ -221,7 +222,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 		defer cancel()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Global.WithFields(log.Fields{
+				h.log.WithFields(log.Fields{
 					"error":      r,
 					"stacktrace": string(debug.Stack()),
 				}).Fatal("Go-Quai Panicked")
@@ -270,7 +271,7 @@ func (h *handler) handleSubscriptionResult(msg *jsonrpcMessage) {
 func (h *handler) handleResponse(msg *jsonrpcMessage) {
 	op := h.respWait[string(msg.ID)]
 	if op == nil {
-		log.Global.WithField("reqid", idForLog{msg.ID}).Debug("Unsolicited RPC response")
+		h.log.WithField("reqid", idForLog{msg.ID}).Debug("Unsolicited RPC response")
 		return
 	}
 	delete(h.respWait, string(msg.ID))
@@ -285,7 +286,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 	defer close(op.resp)
 	defer func() {
 		if r := recover(); r != nil {
-			log.Global.WithFields(log.Fields{
+			h.log.WithFields(log.Fields{
 				"error":      r,
 				"stacktrace": string(debug.Stack()),
 			}).Fatal("Go-Quai Panicked")
@@ -387,7 +388,7 @@ func (h *handler) handleSubscribe(cp *callProc, msg *jsonrpcMessage) *jsonrpcMes
 
 // runMethod runs the Go callback for an RPC method.
 func (h *handler) runMethod(ctx context.Context, msg *jsonrpcMessage, callb *callback, args []reflect.Value) *jsonrpcMessage {
-	result, err := callb.call(ctx, msg.Method, args)
+	result, err := callb.call(ctx, msg.Method, args, h.log)
 	if err != nil {
 		return msg.errorResponse(err)
 	}
