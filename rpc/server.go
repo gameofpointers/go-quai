@@ -131,7 +131,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 // subscriptions.
 func (s *Server) Stop() {
 	if atomic.CompareAndSwapInt32(&s.run, 1, 0) {
-		log.Global.Debug("RPC server shutting down")
+		s.log.Debug("RPC server shutting down")
 		s.codecs.Each(func(c interface{}) bool {
 			c.(ServerCodec).close()
 			return true

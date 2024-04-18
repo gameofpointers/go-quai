@@ -142,6 +142,10 @@ func (db *Database) Location() common.Location {
 	return db.location
 }
 
+func (db *Database) Logger() *log.Logger {
+	return db.logger
+}
+
 // Close stops the metrics collection, flushes any pending data to disk and closes
 // all io accesses to the underlying key-value store.
 func (db *Database) Close() error {
@@ -187,8 +191,9 @@ func (db *Database) Delete(key []byte) error {
 // database until a final write is called.
 func (db *Database) NewBatch() ethdb.Batch {
 	return &batch{
-		db: db.db,
-		b:  new(leveldb.Batch),
+		db:     db.db,
+		b:      new(leveldb.Batch),
+		logger: db.logger,
 	}
 }
 
@@ -406,9 +411,10 @@ func (db *Database) meter(refresh time.Duration) {
 // batch is a write-only leveldb batch that commits changes to its host database
 // when Write is called. A batch cannot be used concurrently.
 type batch struct {
-	db   *leveldb.DB
-	b    *leveldb.Batch
-	size int
+	db     *leveldb.DB
+	b      *leveldb.Batch
+	size   int
+	logger *log.Logger
 }
 
 // Put inserts the given value into the batch for later committing.
@@ -444,6 +450,10 @@ func (b *batch) Reset() {
 // Replay replays the batch contents.
 func (b *batch) Replay(w ethdb.KeyValueWriter) error {
 	return b.b.Replay(&replayer{writer: w})
+}
+
+func (b *batch) Logger() *log.Logger {
+	return b.logger
 }
 
 // replayer is a small wrapper to implement the correct replay methods.

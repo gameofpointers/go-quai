@@ -799,6 +799,10 @@ func (c *cleaner) Delete(key []byte) error {
 	panic("not implemented")
 }
 
+func (c *cleaner) Logger() *log.Logger {
+	return c.db.Logger()
+}
+
 // Size returns the current storage size of the memory cache in front of the
 // persistent database layer.
 func (db *Database) Size() (common.StorageSize, common.StorageSize) {
@@ -857,4 +861,8 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 			return
 		}
 	}
+}
+
+func (db *Database) Logger() *log.Logger {
+	return db.diskdb.Logger()
 }
