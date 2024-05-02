@@ -101,6 +101,13 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 			backend.SendRemoteTx(&data)
 		}
 		// TODO: Handle the error here and mark the peers accordingly
+	case types.Transactions:
+		backend := *qbe.GetBackend(nodeLocation)
+		if backend == nil {
+			log.Global.Error("no backend found")
+			return false
+		}
+		backend.SendRemoteTxs(data)
 	}
 
 	// If it was a good broadcast, mark the peer as lively
