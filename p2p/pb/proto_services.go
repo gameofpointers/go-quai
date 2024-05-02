@@ -213,6 +213,12 @@ func ConvertAndMarshal(data interface{}) ([]byte, error) {
 	case common.Hash:
 		protoHash := data.ProtoEncode()
 		return proto.Marshal(protoHash)
+	case *types.Transactions:
+		protoTransactions, err := data.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		return proto.Marshal(protoTransactions)
 	default:
 		return nil, errors.New("unsupported data type")
 	}

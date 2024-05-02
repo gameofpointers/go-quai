@@ -1002,6 +1002,7 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // a convenience wrapper aroundd AddLocals.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 	pool.localTxsCount += 1
+	tx.SetLocal(true)
 	errs := pool.AddLocals([]*types.Transaction{tx})
 	return errs[0]
 }
@@ -1339,11 +1340,13 @@ func (pool *TxPool) requestPromoteExecutables(set *accountSet) chan struct{} {
 	}
 }
 
-// queueTxEvent enqueues a transaction event to be sent in the next reorg run.
+// queueTxEvent enqueues a transaction event to be sent in the next reorg run if it is local.
 func (pool *TxPool) queueTxEvent(tx *types.Transaction) {
-	select {
-	case pool.queueTxEventCh <- tx:
-	case <-pool.reorgShutdownCh:
+	if tx.IsLocal() {
+		select {
+		case pool.queueTxEventCh <- tx:
+		case <-pool.reorgShutdownCh:
+		}
 	}
 }
 
