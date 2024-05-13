@@ -241,10 +241,10 @@ func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream
 	// check if we have the block in our cache or database
 	block := node.GetWorkObject(hash, loc)
 	if block == nil {
-		log.Global.Debugf("block not found")
+		log.Global.Infof("block not found")
 		return nil
 	}
-	log.Global.Debugf("block found %s", block.Hash())
+	log.Global.Infof("block found %s", block.Hash())
 	// create a Quai Message Response with the block
 	data, err := pb.EncodeQuaiResponse(id, loc, block)
 	if err != nil {
@@ -257,7 +257,7 @@ func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream
 	log.Global.WithFields(log.Fields{
 		"blockHash": block.Hash(),
 		"peer":      stream.Conn().RemotePeer(),
-	}).Trace("Sent block to peer")
+	}).Info("Sent block to peer")
 	return nil
 }
 

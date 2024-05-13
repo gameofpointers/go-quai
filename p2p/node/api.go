@@ -128,7 +128,7 @@ func (p *P2PNode) requestFromPeers(location common.Location, data interface{}, d
 		log.Global.WithFields(log.Fields{
 			"peers":    peers,
 			"location": location,
-		}).Debug("Requesting data from peers")
+		}).Info("Requesting data from peers")
 
 		var requestWg sync.WaitGroup
 		for _, peerID := range peers {
