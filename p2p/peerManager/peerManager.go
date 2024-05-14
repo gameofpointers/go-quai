@@ -34,21 +34,18 @@ const (
 	// Represents the minimum ratio of positive to negative reports
 	// 	e.g. live_reports / latent_reports = 0.8
 	c_qualityThreshold = 0.8
-
-	// The number of peers to return when querying for peers
-	C_peerCount = 3
 )
-
-type PeerQuality int
 
 const (
-	Best PeerQuality = iota
-	Responsive
-	LastResort
-)
+	// Peer DB positions in the peerDBs slice
+	c_bestDBPos = iota
+	c_responseiveDBPos
+	c_lastResortDBPos
 
-var (
-	dbNames = [3]string{"bestPeersDB", "responsivePeersDB", "lastResortPeersDB"}
+	// Dir names for the peerDBs
+	c_bestDBName       = "bestPeersDB"
+	c_responsiveDBName = "responsivePeersDB"
+	c_lastResortDBName = "lastResortPeersDB"
 )
 
 // PeerManager is an interface that extends libp2p Connection Manager and Gater
@@ -72,10 +69,12 @@ type PeerManager interface {
 	// Returns an existing stream with that peer or opens a new one
 	GetStream(p peer.ID) (network.Stream, error)
 
-	// Returns c_peerCount peers starting at the requested quality level of peers
-	// If there are not enough peers at the requested quality, it will return lower quality peers
-	// If there still aren't enough peers, it will query the DHT for more
-	GetPeers(location common.Location, data interface{}, quality PeerQuality) []p2p.PeerID
+	// Returns c_recipientCount of the highest quality peers: lively & responsive
+	GetBestPeersWithFallback(common.Location) []p2p.PeerID
+	// Returns c_recipientCount responsive, but less lively peers
+	GetResponsivePeersWithFallback(common.Location) []p2p.PeerID
+	// Returns c_recipientCount peers regardless of status
+	GetLastResortPeers(common.Location) []p2p.PeerID
 
 	// Increases the peer's liveliness score
 	MarkLivelyPeer(p2p.PeerID, common.Location)
@@ -149,22 +148,22 @@ func NewManager(ctx context.Context, low int, high int, datastore datastore.Data
 				continue
 			}
 			peerDBs[domLocName] = make([]*peerdb.PeerDB, 3)
-			peerDBs[domLocName][Best], err = peerdb.NewPeerDB(dbNames[Best], domLocName)
+			peerDBs[domLocName][c_bestDBPos], err = peerdb.NewPeerDB(c_bestDBName, domLocName)
 			if err != nil {
 				return nil, err
 			}
-			peerDBs[domLocName][Responsive], err = peerdb.NewPeerDB(dbNames[Responsive], domLocName)
+			peerDBs[domLocName][c_responseiveDBPos], err = peerdb.NewPeerDB(c_responsiveDBName, domLocName)
 			if err != nil {
 				return nil, err
 			}
-			peerDBs[domLocName][LastResort], err = peerdb.NewPeerDB(dbNames[LastResort], domLocName)
+			peerDBs[domLocName][c_lastResortDBPos], err = peerdb.NewPeerDB(c_lastResortDBName, domLocName)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	streamManager, err := streamManager.NewStreamManager(C_peerCount)
+	streamManager, err := streamManager.NewStreamManager()
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +211,7 @@ func NewManager(ctx context.Context, low int, high int, datastore datastore.Data
 						logger.WithFields(log.Fields{
 							"location":  locName,
 							"peerCount": len(locPeer),
-							"bucket":    dbNames[dbName],
+							"bucket":    dbName,
 							"peers":     locPeer}).Info("Peer stats")
 					}
 				}
@@ -310,110 +309,38 @@ func (pm *BasicPeerManager) getPeersHelper(peerDB *peerdb.PeerDB, numPeers int) 
 	return peerSubset
 }
 
-func (pm *BasicPeerManager) GetPeers(location common.Location, data interface{}, quality PeerQuality) []p2p.PeerID {
-	var peerList []p2p.PeerID
-	switch quality {
-	case Best:
-		peerList = pm.getBestPeersWithFallback(location)
-	case Responsive:
-		peerList = pm.getResponsivePeersWithFallback(location)
-	case LastResort:
-		peerList = pm.getLastResortPeers(location)
-	default:
-		panic("Invalid peer quality")
-	}
-
-	lenPeer := len(peerList)
-	if lenPeer >= C_peerCount {
-		// Found sufficient number of peers
-		return peerList
-	}
-
-	// Query the DHT for more peers
-	return pm.queryDHT(location, data, peerList, C_peerCount-lenPeer)
-}
-
-func (pm *BasicPeerManager) queryDHT(location common.Location, data interface{}, peerList []p2p.PeerID, peerCount int) []p2p.PeerID {
-	// create a Cid from the slice location
-	topicName, _ := pubsubManager.TopicName(pm.genesis, location, data)
-	shardCid := pubsubManager.TopicToCid(topicName)
-
-	// Internal list of peers from the dht
-	dhtPeers := make([]p2p.PeerID, 0, peerCount)
-	log.Global.Infof("Querying DHT for slice Cid %s", shardCid)
-	// query the DHT for peers in the slice
-	// TODO: need to find providers of a topic, not a shard
-	for peer := range pm.dht.FindProvidersAsync(pm.ctx, shardCid, peerCount) {
-		if peer.ID != pm.selfID {
-			dhtPeers = append(dhtPeers, peer.ID)
-		}
-	}
-	log.Global.Warn("Found the following peers from the DHT: ", dhtPeers)
-	return append(peerList, dhtPeers...)
-}
-
-func (pm *BasicPeerManager) getBestPeersWithFallback(location common.Location) []p2p.PeerID {
+func (pm *BasicPeerManager) GetBestPeersWithFallback(location common.Location) []p2p.PeerID {
 	locName := location.Name()
 	if pm.peerDBs[locName] == nil {
 		// There have not been any peers added to this topic
 		return nil
 	}
 
-	bestPeersCount := pm.peerDBs[locName][Best].GetPeerCount()
-	if bestPeersCount < C_peerCount {
-		// Fetch the initial list of best peers.
-		bestPeerList := pm.getPeersHelper(pm.peerDBs[locName][Best], bestPeersCount)
-
-		// Map to track unique peers.
-		uniquePeers := make(map[p2p.PeerID]bool)
-		for _, peer := range bestPeerList {
-			uniquePeers[peer] = true
-		}
-
-		// Append responsive peers ensuring they are unique.
-		responsivePeers := pm.getResponsivePeersWithFallback(location)
-		for _, peer := range responsivePeers {
-			if !uniquePeers[peer] {
-				bestPeerList = append(bestPeerList, peer)
-				uniquePeers[peer] = true
-			}
-		}
-
+	bestPeersCount := pm.peerDBs[locName][c_bestDBPos].GetPeerCount()
+	if bestPeersCount < streamManager.C_peerCount {
+		bestPeerList := pm.getPeersHelper(pm.peerDBs[locName][c_bestDBPos], bestPeersCount)
+		bestPeerList = append(bestPeerList, pm.GetResponsivePeersWithFallback(location)...)
 		return bestPeerList
 	}
-	return pm.getPeersHelper(pm.peerDBs[locName][Best], C_peerCount)
+	return pm.getPeersHelper(pm.peerDBs[locName][c_bestDBPos], streamManager.C_peerCount)
 }
 
-func (pm *BasicPeerManager) getResponsivePeersWithFallback(location common.Location) []p2p.PeerID {
+func (pm *BasicPeerManager) GetResponsivePeersWithFallback(location common.Location) []p2p.PeerID {
 	locName := location.Name()
 
-	responsivePeersCount := pm.peerDBs[locName][Responsive].GetPeerCount()
-	if responsivePeersCount < C_peerCount {
-		// Fetch the initial list of responsive peers.
-		responsivePeerList := pm.getPeersHelper(pm.peerDBs[locName][Responsive], responsivePeersCount)
-
-		// Map to track unique peers.
-		uniquePeers := make(map[p2p.PeerID]bool)
-		for _, peer := range responsivePeerList {
-			uniquePeers[peer] = true
-		}
-
-		// Append peers from last resort ensuring they are unique.
-		lastResortPeers := pm.getLastResortPeers(location)
-		for _, peer := range lastResortPeers {
-			if !uniquePeers[peer] {
-				responsivePeerList = append(responsivePeerList, peer)
-				uniquePeers[peer] = true
-			}
-		}
+	responsivePeersCount := pm.peerDBs[locName][c_responseiveDBPos].GetPeerCount()
+	if responsivePeersCount < streamManager.C_peerCount {
+		responsivePeerList := pm.getPeersHelper(pm.peerDBs[locName][c_responseiveDBPos], responsivePeersCount)
+		responsivePeerList = append(responsivePeerList, pm.GetLastResortPeers(location)...)
 
 		return responsivePeerList
 	}
-	return pm.getPeersHelper(pm.peerDBs[locName][Responsive], C_peerCount)
+	return pm.getPeersHelper(pm.peerDBs[locName][c_responseiveDBPos], streamManager.C_peerCount)
+
 }
 
-func (pm *BasicPeerManager) getLastResortPeers(location common.Location) []p2p.PeerID {
-	return pm.getPeersHelper(pm.peerDBs[location.Name()][LastResort], C_peerCount)
+func (pm *BasicPeerManager) GetLastResortPeers(location common.Location) []p2p.PeerID {
+	return pm.getPeersHelper(pm.peerDBs[location.Name()][c_lastResortDBPos], streamManager.C_peerCount)
 }
 
 func (pm *BasicPeerManager) MarkLivelyPeer(peer p2p.PeerID, location common.Location) {
@@ -498,21 +425,21 @@ func (pm *BasicPeerManager) recategorizePeer(peerID p2p.PeerID, location common.
 	locationName := location.Name()
 	if liveness >= c_qualityThreshold && responsiveness >= c_qualityThreshold {
 		// Best peers: high liveness and responsiveness
-		err := pm.peerDBs[locationName][Best].Put(pm.ctx, key, peerInfo)
+		err := pm.peerDBs[locationName][c_bestDBPos].Put(pm.ctx, key, peerInfo)
 		if err != nil {
 			return errors.Wrap(err, "error putting peer in bestPeersDB")
 		}
 
 	} else if responsiveness >= c_qualityThreshold {
 		// Responsive peers: high responsiveness, but low liveness
-		err := pm.peerDBs[locationName][Responsive].Put(pm.ctx, key, peerInfo)
+		err := pm.peerDBs[locationName][c_responseiveDBPos].Put(pm.ctx, key, peerInfo)
 		if err != nil {
 			return errors.Wrap(err, "error putting peer in responsivePeersDB")
 		}
 
 	} else {
 		// All other peers
-		err := pm.peerDBs[locationName][LastResort].Put(pm.ctx, key, peerInfo)
+		err := pm.peerDBs[locationName][c_lastResortDBPos].Put(pm.ctx, key, peerInfo)
 		if err != nil {
 			return errors.Wrap(err, "error putting peer in allPeersDB")
 		}

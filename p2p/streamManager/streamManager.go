@@ -14,6 +14,9 @@ import (
 )
 
 const (
+	// The number of peers to return when querying for peers
+	C_peerCount = 3
+
 	// The amount of redundancy for open streams
 	// c_peerCount * c_streamReplicationFactor = total number of open streams
 	c_streamReplicationFactor = 3
@@ -40,9 +43,9 @@ type basicStreamManager struct {
 	p2pBackend  quaiprotocol.QuaiP2PNode
 }
 
-func NewStreamManager(peerCount int) (StreamManager, error) {
+func NewStreamManager() (StreamManager, error) {
 	lruCache, err := lru.NewWithEvict(
-		peerCount*c_streamReplicationFactor,
+		C_peerCount*c_streamReplicationFactor,
 		severStream,
 	)
 	if err != nil {
