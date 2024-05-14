@@ -422,26 +422,32 @@ func (pm *BasicPeerManager) recategorizePeer(peerID p2p.PeerID, location common.
 		return errors.Wrap(err, "error marshaling peer info")
 	}
 
-	locationName := location.Name()
-	if liveness >= c_qualityThreshold && responsiveness >= c_qualityThreshold {
-		// Best peers: high liveness and responsiveness
-		err := pm.peerDBs[locationName][c_bestDBPos].Put(pm.ctx, key, peerInfo)
-		if err != nil {
-			return errors.Wrap(err, "error putting peer in bestPeersDB")
-		}
+	// Need to add the peer to all locations that it is running
+	// This is an important optimization to not have to wait for a
+	// prime block before adding a peer to the prime DB
+	locationContexts := location.GetDoms()
+	for _, location := range locationContexts {
+		locationName := location.Name()
+		if liveness >= c_qualityThreshold && responsiveness >= c_qualityThreshold {
+			// Best peers: high liveness and responsiveness
+			err := pm.peerDBs[locationName][c_bestDBPos].Put(pm.ctx, key, peerInfo)
+			if err != nil {
+				return errors.Wrap(err, "error putting peer in bestPeersDB")
+			}
 
-	} else if responsiveness >= c_qualityThreshold {
-		// Responsive peers: high responsiveness, but low liveness
-		err := pm.peerDBs[locationName][c_responseiveDBPos].Put(pm.ctx, key, peerInfo)
-		if err != nil {
-			return errors.Wrap(err, "error putting peer in responsivePeersDB")
-		}
+		} else if responsiveness >= c_qualityThreshold {
+			// Responsive peers: high responsiveness, but low liveness
+			err := pm.peerDBs[locationName][c_responseiveDBPos].Put(pm.ctx, key, peerInfo)
+			if err != nil {
+				return errors.Wrap(err, "error putting peer in responsivePeersDB")
+			}
 
-	} else {
-		// All other peers
-		err := pm.peerDBs[locationName][c_lastResortDBPos].Put(pm.ctx, key, peerInfo)
-		if err != nil {
-			return errors.Wrap(err, "error putting peer in allPeersDB")
+		} else {
+			// All other peers
+			err := pm.peerDBs[locationName][c_lastResortDBPos].Put(pm.ctx, key, peerInfo)
+			if err != nil {
+				return errors.Wrap(err, "error putting peer in allPeersDB")
+			}
 		}
 	}
 
