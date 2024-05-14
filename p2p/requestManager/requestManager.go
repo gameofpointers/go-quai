@@ -88,6 +88,8 @@ func (m *requestIDManager) addRequestID(id uint32, dataChan chan interface{}) {
 func (m *requestIDManager) CloseRequest(id uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	dataChan, _ := m.activeRequests.load(id)
+	close(dataChan)
 	m.activeRequests.delete(id)
 }
 
