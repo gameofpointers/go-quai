@@ -27,7 +27,6 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p/protocol"
 	"github.com/dominant-strategies/go-quai/p2p/pubsubManager"
 	"github.com/dominant-strategies/go-quai/p2p/requestManager"
-	"github.com/dominant-strategies/go-quai/p2p/streamManager"
 	"github.com/dominant-strategies/go-quai/quai"
 )
 
@@ -38,6 +37,9 @@ const (
 
 // P2PNode represents a libp2p node
 type P2PNode struct {
+	// Host interface
+	host.Host
+
 	// Backend for handling consensus data
 	consensus quai.ConsensusAPI
 
@@ -179,12 +181,14 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 
 	// Create a gossipsub instance with helper functions
 	ps, err := pubsubManager.NewGossipSubManager(ctx, host)
+
 	if err != nil {
 		return nil, err
 	}
 
 	p2p := &P2PNode{
 		ctx:            ctx,
+		Host:           host,
 		bootpeers:      bootpeers,
 		pubsub:         ps,
 		peerManager:    peerMgr,
@@ -193,11 +197,8 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 		quitCh:         quitCh,
 	}
 
-	sm, err := streamManager.NewStreamManager(peerManager.C_peerCount, p2p, host)
-	if err != nil {
-		return nil, err
-	}
-	p2p.peerManager.SetStreamManager(sm)
+	// Set the peer manager's backend to the host
+	peerMgr.SetP2PBackend(p2p)
 
 	return p2p, nil
 }
@@ -225,7 +226,7 @@ func createCache(size int) *lru.Cache[common.Hash, interface{}] {
 
 // Get the full multi-address to reach our node
 func (p *P2PNode) p2pAddress() (multiaddr.Multiaddr, error) {
-	return multiaddr.NewMultiaddr(fmt.Sprintf("/p2p/%s", p.peerManager.GetSelfID()))
+	return multiaddr.NewMultiaddr(fmt.Sprintf("/p2p/%s", p.ID()))
 }
 
 // Helper to access the corresponding data cache

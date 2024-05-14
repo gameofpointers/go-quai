@@ -22,7 +22,7 @@ func (p *P2PNode) eventLoop() {
 	}()
 
 	// Subscribe to any events of interest
-	sub, err := p.peerManager.GetHost().EventBus().Subscribe([]interface{}{
+	sub, err := p.EventBus().Subscribe([]interface{}{
 		new(event.EvtLocalProtocolsUpdated),
 		new(event.EvtLocalAddressesUpdated),
 		new(event.EvtLocalReachabilityChanged),
@@ -72,16 +72,16 @@ func (p *P2PNode) eventLoop() {
 				log.Global.Debugf("Event 'Peer identification failed' - peer: %v, reason: %v", e.Peer, e.Reason.Error())
 			case event.EvtPeerConnectednessChanged:
 				// get the peer info
-				peerInfo := p.peerManager.GetHost().Peerstore().PeerInfo(e.Peer)
+				peerInfo := p.Peerstore().PeerInfo(e.Peer)
 				// get the peer ID
 				peerID := peerInfo.ID
 				// get the peer protocols
-				peerProtocols, err := p.peerManager.GetHost().Peerstore().GetProtocols(peerID)
+				peerProtocols, err := p.Peerstore().GetProtocols(peerID)
 				if err != nil {
 					log.Global.Errorf("error getting peer protocols: %s", err)
 				}
 				// get the peer addresses
-				peerAddresses := p.peerManager.GetHost().Peerstore().Addrs(peerID)
+				peerAddresses := p.Peerstore().Addrs(peerID)
 				log.Global.Debugf("Event: 'Peer connectedness change' - Peer %s (peerInfo: %+v) is now %s, protocols: %v, addresses: %v", peerID.String(), peerInfo, e.Connectedness, peerProtocols, peerAddresses)
 
 				if e.Connectedness == network.NotConnected {

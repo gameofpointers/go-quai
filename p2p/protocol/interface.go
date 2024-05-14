@@ -3,6 +3,7 @@ package protocol
 import (
 	"math/big"
 
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -22,7 +23,9 @@ type QuaiP2PNode interface {
 	GetBlockHashByNumber(number *big.Int, location common.Location) *common.Hash
 	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
 	GetRequestManager() requestManager.RequestManager
+	GetHostBackend() host.Host
 
 	Connect(peer.AddrInfo) error
 	NewStream(peer.ID) (network.Stream, error)
+	Network() network.Network
 }
