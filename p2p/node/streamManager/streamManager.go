@@ -79,13 +79,8 @@ func NewStreamManager(peerCount int, node quaiprotocol.QuaiP2PNode, host host.Ho
 	}, nil
 }
 
-// Expects a key as peerID and value of *streamWrapper
 func severStream(key interface{}, value interface{}) {
-	wrappedStream, ok := value.(*streamWrapper)
-	if !ok {
-		return
-	}
-	stream := wrappedStream.stream
+	stream := value.(network.Stream)
 	err := stream.Close()
 	if err != nil {
 		log.Global.WithField("err", err).Error("Failed to close stream")
@@ -98,9 +93,10 @@ func severStream(key interface{}, value interface{}) {
 func (sm *basicStreamManager) CloseStream(peerID p2p.PeerID) error {
 	wrappedStream, ok := sm.streamCache.Get(peerID)
 	if ok {
-		severStream(peerID, wrappedStream)
-		sm.streamCache.Remove(peerID)
+		stream := wrappedStream.(*streamWrapper).stream
 		log.Global.WithField("peerID", peerID).Debug("Pruned connection with peer")
+		severStream(peerID, stream)
+		sm.streamCache.Remove(peerID)
 		return nil
 	}
 	return errStreamNotFound
