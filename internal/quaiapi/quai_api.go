@@ -896,32 +896,6 @@ func (s *PublicBlockChainQuaiAPI) GetManifest(ctx context.Context, raw json.RawM
 	return manifest, nil
 }
 
-type SendPendingEtxsToDomArgs struct {
-	Header         types.WorkObject     `json:"header"`
-	NewPendingEtxs []types.Transactions `json:"newPendingEtxs"`
-}
-
-func (s *PublicBlockChainQuaiAPI) SendPendingEtxsToDom(ctx context.Context, raw json.RawMessage) error {
-	var pEtxs types.PendingEtxs
-	if err := json.Unmarshal(raw, &pEtxs); err != nil {
-		return err
-	}
-	return s.b.AddPendingEtxs(pEtxs)
-}
-
-type SendPendingEtxsRollupToDomArgs struct {
-	Header     *types.WorkObject  `json:"header"`
-	EtxsRollup types.Transactions `json:"etxsrollup"`
-}
-
-func (s *PublicBlockChainQuaiAPI) SendPendingEtxsRollupToDom(ctx context.Context, raw json.RawMessage) error {
-	var pEtxsRollup SendPendingEtxsRollupToDomArgs
-	if err := json.Unmarshal(raw, &pEtxsRollup); err != nil {
-		return err
-	}
-	return s.b.AddPendingEtxsRollup(types.PendingEtxsRollup{Header: pEtxsRollup.Header, EtxsRollup: pEtxsRollup.EtxsRollup})
-}
-
 type GenerateRecoveryPendingHeaderArgs struct {
 	PendingHeader    *types.WorkObject `json:"pendingHeader"`
 	CheckpointHashes types.Termini     `json:"checkpointHashes"`

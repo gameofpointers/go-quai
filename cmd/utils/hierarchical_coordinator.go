@@ -123,6 +123,20 @@ func (hc *HierarchicalCoordinator) StartQuaiBackend() (*quai.QuaiBackend, error)
 		}
 	}
 
+	// Set the Dom Interface for all the regions and zones
+	for i := 0; i < int(currentRegions); i++ {
+		primeBackend := *quaiBackend.GetBackend(common.Location{})
+		regionBackend := *quaiBackend.GetBackend(common.Location{byte(i)})
+		regionBackend.SetDomInterface(primeBackend)
+	}
+	for i := 0; i < int(currentRegions); i++ {
+		regionBackend := *quaiBackend.GetBackend(common.Location{byte(i)})
+		for j := 0; j < int(currentZones); j++ {
+			zoneBackend := *quaiBackend.GetBackend(common.Location{byte(i), byte(j)})
+			zoneBackend.SetDomInterface(regionBackend)
+		}
+	}
+
 	return quaiBackend, nil
 }
 

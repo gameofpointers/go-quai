@@ -238,26 +238,6 @@ func (ec *Client) GetPendingEtxsFromSub(ctx context.Context, hash common.Hash, l
 	return pEtxs, nil
 }
 
-func (ec *Client) SendPendingEtxsToDom(ctx context.Context, pEtxs types.PendingEtxs) error {
-	fields := make(map[string]interface{})
-	fields["header"] = pEtxs.Header.RPCMarshalWorkObject()
-	fields["etxs"] = pEtxs.Etxs
-	var raw json.RawMessage
-	err := ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsToDom", fields)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (ec *Client) SendPendingEtxsRollupToDom(ctx context.Context, pEtxsRollup types.PendingEtxsRollup) error {
-	fields := make(map[string]interface{})
-	fields["header"] = pEtxsRollup.Header.RPCMarshalWorkObject()
-	fields["etxsrollup"] = pEtxsRollup.EtxsRollup
-	var raw json.RawMessage
-	return ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsRollupToDom", fields)
-}
-
 func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.WorkObject, checkpointHashes types.Termini) error {
 	fields := make(map[string]interface{})
 	fields["pendingHeader"] = pendingHeader.RPCMarshalWorkObject()

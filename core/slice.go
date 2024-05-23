@@ -46,6 +46,12 @@ const (
 
 )
 
+// Core will implement the following interface to enable dom-sub communication
+type CoreBackend interface {
+	AddPendingEtxs(pEtxs types.PendingEtxs) error
+	AddPendingEtxsRollup(pEtxRollup types.PendingEtxsRollup) error
+}
+
 type pEtxRetry struct {
 	hash    common.Hash
 	retries uint64
@@ -64,8 +70,9 @@ type Slice struct {
 
 	quit chan struct{} // slice quit channel
 
-	domClient  *quaiclient.Client
-	subClients []*quaiclient.Client
+	domInterface CoreBackend
+	domClient    *quaiclient.Client
+	subClients   []*quaiclient.Client
 
 	wg               sync.WaitGroup
 	scope            event.SubscriptionScope
@@ -162,6 +169,10 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	}
 
 	return sl, nil
+}
+
+func (sl *Slice) SetDomInterface(domInterface CoreBackend) {
+	sl.domInterface = domInterface
 }
 
 // Append takes a proposed header and constructs a local block and attempts to hierarchically append it to the block graph.
@@ -897,7 +908,7 @@ func (sl *Slice) GetSubManifest(slice common.Location, blockHash common.Hash) (t
 
 // SendPendingEtxsToDom shares a set of pending ETXs with your dom, so he can reference them when a coincident block is found
 func (sl *Slice) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
-	return sl.domClient.SendPendingEtxsToDom(context.Background(), pEtxs)
+	return sl.domInterface.AddPendingEtxs(pEtxs)
 }
 
 func (sl *Slice) GetPEtxRollupAfterRetryThreshold(blockHash common.Hash, hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
@@ -1675,9 +1686,7 @@ func (sl *Slice) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error
 		// Write to pending ETX rollup database
 		rawdb.WritePendingEtxsRollup(sl.sliceDb, pEtxsRollup)
 		if nodeCtx == common.REGION_CTX {
-			if sl.domClient != nil {
-				sl.domClient.SendPendingEtxsRollupToDom(context.Background(), pEtxsRollup)
-			}
+			sl.domInterface.AddPendingEtxsRollup(pEtxsRollup)
 		}
 	}
 	return nil

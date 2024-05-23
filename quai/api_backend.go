@@ -595,6 +595,10 @@ func (b *QuaiAPIBackend) CheckIfValidWorkShare(workShare *types.WorkObjectHeader
 	return b.quai.core.CheckIfValidWorkShare(workShare)
 }
 
+func (b *QuaiAPIBackend) SetDomInterface(domInterface core.CoreBackend) {
+	b.quai.core.SetDomInterface(domInterface)
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////

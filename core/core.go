@@ -756,6 +756,10 @@ func (c *Core) SubscribeExpansionEvent(ch chan<- ExpansionEvent) event.Subscript
 	return c.sl.SubscribeExpansionEvent(ch)
 }
 
+func (c *Core) SetDomInterface(domInterface CoreBackend) {
+	c.sl.SetDomInterface(domInterface)
+}
+
 //---------------------//
 // HeaderChain methods //
 //---------------------//

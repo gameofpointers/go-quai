@@ -101,6 +101,7 @@ type Backend interface {
 	WriteGenesisBlock(block *types.WorkObject, location common.Location)
 	SendWorkShare(workShare *types.WorkObjectHeader) error
 	CheckIfValidWorkShare(workShare *types.WorkObjectHeader) bool
+	SetDomInterface(domInterface core.CoreBackend)
 
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error
