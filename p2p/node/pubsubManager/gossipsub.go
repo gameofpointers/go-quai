@@ -12,6 +12,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
 	"github.com/dominant-strategies/go-quai/quai"
@@ -135,7 +136,8 @@ func (g *PubsubManager) Subscribe(location common.Location, datatype interface{}
 		for i := 0; i < numWorkers; i++ {
 			go func(location common.Location) {
 				for msg := range msgChan { // This should exit when msgChan is closed
-					var data interface{}
+					data := types.ObjectPool.Get().(interface{})
+					data = nil
 					// unmarshal the received data depending on the topic's type
 					err = pb.UnmarshalAndConvert(msg.Data, location, &data, datatype)
 					if err != nil {
