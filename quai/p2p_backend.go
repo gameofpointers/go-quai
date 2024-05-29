@@ -88,6 +88,106 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, topic string, data
 		// TODO: Verify the Block before writing it
 		// TODO: Determine if the block information was lively or stale and rate
 		// the peer accordingly
+
+		// HANDLER ETH CHANGES
+		// 		// Do not handle any broadcast until we finish resetting from the bad state.
+		// // This should be a very small time window
+		// if h.Core().BadHashExistsInChain() {
+		// 	log.Warn("Bad Hashes still exist on chain, cannot handle block broadcast yet")
+		// 	return nil
+		// }
+		//
+		// syncEntropy, threshold := h.core.SyncTargetEntropy()
+		// window := new(big.Int).Mul(threshold, big.NewInt(5))
+		// syncThreshold := new(big.Int).Add(block.ParentEntropy(), window)
+		// requestBlock := h.subSyncQueue.Contains(block.Hash())
+		// beyondSyncPoint := syncEntropy.Cmp(syncThreshold) < 0
+		// looseSyncEntropyDelta := new(big.Int).Div(syncEntropy, big.NewInt(100))
+		// looseSyncEntropy := new(big.Int).Sub(syncEntropy, looseSyncEntropyDelta)
+		// atFray := looseSyncEntropy.Cmp(h.core.CurrentHeader().ParentEntropy()) < 0
+		//
+		// // If block is greater than sync entropy, or its manifest cache, handle it
+		// // If block if its in manifest cache, relay is set to true, set relay to false and handle
+		// // !atFray checked because when "synced" we want to be able to check entropy against later window
+		// log.Debug("Handle Block", "requestBlock", requestBlock, "atFray", atFray, "relay", relay, "beyondSync", beyondSyncPoint)
+		// if relay && !atFray {
+		// 	if !beyondSyncPoint {
+		// 		if !requestBlock {
+		// 			// drop peer
+		// 			if common.NodeLocation.Context() != common.PRIME_CTX {
+		// 				log.Info("Peer broadcasting block not in requestQueue or beyond sync target, dropping peer")
+		// 				h.downloader.DropPeer(peer)
+		// 			}
+		// 			return nil
+		// 		} else {
+		// 			relay = false
+		// 		}
+		// 	}
+		// }
+		////  FETCHER CHANGES
+		// 		powhash, err := f.verifySeal(block.Header())
+		// if err != nil {
+		// 	return
+		// }
+		// // Check if the Block is atleast half the current difficulty in Zone Context,
+		// // this makes sure that the nodes don't listen to the forks with the PowHash
+		// //	with less than 50% of current difficulty
+		// if nodeCtx == common.ZONE_CTX && new(big.Int).SetBytes(powhash.Bytes()).Cmp(new(big.Int).Div(f.currentDifficulty(), big.NewInt(2))) < 0 {
+		// 	return
+		// }
+		//
+		// currentIntrinsicS := f.currentIntrinsicS()
+		// MaxAllowableEntropyDist := new(big.Int).Mul(currentIntrinsicS, big.NewInt(c_maxAllowableEntropyDist))
+		// looseMaxAllowableEntropy := new(big.Int).Div(MaxAllowableEntropyDist, big.NewInt(100))
+		// looseSyncEntropyDist := new(big.Int).Add(MaxAllowableEntropyDist, looseMaxAllowableEntropy)
+		//
+		// broadCastEntropy := block.ParentEntropy()
+		//
+		// // If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS dont broadcast
+		// if relay && f.currentS().Cmp(new(big.Int).Add(broadCastEntropy, MaxAllowableEntropyDist)) > 0 {
+		// 	return
+		// }
+		// // But don't drop the peers if within 1% of that distance
+		// if relay && f.currentS().Cmp(new(big.Int).Add(broadCastEntropy, looseSyncEntropyDist)) > 0 {
+		// 	if nodeCtx != common.PRIME_CTX {
+		// 		f.dropPeer(peer)
+		// 	}
+		// 	return
+		// }
+		//
+		// // Run the import on a new thread
+		// log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
+		// go func() {
+		// 	defer func() { f.done <- hash }()
+		//
+		// 	// If Block broadcasted by the peer exists in the bad block list drop the peer
+		// 	if f.isBlockHashABadHash(block.Hash()) {
+		// 		f.dropPeer(peer)
+		// 		return
+		// 	}
+		// 	// Quickly validate the header and propagate the block if it passes
+		// 	err := f.verifyHeader(block.Header())
+		//
+		// 	// Including the ErrUnknownAncestor as well because a filter has already
+		// 	// been applied for all the blocks that come until here. Since there
+		// 	// exists a timedCache where the blocks expire, it is okay to let this
+		// 	// block through and broadcast the block.
+		// 	if err == nil || err.Error() == consensus.ErrUnknownAncestor.Error() {
+		// 		// All ok, quickly propagate to our peers
+		// 		blockBroadcastOutTimer.UpdateSince(block.ReceivedAt)
+		//
+		// 		// Only relay the Mined Blocks that meet the depth criteria
+		// 		if relay {
+		// 			go f.broadcastBlock(block, true)
+		// 		}
+		// 	} else if err.Error() == consensus.ErrFutureBlock.Error() {
+		// 		// Weird future block, don't fail, but neither propagate
+		// 	} else {
+		// 		// Something went very wrong, drop the peer
+		// 		log.Debug("Propagated block verification failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
+		// 		f.dropPeer(peer)
+		// 		return
+		// 	}
 		backend.WriteBlock(&data)
 		// If it was a good broadcast, mark the peer as lively
 		qbe.p2pBackend.MarkLivelyPeer(sourcePeer, topic)
