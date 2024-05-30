@@ -1073,7 +1073,7 @@ func ProcessQiTx(tx *types.Transaction, chain ChainContext, updateState bool, ch
 // Go through all denominations largest to smallest, check if the input exists as the output, if not, convert it to the respective number of bills for the next smallest denomination, then repeat the check. Subtract the 'carry' when the outputs match the carry for that denomination.
 func CheckDenominations(inputs, outputs map[uint]uint64) error {
 	carries := make(map[uint]uint64)
-	for i := types.MaxDenomination; i >= 0; i-- {
+	for i := types.MaxDenomination; i >= 1; i-- {
 		if outputs[uint(i)] <= inputs[uint(i)]+carries[uint(i)] {
 			diff := new(big.Int).SetUint64((inputs[uint(i)] + carries[uint(i)]) - (outputs[uint(i)]))
 			carries[uint(i-1)] += diff.Mul(diff, (new(big.Int).Div(types.Denominations[uint8(i)], types.Denominations[uint8(i-1)]))).Uint64()
