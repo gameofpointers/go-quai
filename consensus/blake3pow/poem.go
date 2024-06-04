@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	bigMath "github.com/dominant-strategies/go-quai/common/math"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
@@ -196,18 +197,34 @@ func (blake3pow *Blake3pow) WorkShareLogS(wo *types.WorkObject) (*big.Int, error
 			// actual work share weight here +1 is done to the extraBits because
 			// of Quo and if the difference is less than 0, its within the first
 			// level
+
 			cBigBits := blake3pow.IntrinsicLogS(powHash)
+			blake3pow.logger.Info("WorkShareLogS", "cBigBits", cBigBits)
+
 			thresholdBigBits := blake3pow.IntrinsicLogS(common.BytesToHash(target.Bytes()))
+			blake3pow.logger.Info("WorkShareLogS", "thresholdBigBits", thresholdBigBits)
+
 			wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
-			extraBits := new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(mantBits)), nil))
-			wsEntropy = new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), new(big.Int).Add(extraBits, big.NewInt(1)), nil))
+			blake3pow.logger.Info("WorkShareLogS", "wsEntropy after subtraction", wsEntropy)
+
+			extraBits := new(big.Float).Quo(new(big.Float).SetInt(wsEntropy), new(big.Float).SetInt(common.Big2e64))
+			blake3pow.logger.Info("WorkShareLogS", "extraBits", extraBits)
+
+			wsEntropyAdj := new(big.Float).Quo(new(big.Float).SetInt(common.Big2e64), bigMath.TwoToTheX(extraBits))
+			blake3pow.logger.Info("WorkShareLogS", "wsEntropyAdj", wsEntropyAdj)
+
+			wsEntropy, _ = wsEntropyAdj.Int(wsEntropy)
+			blake3pow.logger.Info("WorkShareLogS", "wsEntropy after adjustment", wsEntropy)
 		} else {
 			wsEntropy = new(big.Int).Set(blake3pow.IntrinsicLogS(powHash))
 		}
-		// Discount 2) applies to all shares regardless of the weight
 		wsEntropy = new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(wo.NumberU64(common.ZONE_CTX)-ws.NumberU64())), nil))
-		// Add the entropy into the total entropy once the discount calculation is done
+		blake3pow.logger.Info("NumberDiscount", "Number:", wo.NumberU64(common.ZONE_CTX)-ws.NumberU64(), "woNumber:", wo.NumberU64(common.ZONE_CTX), "wsNumber:", ws.NumberU64())
+		blake3pow.logger.Info("WorkShareLogS", "wsEntropy after discount", wsEntropy)
+
 		totalWsEntropy.Add(totalWsEntropy, wsEntropy)
+		blake3pow.logger.Info("WorkShareLogS", "totalWsEntropy after addition", totalWsEntropy)
+
 	}
 	return totalWsEntropy, nil
 }
