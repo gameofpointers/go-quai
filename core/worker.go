@@ -1382,7 +1382,7 @@ func (w *worker) AddPendingWorkObjectBody(wo *types.WorkObject) {
 }
 
 // GetPendingBlockBody gets the block body associated with the given header.
-func (w *worker) GetPendingBlockBody(woHeader *types.WorkObject) (*types.WorkObject, error) {
+func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
 	body, ok := w.pendingBlockBody.Get(woHeader.SealHash())
 	if ok {
 		return &body, nil
