@@ -241,10 +241,15 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-		if ancestors[uncle.ParentHash()] == nil || uncle.ParentHash() == block.ParentHash(nodeCtx) {
+		var workShare bool
+		_, err := progpow.VerifySeal(uncle)
+		if err != nil {
+			workShare = true
+		}
+		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return errDanglingUncle
 		}
-		_, err := progpow.ComputePowHash(uncle)
+		_, err = progpow.ComputePowHash(uncle)
 		if err != nil {
 			return err
 		}

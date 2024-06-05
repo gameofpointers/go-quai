@@ -238,12 +238,17 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-		if ancestors[uncle.ParentHash()] == nil || uncle.ParentHash() == block.ParentHash(nodeCtx) {
+		var workShare bool
+		_, err := blake3pow.VerifySeal(uncle)
+		if err != nil {
+			workShare = true
+		}
+		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return errDanglingUncle
 		}
 
 		// make sure that the work can be computed
-		_, err := blake3pow.ComputePowHash(uncle)
+		_, err = blake3pow.ComputePowHash(uncle)
 		if err != nil {
 			return err
 		}
