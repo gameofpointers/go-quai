@@ -28,7 +28,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/math"
-	"github.com/dominant-strategies/go-quai/params"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dominant-strategies/go-quai/crypto"
@@ -762,22 +761,6 @@ func (tx *Transaction) FromChain(nodeLocation common.Location) common.Location {
 	return loc
 }
 
-// ConfirmationCtx indicates the chain context at which this ETX becomes
-// confirmed and referencable to the destination chain
-func (tx *Transaction) ConfirmationCtx(nodeLocation common.Location) int {
-	if ctx := tx.confirmCtx.Load(); ctx != nil {
-		return ctx.(int)
-	}
-	if tx.ETXSender().Location().Equal(*tx.To().Location()) {
-		// If the ETX sender and the destination chain are the same, the ETX is a conversion tx
-		return params.ConversionConfirmationContext
-	}
-
-	ctx := tx.To().Location().CommonDom(tx.FromChain(nodeLocation)).Context()
-	tx.confirmCtx.Store(ctx)
-	return ctx
-}
-
 // Size returns the true RLP encoded storage size of the transaction, either by
 // encoding and returning it, or returning a previously cached value.
 func (tx *Transaction) Size() common.StorageSize {
@@ -857,25 +840,22 @@ func (s Transactions) FilterToLocation(l common.Location) Transactions {
 }
 
 // FilterToSlice returns the subset of transactions with a 'to' address which
-// belongs to the given slice location, at or above the given minimum context
-func (s Transactions) FilterToSlice(slice common.Location) Transactions {
+// belongs to the given sub location, at or above the given minimum context
+func (s Transactions) FilterToSub(slice common.Location, nodeCtx int) Transactions {
 	filteredList := Transactions{}
 	for _, tx := range s {
-		toChain := tx.To().Location()
-		if toChain.Equal(slice) {
-			filteredList = append(filteredList, tx)
-		}
-	}
-	return filteredList
-}
-
-// FilterConfirmationCtx returns the subset of transactions who can be confirmed
-// at the given context
-func (s Transactions) FilterConfirmationCtx(ctx int, nodeLocation common.Location) Transactions {
-	filteredList := Transactions{}
-	for _, tx := range s {
-		if tx.ConfirmationCtx(nodeLocation) == ctx {
-			filteredList = append(filteredList, tx)
+		// In the case of Prime, we will filter all the etxs that are going into
+		// any zone in the given location, but in the case of Region we only send
+		// the relevant etxs down
+		switch nodeCtx {
+		case common.PRIME_CTX:
+			if tx.To().Location().SubIndex(nodeCtx) == slice.SubIndex(nodeCtx) {
+				filteredList = append(filteredList, tx)
+			}
+		case common.REGION_CTX:
+			if tx.To().Location().Equal(slice) {
+				filteredList = append(filteredList, tx)
+			}
 		}
 	}
 	return filteredList
