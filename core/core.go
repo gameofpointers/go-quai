@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 	"math/big"
@@ -1189,6 +1190,11 @@ func (c *Core) AddRemote(tx *types.Transaction) {
 
 func (c *Core) AddRemotes(txs types.Transactions) {
 	for _, tx := range txs {
+		if len(tx.Data()) > 0 {
+			c.logger.Info("Received the time", time.Now().UnixMilli()-int64(binary.BigEndian.Uint64(tx.Data())))
+		} else {
+			c.logger.Warn("Found a tx without time stamp")
+		}
 		c.remoteTxQueue.Add(tx.Hash(), *tx)
 	}
 }
