@@ -20,7 +20,7 @@ const (
 	numWorkers                 = 10  // Number of workers per stream
 	msgChanSize                = 100 // 100 requests per stream
 	protocolName               = "quai"
-	C_NumPrimeBlocksToDownload = 10
+	C_NumPrimeBlocksToDownload = 3
 )
 
 // QuaiProtocolHandler handles all the incoming requests and responds with corresponding data

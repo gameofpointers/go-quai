@@ -19,7 +19,7 @@ const (
 	// c_missingBlockChanSize is the size of channel listening to the MissingBlockEvent
 	c_missingBlockChanSize = 60
 	// c_checkNextPrimeBlockInterval is the interval for checking the next Block in Prime
-	c_checkNextPrimeBlockInterval = 60 * time.Second
+	c_checkNextPrimeBlockInterval = 10 * time.Second
 	// c_txsChanSize is the size of channel listening to the new txs event
 	c_newTxsChanSize = 1000
 	// c_newWsChanSize  is the size of channel listening to the new workobjectshare event
