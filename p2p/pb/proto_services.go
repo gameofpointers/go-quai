@@ -147,6 +147,7 @@ func EncodeQuaiResponse(id uint32, location common.Location, respDataType interf
 			}
 			respMsg.Response = &QuaiResponseMessage_WorkObjectBlocksView{WorkObjectBlocksView: protoWorkObjectBlocks}
 		}
+		log.Global.Info("resp in prime", respMsg)
 	case *common.Hash:
 		if data == nil {
 			respMsg.Response = &QuaiResponseMessage_BlockHash{}
