@@ -337,6 +337,13 @@ func (s *stat) Count() string {
 	return s.count.String()
 }
 
+func TotalDatabaseSize(db ethdb.Database, logger *log.Logger) error {
+	log.Global.Info("DB stats for", db.Location())
+
+	InspectDatabase(db, []byte{}, []byte{}, logger)
+	return nil
+}
+
 // InspectDatabase traverses the entire database and checks the size
 // of all different categories of data.
 func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte, logger *log.Logger) error {
@@ -362,6 +369,25 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte, logger *log.
 		storageSnaps    stat
 		preimages       stat
 		bloomBits       stat
+
+		pendingHeader         stat
+		pbBody                stat
+		phTermini             stat
+		termini               stat
+		blockWorkObjectHeader stat
+		txWorkObjectHeader    stat
+		phWorkObjectHeader    stat
+		workObjectBody        stat
+		inboundEtxs           stat
+		addressUtxos          stat
+		processedState        stat
+		etxSetHashes          stat
+		etx                   stat
+		pendingEtxs           stat
+		pendingEtxsRollup     stat
+		manifest              stat
+		interlinks            stat
+		bloom                 stat
 
 		// Ancient store statistics
 		ancientHeadersSize  common.StorageSize
@@ -427,13 +453,49 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte, logger *log.
 			bytes.HasPrefix(key, []byte("bltIndex-")) ||
 			bytes.HasPrefix(key, []byte("bltRoot-")): // Bloomtrie sub
 			bloomTrieNodes.Add(size)
+		case bytes.HasPrefix(key, pendingHeaderPrefix) && len(key) == len(pendingHeaderPrefix)+common.HashLength:
+			pendingHeader.Add(size)
+		case bytes.HasPrefix(key, pbBodyPrefix) && len(key) == len(pbBodyPrefix)+common.HashLength:
+			pbBody.Add(size)
+		case bytes.HasPrefix(key, phTerminiPrefix) && len(key) == len(phTerminiPrefix)+common.HashLength:
+			phTermini.Add(size)
+		case bytes.HasPrefix(key, terminiPrefix) && len(key) == len(terminiPrefix)+common.HashLength:
+			termini.Add(size)
+		case bytes.HasPrefix(key, blockWorkObjectHeaderPrefix) && len(key) == len(blockWorkObjectHeaderPrefix)+common.HashLength:
+			blockWorkObjectHeader.Add(size)
+		case bytes.HasPrefix(key, txWorkObjectHeaderPrefix) && len(key) == len(txWorkObjectHeaderPrefix)+common.HashLength:
+			txWorkObjectHeader.Add(size)
+		case bytes.HasPrefix(key, phWorkObjectHeaderPrefix) && len(key) == len(phWorkObjectHeaderPrefix)+common.HashLength:
+			phWorkObjectHeader.Add(size)
+		case bytes.HasPrefix(key, workObjectBodyPrefix) && len(key) == len(workObjectBodyPrefix)+common.HashLength:
+			workObjectBody.Add(size)
+		case bytes.HasPrefix(key, inboundEtxsPrefix) && len(key) == len(inboundEtxsPrefix)+common.HashLength:
+			inboundEtxs.Add(size)
+		case bytes.HasPrefix(key, AddressUtxosPrefix) && len(key) == len(AddressUtxosPrefix)+common.AddressLength:
+			addressUtxos.Add(size)
+		case bytes.HasPrefix(key, processedStatePrefix) && len(key) == len(processedStatePrefix)+common.HashLength:
+			processedState.Add(size)
+		case bytes.HasPrefix(key, etxSetHashesPrefix) && len(key) == len(etxSetHashesPrefix)+8+common.HashLength:
+			etxSetHashes.Add(size)
+		case bytes.HasPrefix(key, etxPrefix) && len(key) == len(etxPrefix)+common.HashLength:
+			etx.Add(size)
+		case bytes.HasPrefix(key, pendingEtxsPrefix) && len(key) == len(pendingEtxsPrefix)+common.HashLength:
+			pendingEtxs.Add(size)
+		case bytes.HasPrefix(key, pendingEtxsRollupPrefix) && len(key) == len(pendingEtxsRollupPrefix)+common.HashLength:
+			pendingEtxsRollup.Add(size)
+		case bytes.HasPrefix(key, manifestPrefix) && len(key) == len(manifestPrefix)+common.HashLength:
+			manifest.Add(size)
+		case bytes.HasPrefix(key, interlinkPrefix) && len(key) == len(interlinkPrefix)+common.HashLength:
+			interlinks.Add(size)
+		case bytes.HasPrefix(key, bloomPrefix) && len(key) == len(bloomPrefix)+common.HashLength:
+			bloom.Add(size)
 		default:
 			var accounted bool
 			for _, meta := range [][]byte{
 				databaseVersionKey, headHeaderKey, headWorkObjectKey, lastPivotKey,
 				fastTrieProgressKey, snapshotDisabledKey, snapshotRootKey, snapshotJournalKey,
 				snapshotGeneratorKey, snapshotRecoveryKey, txIndexTailKey, fastTxLookupLimitKey,
-				uncleanShutdownKey, badWorkObjectKey,
+				uncleanShutdownKey, badWorkObjectKey, headsHashesKey, phHeadKey, pbBodyHashPrefix,
 			} {
 				if bytes.Equal(key, meta) {
 					metadata.Add(size)
@@ -456,7 +518,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte, logger *log.
 	}
 	// Inspect append-only file store then.
 	ancientSizes := []*common.StorageSize{&ancientHeadersSize, &ancientBodiesSize, &ancientReceiptsSize, &ancientHashesSize, &ancientTdsSize}
-	for i, category := range []string{freezerHeaderTable, freezerBodiesTable, freezerReceiptTable, freezerHashTable, freezerDifficultyTable, freezerEtxSetsTable} {
+	for i, category := range []string{freezerHeaderTable, freezerBodiesTable, freezerReceiptTable, freezerHashTable, freezerDifficultyTable} {
 		if size, err := db.AncientSize(category); err == nil {
 			*ancientSizes[i] += common.StorageSize(size)
 			total += common.StorageSize(size)
@@ -483,6 +545,24 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte, logger *log.
 		{"Key-Value store", "Account snapshot", accountSnaps.Size(), accountSnaps.Count()},
 		{"Key-Value store", "Storage snapshot", storageSnaps.Size(), storageSnaps.Count()},
 		{"Key-Value store", "Singleton metadata", metadata.Size(), metadata.Count()},
+		{"Key-Value store", "PendingHeader", pendingHeader.Size(), pendingHeader.Count()},
+		{"Key-Value store", "PendingHeader Body", pbBody.Size(), pbBody.Count()},
+		{"Key-Value store", "PendingHeader Termini", phTermini.Size(), phTermini.Count()},
+		{"Key-Value store", "Termini", termini.Size(), termini.Count()},
+		{"Key-Value store", "BlockWorkObject Header", blockWorkObjectHeader.Size(), blockWorkObjectHeader.Count()},
+		{"Key-Value store", "Tx WorkObject Header", txWorkObjectHeader.Size(), txWorkObjectHeader.Count()},
+		{"Key-Value store", "PendingHeader WorkObject Header", phWorkObjectHeader.Size(), phWorkObjectHeader.Count()},
+		{"Key-Value store", "WorkObject Body", workObjectBody.Size(), workObjectBody.Count()},
+		{"Key-Value store", "Inbound Etxs", inboundEtxs.Size(), inboundEtxs.Count()},
+		{"Key-Value store", "Address Utxos", addressUtxos.Size(), addressUtxos.Count()},
+		{"Key-Value store", "Processed State", processedState.Size(), processedState.Count()},
+		{"Key-Value store", "EtxSet Hashes", etxSetHashes.Size(), etxSetHashes.Count()},
+		{"Key-Value store", "etx", etx.Size(), etx.Count()},
+		{"Key-Value store", "Pending Etxs", pendingEtxs.Size(), pendingEtxs.Count()},
+		{"Key-Value store", "Pending Etxs Rollup", pendingEtxsRollup.Size(), pendingEtxsRollup.Count()},
+		{"Key-Value store", "manifest", manifest.Size(), manifest.Count()},
+		{"Key-Value store", "interlinks", interlinks.Size(), interlinks.Count()},
+		{"Key-Value store", "bloom", bloom.Size(), bloom.Count()},
 		{"Ancient store", "Headers", ancientHeadersSize.String(), ancients.String()},
 		{"Ancient store", "Bodies", ancientBodiesSize.String(), ancients.String()},
 		{"Ancient store", "Receipt lists", ancientReceiptsSize.String(), ancients.String()},

@@ -155,6 +155,8 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 		go sl.asyncWorkShareUpdateLoop()
 	}
 
+	rawdb.TotalDatabaseSize(sl.sliceDb, sl.logger)
+
 	return sl, nil
 }
 
