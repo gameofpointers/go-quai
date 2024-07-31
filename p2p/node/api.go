@@ -343,7 +343,7 @@ func (p *P2PNode) GetWorkObjectsFrom(hash common.Hash, location common.Location,
 			return nil
 		}
 		// The parent hash has to be continuous
-		if next.ParentHash(location.Context()) != response[i-1].ParentHash(location.Context()) {
+		if next.ParentHash(location.Context()) != response[i-1].Hash() {
 			return nil
 		}
 		response = append(response, next.ConvertToBlockView())

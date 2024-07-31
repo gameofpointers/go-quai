@@ -67,7 +67,7 @@ func (h *handler) Start() {
 	h.wg.Add(1)
 	h.missingBlockCh = make(chan types.BlockRequest, c_missingBlockChanSize)
 	h.missingBlockSub = h.core.SubscribeMissingBlockEvent(h.missingBlockCh)
-	go h.missingBlockLoop()
+	// go h.missingBlockLoop()
 
 	nodeCtx := h.nodeLocation.Context()
 	if nodeCtx == common.PRIME_CTX {
