@@ -60,7 +60,7 @@ const (
 
 	// freezerBatchLimit is the maximum number of blocks to freeze in one batch
 	// before doing an fsync and deleting it from the key-value store.
-	freezerBatchLimit = 30000
+	freezerBatchLimit = 3
 )
 
 // freezer is an memory mapped append-only database to store immutable chain data
@@ -279,7 +279,7 @@ func (f *freezer) Sync() error {
 //
 // This functionality is deliberately broken off from block importing to avoid
 // incurring additional data shuffling delays on block propagation.
-func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Location) {
+func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int) {
 	nfdb := &nofreezedb{KeyValueStore: db}
 
 	var (
@@ -311,7 +311,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Lo
 		// Retrieve the freezing threshold.
 		hash := ReadHeadBlockHash(nfdb)
 		if hash == (common.Hash{}) {
-			f.logger.Debug("Current full block hash unavailable") // new chain, empty database
+			f.logger.Info("Current full block hash unavailable") // new chain, empty database
 			backoff = true
 			continue
 		}
@@ -329,7 +329,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Lo
 				"number":    *number,
 				"hash":      hash,
 				"threshold": threshold,
-			}).Debug("Current full block not old enough")
+			}).Info("Current full block not old enough")
 			backoff = true
 			continue
 
@@ -338,7 +338,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Lo
 				"number": *number,
 				"hash":   hash,
 				"frozen": f.frozen,
-			}).Debug("Ancient blocks frozen already")
+			}).Info("Ancient blocks frozen already")
 			backoff = true
 			continue
 		}
@@ -379,7 +379,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Lo
 			f.logger.WithFields(log.Fields{
 				"number": f.frozen,
 				"hash":   hash,
-			}).Trace("Deep froze ancient block")
+			}).Info("Deep froze ancient block")
 			// Inject all the components into the relevant data tables
 			if err := f.AppendAncient(f.frozen, hash[:], receipts); err != nil {
 				break
@@ -457,7 +457,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int, location common.Lo
 						"number": tip,
 						"hash":   children[i],
 						"parent": child.ParentHash(nodeCtx),
-					}).Debug("Deleting dangling block")
+					}).Info("Deleting dangling block")
 					DeleteWorkObject(batch, children[i], tip, types.BlockObject)
 				}
 				dangling = children

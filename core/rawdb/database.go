@@ -154,6 +154,8 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, freezer string, namespace st
 	// If the genesis hash is empty, we have a new key-value store, so nothing to
 	// validate in this method. If, however, the genesis hash is not nil, compare
 	// it to the freezer content.
+	// TODO: Ensure that this is valid check to have on an expansion. One
+	// possible solution is write the default genesis hash in all cases
 	if kvgenesis, _ := db.Get(headerHashKey(0)); len(kvgenesis) > 0 {
 		if frozen, _ := frdb.Ancients(); frozen > 0 {
 			// If the freezer already contains something, ensure that the genesis blocks
@@ -195,6 +197,14 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, freezer string, namespace st
 			// Otherwise, the head header is still the genesis, we're allowed to init a new
 			// feezer.
 		}
+	}
+	// Freezer is consistent with the key-value database, permit combining the two
+	if !frdb.readonly {
+		frdb.wg.Add(1)
+		go func() {
+			frdb.freeze(db, nodeCtx)
+			frdb.wg.Done()
+		}()
 	}
 	return &freezerdb{
 		KeyValueStore: db,
