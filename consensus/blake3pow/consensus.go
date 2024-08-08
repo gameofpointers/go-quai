@@ -456,6 +456,11 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 			return fmt.Errorf("invalid baseFee: have %s, want %s, parentBaseFee %s, parentGasUsed %d",
 				expectedBaseFee, header.BaseFee(), parent.BaseFee(), parent.GasUsed())
 		}
+		// Verify the stateFee is correct based on the parent header.
+		expectedStateFee := misc.CalcStateFee()
+		if header.StateFee().Cmp(expectedStateFee) != 0 {
+			return fmt.Errorf("invalid stateFee: have %s, want %s, parentStateFee %s", expectedStateFee, header.StateFee(), parent.StateFee())
+		}
 		var expectedPrimeTerminus common.Hash
 		_, parentOrder, _ := blake3pow.CalcOrder(chain, parent)
 		if parentOrder == common.PRIME_CTX {

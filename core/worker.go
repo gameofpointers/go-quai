@@ -1277,6 +1277,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 		newWo.Header().SetExtra(w.extra)
 		newWo.Header().SetBaseFee(misc.CalcBaseFee(w.chainConfig, parent))
+		newWo.Header().SetStateFee(misc.CalcStateFee())
 		if w.isRunning() {
 			if w.coinbase.Equal(common.Zero) {
 				w.logger.Error("Refusing to mine without etherbase")
