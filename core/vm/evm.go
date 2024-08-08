@@ -138,13 +138,15 @@ type EVM struct {
 	// applied in opCall*.
 	callGasTemp uint64
 
+	stateFee *big.Int
+
 	ETXCache     []*types.Transaction
 	ETXCacheLock sync.RWMutex
 }
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
-func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig *params.ChainConfig, config Config) *EVM {
+func NewEVM(blockCtx BlockContext, txCtx TxContext, stateFee *big.Int, statedb StateDB, chainConfig *params.ChainConfig, config Config) *EVM {
 	evm := &EVM{
 		Context:     blockCtx,
 		TxContext:   txCtx,
@@ -153,6 +155,7 @@ func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig
 		chainConfig: chainConfig,
 		chainRules:  chainConfig.Rules(blockCtx.BlockNumber),
 		ETXCache:    make([]*types.Transaction, 0),
+		stateFee:    stateFee,
 	}
 	evm.interpreter = NewEVMInterpreter(evm, config)
 	return evm

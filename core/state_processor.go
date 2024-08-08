@@ -275,7 +275,7 @@ func (p *StateProcessor) Process(block *types.WorkObject) (types.Receipts, []*ty
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, p.vmConfig)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, block.StateFee(), statedb, p.config, p.vmConfig)
 	time3 := common.PrettyDuration(time.Since(start))
 
 	// Iterate over and process the individual transactions.
@@ -1276,7 +1276,7 @@ func ApplyTransaction(config *params.ChainConfig, parent *types.WorkObject, bc C
 	if err != nil {
 		return nil, nil, err
 	}
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, header.StateFee(), statedb, config, cfg)
 	if tx.Type() == types.ExternalTxType {
 		prevZeroBal := prepareApplyETX(statedb, msg.Value(), config.Location)
 		receipt, quaiFees, err := applyTransaction(msg, parent, config, bc, author, gp, statedb, header.Number(nodeCtx), header.Hash(), tx, usedGas, vmenv, etxRLimit, etxPLimit, logger)
@@ -1565,7 +1565,7 @@ func (p *StateProcessor) StateAtTransaction(block *types.WorkObject, txIndex int
 			return msg, context, statedb, nil
 		}
 		// Not yet the searched for transaction, execute on top of the current state
-		vmenv := vm.NewEVM(context, txContext, statedb, p.hc.Config(), vm.Config{})
+		vmenv := vm.NewEVM(context, txContext, block.StateFee(), statedb, p.hc.Config(), vm.Config{})
 		statedb.Prepare(tx.Hash(), idx)
 		if _, err := ApplyMessage(vmenv, msg, new(types.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)

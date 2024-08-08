@@ -831,6 +831,8 @@ func opSuicide(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	balance := interpreter.evm.StateDB.GetBalance(addr)
 	interpreter.evm.StateDB.AddBalance(beneficiaryAddr, balance)
 	interpreter.evm.StateDB.Suicide(addr)
+	// add the state fee to the gas available
+	interpreter.evm.callGasTemp += interpreter.evm.stateFee.Uint64()
 	return nil, nil
 }
 
