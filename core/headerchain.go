@@ -276,14 +276,6 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		return err
 	}
 
-	hc.CalculateManifest(header)
-	if nodeCtx == common.PRIME_CTX {
-		_, err = hc.CalculateInterlink(header)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Verify the manifest matches expected
 	// Load the manifest of headers preceding this header
 	// note: prime manifest is non-existent, because a prime header cannot be

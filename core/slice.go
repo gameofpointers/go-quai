@@ -239,6 +239,13 @@ func (sl *Slice) Append(header *types.WorkObject, domPendingHeader *types.WorkOb
 	}
 	time4 := common.PrettyDuration(time.Since(start))
 
+	sl.hc.CalculateManifest(block)
+	if nodeCtx == common.PRIME_CTX {
+		_, err = sl.hc.CalculateInterlink(block)
+		if err != nil {
+			return nil, false, err
+		}
+	}
 	var pendingHeaderWithTermini types.PendingHeader
 	if nodeCtx != common.ZONE_CTX {
 		// Upate the local pending header
