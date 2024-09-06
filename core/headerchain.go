@@ -276,6 +276,14 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		return err
 	}
 
+	hc.CalculateManifest(header)
+	if nodeCtx == common.PRIME_CTX {
+		_, err = hc.CalculateInterlink(header)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Verify the manifest matches expected
 	// Load the manifest of headers preceding this header
 	// note: prime manifest is non-existent, because a prime header cannot be
@@ -304,6 +312,57 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 
 	return nil
 }
+
+func (hc *HeaderChain) CalculateInterlink(header *types.WorkObject) (common.Hashes, error) {
+	var interlinkHashes common.Hashes
+	if hc.IsGenesisHash(header.Hash()) {
+		// On genesis, the interlink hashes are all the same and should start with genesis hash
+		interlinkHashes = common.Hashes{header.Hash(), header.Hash(), header.Hash(), header.Hash()}
+	} else {
+		// check if parent belongs to any interlink level
+		rank, err := hc.engine.CalcRank(hc, header)
+		if err != nil {
+			return nil, err
+		}
+		if rank == 0 { // No change in the interlink hashes, so carry
+			interlinkHashes = header.InterlinkHashes()
+		} else if rank > 0 && rank <= common.InterlinkDepth {
+			interlinkHashes = header.InterlinkHashes()
+			// update the interlink hashes for each level below the rank
+			for i := 0; i < rank; i++ {
+				interlinkHashes[i] = header.Hash()
+			}
+		} else {
+			hc.logger.Error("Not possible to find rank greater than the max interlink levels")
+			return nil, errors.New("not possible to find rank greater than the max interlink levels")
+		}
+	}
+	// Store the interlink hashes in the database
+	rawdb.WriteInterlinkHashes(hc.headerDb, header.Hash(), interlinkHashes)
+	return interlinkHashes, nil
+}
+
+func (hc *HeaderChain) CalculateManifest(header *types.WorkObject) types.BlockManifest {
+	manifest := rawdb.ReadManifest(hc.headerDb, header.Hash())
+	if manifest == nil {
+		nodeCtx := hc.NodeCtx()
+		// Compute and set manifest hash
+		var manifest types.BlockManifest
+		if nodeCtx == common.PRIME_CTX {
+			// Nothing to do for prime chain
+			manifest = types.BlockManifest{}
+		} else if hc.engine.IsDomCoincident(hc, header) {
+			manifest = types.BlockManifest{header.Hash()}
+		} else {
+			parentManifest := rawdb.ReadManifest(hc.headerDb, header.ParentHash(nodeCtx))
+			manifest = append(parentManifest, header.Hash())
+		}
+		// write the manifest into the disk
+		rawdb.WriteManifest(hc.headerDb, header.Hash(), manifest)
+	}
+	return manifest
+}
+
 func (hc *HeaderChain) ProcessingState() bool {
 	return hc.processingState
 }

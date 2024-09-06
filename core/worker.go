@@ -1217,31 +1217,11 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 	}
 
-	var interlinkHashes common.Hashes
 	if nodeCtx == common.PRIME_CTX {
-		if w.hc.IsGenesisHash(parent.Hash()) {
-			// On genesis, the interlink hashes are all the same and should start with genesis hash
-			interlinkHashes = common.Hashes{parent.Hash(), parent.Hash(), parent.Hash(), parent.Hash()}
-		} else {
-			// check if parent belongs to any interlink level
-			rank, err := w.engine.CalcRank(w.hc, parent)
-			if err != nil {
-				return nil, err
-			}
-			if rank == 0 { // No change in the interlink hashes, so carry
-				interlinkHashes = parent.InterlinkHashes()
-			} else if rank > 0 && rank <= common.InterlinkDepth {
-				interlinkHashes = parent.InterlinkHashes()
-				// update the interlink hashes for each level below the rank
-				for i := 0; i < rank; i++ {
-					interlinkHashes[i] = parent.Hash()
-				}
-			} else {
-				w.logger.Error("Not possible to find rank greater than the max interlink levels")
-			}
+		interlinkHashes, err := w.hc.CalculateInterlink(parent)
+		if err != nil {
+			return nil, err
 		}
-		// Store the interlink hashes in the database
-		rawdb.WriteInterlinkHashes(w.workerDb, parent.Hash(), interlinkHashes)
 		interlinkRootHash := types.DeriveSha(interlinkHashes, trie.NewStackTrie(nil))
 		newWo.Header().SetInterlinkRootHash(interlinkRootHash)
 	}
@@ -1401,25 +1381,8 @@ func (w *worker) adjustGasLimit(env *environment, parent *types.WorkObject) {
 // ComputeManifestHash given a header computes the manifest hash for the header
 // and stores it in the database
 func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
-	manifest := rawdb.ReadManifest(w.workerDb, header.Hash())
-	if manifest == nil {
-		nodeCtx := w.hc.NodeCtx()
-		// Compute and set manifest hash
-		manifest = types.BlockManifest{}
-		if nodeCtx == common.PRIME_CTX {
-			// Nothing to do for prime chain
-			manifest = types.BlockManifest{}
-		} else if w.engine.IsDomCoincident(w.hc, header) {
-			manifest = types.BlockManifest{header.Hash()}
-		} else {
-			parentManifest := rawdb.ReadManifest(w.workerDb, header.ParentHash(nodeCtx))
-			manifest = append(parentManifest, header.Hash())
-		}
-		// write the manifest into the disk
-		rawdb.WriteManifest(w.workerDb, header.Hash(), manifest)
-	}
+	manifest := w.hc.CalculateManifest(header)
 	manifestHash := types.DeriveSha(manifest, trie.NewStackTrie(nil))
-
 	return manifestHash
 }
 
