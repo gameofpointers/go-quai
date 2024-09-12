@@ -44,6 +44,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		StateLimit     					hexutil.Uint64   		`json:"stateLimit"      			gencodec:"required"`
 		StateUsed                       hexutil.Uint64          `json:"stateUsed"                   gencodec:"required"`
 		Extra       					hexutil.Bytes  		 	`json:"extraData"          			gencodec:"required"`
+		SecondaryCoinbase               common.Address          `json:"secondaryCoinbase"           gencodec:"required"`
 	}
 	// Initialize the enc struct
 	enc.ParentEntropy = make([]*hexutil.Big, common.HierarchyDepth)
@@ -84,6 +85,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.StateLimit = hexutil.Uint64(h.StateLimit())
 	enc.StateUsed = hexutil.Uint64(h.StateUsed())
 	enc.Extra = hexutil.Bytes(h.Extra())
+	enc.SecondaryCoinbase = h.SecondaryCoinbase()
 	raw, err := json.Marshal(&enc)
 	return raw, err
 }
@@ -119,6 +121,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		StateLimit                      *hexutil.Uint64         `json:"stateLimit"                  gencodec:"required"`
 		StateUsed                       *hexutil.Uint64         `json:"stateUsed"                   gencodec:"required"`
 		Extra       					hexutil.Bytes  		 	`json:"extraData"          			gencodec:"required"`
+		SecondaryCoinbase               *common.Address         `json:"secondaryCoinbase"           gencodec:"required"`
 	}
 	if err := json.Unmarshal(input, &dec); err != nil {
 		return err
@@ -204,6 +207,9 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 	if dec.QuaiStateSize == nil {
 		return errors.New("missing required field 'quaiStateSize' for Header")
 	}
+	if dec.SecondaryCoinbase == nil {
+		return errors.New("missing required field 'secondaryCoinbase' for Header")
+	}
 	// Initialize the header
 	h.parentHash = make([]common.Hash, common.HierarchyDepth-1)
 	h.manifestHash = make([]common.Hash, common.HierarchyDepth)
@@ -258,6 +264,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 	h.SetStateLimit(uint64(*dec.StateLimit))
 	h.SetStateUsed(uint64(*dec.StateUsed))
 	h.SetExtra(dec.Extra)
+	h.SetSecondaryCoinbase(*dec.SecondaryCoinbase)
 	return nil
 }
 
@@ -303,7 +310,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		MixHash    common.Hash    `json:"mixHash" gencoden:"required"`
 		Time       hexutil.Uint64 `json:"time" gencoden:"required"`
 		Nonce      BlockNonce     `json:"nonce" gencoden:"required"`
-		Coinbase   common.Address `json:"coinbase" gencoden:"required"`
+		PrimaryCoinbase   common.Address `json:"primaryCoinbase" gencoden:"required"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -315,7 +322,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 	enc.MixHash = wh.MixHash()
 	enc.Time = hexutil.Uint64(wh.Time())
 	enc.Nonce = wh.Nonce()
-	enc.Coinbase = wh.Coinbase()
+	enc.PrimaryCoinbase = wh.PrimaryCoinbase()
 
 	raw, err := json.Marshal(&enc)
 	return raw, err
@@ -333,7 +340,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		MixHash	   common.Hash     `json:"mixHash" gencoden:"required"`
 		Time       hexutil.Uint64  `json:"time" gencoden:"required"`
 		Nonce      BlockNonce      `json:"nonce" gencoden:"required"`
-		Coinbase   common.Address  `json:"coinbase" gencoden:"required"`
+		PrimaryCoinbase   common.Address  `json:"primaryCoinbase" gencoden:"required"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -354,7 +361,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	wh.SetMixHash(dec.MixHash)
 	wh.SetTime(uint64(dec.Time))
 	wh.SetNonce(dec.Nonce)
-	wh.SetCoinbase(dec.Coinbase)
+	wh.SetPrimaryCoinbase(dec.PrimaryCoinbase)
 	return nil
 }
 

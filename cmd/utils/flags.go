@@ -767,15 +767,23 @@ func ParseCoinbaseAddresses() (map[string]string, error) {
 
 	for _, coinbase := range strings.Split(coinbaseInput, ",") {
 		coinbase = strings.TrimSpace(coinbase)
-		address := common.FromHex(coinbase)
-		location := common.LocationFromAddressBytes(address)
-		if _, exists := coinbases[location.Name()]; exists {
-			log.Global.WithField("shard", location.Name()).Fatalf("Duplicate coinbase address for shard")
+		address := common.HexToAddress(coinbase, common.Location{0, 0})
+		location := address.Location()
+		quai := address.IsInQuaiLedgerScope()
+		var key string
+		if quai {
+			key = location.Name() + "quai"
+		} else {
+			key = location.Name() + "qi"
+		}
+
+		if _, exists := coinbases[key]; exists {
+			log.Global.WithField("key", key).Fatalf("Duplicate coinbase address for shard")
 		}
 		if err := isValidAddress(coinbase); err != nil {
 			log.Global.WithField("err", err).Fatalf("Error parsing coinbase addresses")
 		}
-		coinbases[location.Name()] = coinbase
+		coinbases[key] = coinbase
 	}
 
 	log.Global.Infof("Coinbase Addresses: %v", coinbases)
@@ -979,22 +987,31 @@ func HexAddress(account string, nodeLocation common.Location) (common.Address, e
 	return common.Address{}, errors.New("invalid account address")
 }
 
-// setEtherbase retrieves the etherbase either from the directly specified
+// setCoinbase retrieves the etherbase either from the directly specified
 // command line flags or from the keystore if CLI indexed.
-func setEtherbase(cfg *quaiconfig.Config) {
+func setCoinbase(cfg *quaiconfig.Config) {
 	coinbaseMap, err := ParseCoinbaseAddresses()
 	if err != nil {
 		log.Global.Fatalf("error parsing coinbase addresses: %s", err)
 	}
 	// TODO: Have to handle more shards in the future
-	etherbase := coinbaseMap[cfg.NodeLocation.Name()]
-	// Convert the etherbase into an address and configure it
-	if etherbase != "" {
-		account, err := HexAddress(etherbase, cfg.NodeLocation)
+	primaryCoinbase := coinbaseMap[cfg.NodeLocation.Name()+"quai"]
+	secondaryCoinbase := coinbaseMap[cfg.NodeLocation.Name()+"qi"]
+	// Convert the coinbase into an address and configure it
+	if primaryCoinbase != "" {
+		account, err := HexAddress(primaryCoinbase, cfg.NodeLocation)
 		if err != nil {
-			Fatalf("Invalid miner etherbase: %v", err)
+			Fatalf("Invalid primary coinbase: %v", err)
 		}
-		cfg.Miner.Etherbase = account
+		cfg.Miner.PrimaryCoinbase = account
+	}
+	// Convert the coinbase into an address and configure it
+	if secondaryCoinbase != "" {
+		account, err := HexAddress(secondaryCoinbase, cfg.NodeLocation)
+		if err != nil {
+			Fatalf("Invalid secondary coinbase: %v", err)
+		}
+		cfg.Miner.SecondaryCoinbase = account
 	}
 }
 
@@ -1291,7 +1308,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 
 	// only set etherbase if its a zone chain
 	if len(nodeLocation) == 2 {
-		setEtherbase(cfg)
+		setCoinbase(cfg)
 	}
 	setGPO(&cfg.GPO)
 	setTxPool(&cfg.TxPool, nodeLocation)

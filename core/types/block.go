@@ -87,34 +87,35 @@ func (c *writeCounter) Write(b []byte) (int, error) {
 
 // Header represents a block header in the Quai blockchain.
 type Header struct {
-	parentHash            []common.Hash `json:"parentHash"            gencodec:"required"`
-	uncleHash             common.Hash   `json:"sha3Uncles"            gencodec:"required"`
-	evmRoot               common.Hash   `json:"evmRoot"               gencodec:"required"`
-	utxoRoot              common.Hash   `json:"utxoRoot"              gencodec:"required"`
-	quaiStateSize         *big.Int      `json:"quaiStateSize"         gencodec:"required"`
-	txHash                common.Hash   `json:"transactionsRoot"      gencodec:"required"`
-	etxHash               common.Hash   `json:"extTransactionsRoot"   gencodec:"required"`
-	etxSetRoot            common.Hash   `json:"etxSetRoot"            gencodec:"required"`
-	etxRollupHash         common.Hash   `json:"extRollupRoot"         gencodec:"required"`
-	manifestHash          []common.Hash `json:"manifestHash"          gencodec:"required"`
-	receiptHash           common.Hash   `json:"receiptsRoot"          gencodec:"required"`
-	parentEntropy         []*big.Int    `json:"parentEntropy"         gencodec:"required"`
-	parentDeltaS          []*big.Int    `json:"parentDeltaS"          gencodec:"required"`
-	parentUncledSubDeltaS []*big.Int    `json:"parentUncledSubDeltaS" gencodec:"required"`
-	efficiencyScore       uint16        `json:"efficiencyScore"       gencodec:"required"`
-	thresholdCount        uint16        `json:"thresholdCount"        gencodec:"required"`
-	expansionNumber       uint8         `json:"expansionNumber"    	  gencodec:"required"`
-	etxEligibleSlices     common.Hash   `json:"etxEligibleSlices"     gencodec:"required"`
-	primeTerminus         common.Hash   `json:"primeTerminus"         gencodec:"required"`
-	interlinkRootHash     common.Hash   `json:"interlinkRootHash"     gencodec:"required"`
-	uncledS               *big.Int      `json:"uncledLogS"            gencodec:"required"`
-	number                []*big.Int    `json:"number"                gencodec:"required"`
-	gasLimit              uint64        `json:"gasLimit"              gencodec:"required"`
-	gasUsed               uint64        `json:"gasUsed"               gencodec:"required"`
-	baseFee               *big.Int      `json:"baseFeePerGas"         gencodec:"required"`
-	extra                 []byte        `json:"extraData"             gencodec:"required"`
-	stateLimit            uint64        `json:"stateLimit" 			  gencodec:"required"`
-	stateUsed             uint64        `json:"stateUsed"             gencodec:"required"`
+	parentHash            []common.Hash  `json:"parentHash"            gencodec:"required"`
+	uncleHash             common.Hash    `json:"sha3Uncles"            gencodec:"required"`
+	evmRoot               common.Hash    `json:"evmRoot"               gencodec:"required"`
+	utxoRoot              common.Hash    `json:"utxoRoot"              gencodec:"required"`
+	quaiStateSize         *big.Int       `json:"quaiStateSize"         gencodec:"required"`
+	txHash                common.Hash    `json:"transactionsRoot"      gencodec:"required"`
+	etxHash               common.Hash    `json:"extTransactionsRoot"   gencodec:"required"`
+	etxSetRoot            common.Hash    `json:"etxSetRoot"            gencodec:"required"`
+	etxRollupHash         common.Hash    `json:"extRollupRoot"         gencodec:"required"`
+	manifestHash          []common.Hash  `json:"manifestHash"          gencodec:"required"`
+	receiptHash           common.Hash    `json:"receiptsRoot"          gencodec:"required"`
+	parentEntropy         []*big.Int     `json:"parentEntropy"         gencodec:"required"`
+	parentDeltaS          []*big.Int     `json:"parentDeltaS"          gencodec:"required"`
+	parentUncledSubDeltaS []*big.Int     `json:"parentUncledSubDeltaS" gencodec:"required"`
+	efficiencyScore       uint16         `json:"efficiencyScore"       gencodec:"required"`
+	thresholdCount        uint16         `json:"thresholdCount"        gencodec:"required"`
+	expansionNumber       uint8          `json:"expansionNumber"    	  gencodec:"required"`
+	etxEligibleSlices     common.Hash    `json:"etxEligibleSlices"     gencodec:"required"`
+	primeTerminus         common.Hash    `json:"primeTerminus"         gencodec:"required"`
+	interlinkRootHash     common.Hash    `json:"interlinkRootHash"     gencodec:"required"`
+	uncledS               *big.Int       `json:"uncledLogS"            gencodec:"required"`
+	number                []*big.Int     `json:"number"                gencodec:"required"`
+	gasLimit              uint64         `json:"gasLimit"              gencodec:"required"`
+	gasUsed               uint64         `json:"gasUsed"               gencodec:"required"`
+	baseFee               *big.Int       `json:"baseFeePerGas"         gencodec:"required"`
+	extra                 []byte         `json:"extraData"             gencodec:"required"`
+	stateLimit            uint64         `json:"stateLimit" 			  gencodec:"required"`
+	stateUsed             uint64         `json:"stateUsed"             gencodec:"required"`
+	secondaryCoinbase     common.Address `json:secondaryCoinbase       gencodec:"required"`
 
 	// caches
 	hash     atomic.Value
@@ -165,6 +166,7 @@ func EmptyHeader() *Header {
 	h.etxEligibleSlices = EmptyHash
 	h.primeTerminus = EmptyRootHash
 	h.interlinkRootHash = EmptyRootHash
+	h.secondaryCoinbase = common.Address{}
 
 	for i := 0; i < common.HierarchyDepth; i++ {
 		h.manifestHash[i] = EmptyRootHash
@@ -192,6 +194,7 @@ func EmptyWorkObject(nodeCtx int) *WorkObject {
 	wo.woHeader.SetTxHash(EmptyRootHash)
 	wo.woHeader.SetLocation(common.Location{})
 	wo.woHeader.SetNonce(EncodeNonce(0))
+	wo.woHeader.SetPrimaryCoinbase(common.Address{})
 	wo.woHeader.SetTime(0)
 	wo.woBody.SetHeader(h)
 	wo.woBody.SetUncles([]*WorkObjectHeader{})
@@ -240,6 +243,7 @@ func (h *Header) ProtoEncode() (*ProtoHeader, error) {
 		InterlinkRootHash: &interlinkRootHash,
 		EtxEligibleSlices: &etxEligibleSlices,
 		UncledS:           h.UncledS().Bytes(),
+		SecondaryCoinbase: h.SecondaryCoinbase().Bytes(),
 		GasLimit:          &gasLimit,
 		GasUsed:           &gasUsed,
 		EfficiencyScore:   &efficiencyScore,
@@ -347,6 +351,9 @@ func (h *Header) ProtoDecode(protoHeader *ProtoHeader, location common.Location)
 	if protoHeader.QuaiStateSize == nil {
 		return errors.New("missing required field 'QuaiStateSize' in Header")
 	}
+	if protoHeader.SecondaryCoinbase == nil {
+		return errors.New("missing required field 'secondaryCoinbase' in Header")
+	}
 
 	// Initialize the array fields before setting
 	h.parentHash = make([]common.Hash, common.HierarchyDepth-1)
@@ -389,6 +396,7 @@ func (h *Header) ProtoDecode(protoHeader *ProtoHeader, location common.Location)
 	h.SetThresholdCount(uint16(protoHeader.GetThresholdCount()))
 	h.SetExpansionNumber(uint8(protoHeader.GetExpansionNumber()))
 	h.SetEtxEligibleSlices(common.BytesToHash(protoHeader.GetEtxEligibleSlices().GetValue()))
+	h.SetSecondaryCoinbase(common.BytesToAddress(protoHeader.GetSecondaryCoinbase(), location))
 
 	return nil
 }
@@ -428,6 +436,7 @@ func (h *Header) RPCMarshalHeader() map[string]interface{} {
 		"etxEligibleSlices":   h.EtxEligibleSlices(),
 		"stateLimit":          hexutil.Uint64(h.StateLimit()),
 		"stateUsed":           hexutil.Uint64(h.StateUsed()),
+		"secondaryCoinbase":   h.SecondaryCoinbase(),
 	}
 
 	number := make([]*hexutil.Big, common.HierarchyDepth)
@@ -539,6 +548,9 @@ func (h *Header) StateUsed() uint64 {
 func (h *Header) Extra() []byte                  { return common.CopyBytes(h.extra) }
 func (h *Header) PrimeTerminus() common.Hash     { return h.primeTerminus }
 func (h *Header) InterlinkRootHash() common.Hash { return h.interlinkRootHash }
+func (h *Header) SecondaryCoinbase() common.Address {
+	return h.secondaryCoinbase
+}
 
 func (h *Header) SetParentHash(val common.Hash, nodeCtx int) {
 	h.hash = atomic.Value{}     // clear hash cache
@@ -685,6 +697,11 @@ func (h *Header) SetExtra(val []byte) {
 	h.extra = make([]byte, len(val))
 	copy(h.extra, val)
 }
+func (h *Header) SetSecondaryCoinbase(val common.Address) {
+	h.hash = atomic.Value{}
+	h.sealHash = atomic.Value{}
+	h.secondaryCoinbase = val
+}
 
 // Array accessors
 func (h *Header) ParentHashArray() []common.Hash   { return h.parentHash }
@@ -694,7 +711,7 @@ func (h *Header) ParentUncledSubDeltaSArray() []*big.Int {
 	return h.parentUncledSubDeltaS
 }
 
-// ProtoEncode serializes s into the Quai Proto sealData format
+// SealEncode serializes s into the Quai Proto sealData format
 func (h *Header) SealEncode() *ProtoHeader {
 	uncleHash := common.ProtoHash{Value: h.UncleHash().Bytes()}
 	evmRoot := common.ProtoHash{Value: h.EVMRoot().Bytes()}
@@ -738,6 +755,7 @@ func (h *Header) SealEncode() *ProtoHeader {
 		ThresholdCount:    &thresholdCount,
 		ExpansionNumber:   &expansionNumber,
 		Extra:             h.Extra(),
+		SecondaryCoinbase: h.SecondaryCoinbase().Bytes(),
 	}
 
 	for i := 0; i < common.HierarchyDepth; i++ {
