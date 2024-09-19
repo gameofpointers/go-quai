@@ -151,7 +151,6 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, relayPeer p2p.Peer
 
 		backend.WriteBlock(data.WorkObject)
 		blockIngressCounter.Inc()
-		qbe.woPeers.Add(sourcePeer.String(), struct{}{})
 		qbe.woPeers.Add(relayPeer.String(), struct{}{})
 		// If it was a good broadcast, mark the peer as lively
 		qbe.p2pBackend.MarkLivelyPeer(sourcePeer, topic)
@@ -169,7 +168,6 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, relayPeer p2p.Peer
 
 		headerIngressCounter.Inc()
 		// If it was a good broadcast, mark the peer as lively
-		qbe.whPeers.Add(sourcePeer.String(), struct{}{})
 		qbe.whPeers.Add(relayPeer.String(), struct{}{})
 		qbe.p2pBackend.MarkLivelyPeer(sourcePeer, topic)
 		qbe.p2pBackend.MarkLivelyPeer(relayPeer, topic)
@@ -199,7 +197,6 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, relayPeer p2p.Peer
 			}
 		}
 
-		qbe.wsPeers.Add(sourcePeer.String(), struct{}{})
 		qbe.wsPeers.Add(relayPeer.String(), struct{}{})
 		// If it was a good broadcast, mark the peer as lively
 		qbe.p2pBackend.MarkLivelyPeer(sourcePeer, topic)
