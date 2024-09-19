@@ -123,6 +123,7 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 		// pass the ip address and port to listen on
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/%s/tcp/%s", ipAddr, port),
+			fmt.Sprintf("/ip4/%s/udp/%s/quic", ipAddr, port),
 		),
 
 		// support all transports
