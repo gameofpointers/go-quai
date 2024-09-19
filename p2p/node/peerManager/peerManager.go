@@ -627,21 +627,21 @@ func (pm *BasicPeerManager) recategorizePeer(peerID p2p.PeerID, topic *pubsubMan
 			return errors.Wrap(err, "error putting peer in allPeersDB")
 		}
 	}
-	q := query.Query{
-		Limit: 3,
-	}
-	results, err := pm.peerDBs[topic.String()][LastResort].Query(context.Background(), q)
-	if err != nil {
-		return err
-	}
-	for result := range results.Next() {
-		peerID, err := peer.Decode(strings.TrimPrefix(result.Key, "/"))
-		if err != nil {
-			// If there is an error, move to the next peer
-			continue
-		}
-		log.Global.Info("Peer ID found in the database", result, peerID)
-	}
+	// q := query.Query{
+	// 	Limit: 3,
+	// }
+	// results, err := pm.peerDBs[topic.String()][LastResort].Query(context.Background(), q)
+	// if err != nil {
+	// 	return err
+	// }
+	// for result := range results.Next() {
+	// 	peerID, err := peer.Decode(strings.TrimPrefix(result.Key, "/"))
+	// 	if err != nil {
+	// 		// If there is an error, move to the next peer
+	// 		continue
+	// 	}
+	// 	log.Global.Info("Peer ID found in the database", result, peerID)
+	// }
 
 	return nil
 }
