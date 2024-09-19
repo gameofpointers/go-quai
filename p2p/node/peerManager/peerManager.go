@@ -462,10 +462,10 @@ func (pm *BasicPeerManager) GetPeers(topic *pubsubManager.Topic) map[p2p.PeerID]
 	// Randomly select request degree number of peers from the peerList
 	lenPeer := len(peerList)
 
-	go func() {
-		dhtContent := pm.queryDHT(topic, peerList, 10)
-		log.Global.Infof("Found %d peers from the DHT", len(dhtContent))
-	}()
+	// go func() {
+	// 	dhtContent := pm.queryDHT(topic, peerList, 10)
+	// 	log.Global.Infof("Found %d peers from the DHT", len(dhtContent))
+	// }()
 
 	// If we have more peers than the request degree, randomly select peers and
 	// return, otherwise ask the dht for the extra required peers
