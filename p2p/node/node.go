@@ -9,7 +9,9 @@ import (
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pmetrics "github.com/libp2p/go-libp2p/core/metrics"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -18,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multihash"
 	"github.com/spf13/viper"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -109,6 +112,8 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 
 	log.Global.Warn("listen addr strings", fmt.Sprintf("/ip4/%s/udp/%s/quic", ipAddr, port))
 	// Create the libp2p host
+
+	peerKey := getNodeKey()
 	var dht *kaddht.IpfsDHT
 	host, err := libp2p.New(
 		// Pass in the resource manager
@@ -118,7 +123,7 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 		libp2p.BandwidthReporter(bwctr),
 
 		// use a private key for persistent identity
-		libp2p.Identity(getNodeKey()),
+		libp2p.Identity(peerKey),
 
 		// pass the ip address and port to listen on
 		libp2p.ListenAddrStrings(
@@ -209,17 +214,44 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	for _, addr := range peerMgr.RefreshBootpeers() {
 		if err := host.Connect(ctx, addr); err != nil {
 			log.Global.Error("Error connecting to the boot peers", err)
+			return nil, err
 		}
 	}
 	// Bootstrapping the DHT (this step is essential for peer discovery)
 	if err := dht.Bootstrap(ctx); err != nil {
 		log.Global.Info("Failed to bootstrap DHT:", err)
+		return nil, err
 	}
 
-	log.Global.Warn("value", nodeID.String(), []byte(host.Addrs()[0].String()))
-	err = dht.PutValue(ctx, nodeID.String(), []byte(host.Addrs()[0].String()))
+	pubKey, err := host.ID().ExtractPublicKey()
+	if err != nil {
+		log.Global.Warn("Error extracting the public key", err)
+		return nil, err
+	}
+
+	rawPubKey, err := pubKey.Raw()
+	if err != nil {
+		log.Global.Warn("Error extracting the raw public key", err)
+		return nil, err
+	}
+
+	publicKey := &pb.PublicKey{Type: pb.KeyType_Ed25519.Enum(), Data: rawPubKey}
+	marshalPublicKey, err := proto.Marshal(publicKey)
+	if err != nil {
+		log.Global.Error("error marshalling the public key", err)
+		return nil, err
+	}
+
+	peerIdMultiHash, err := multihash.FromB58String(nodeID.String())
+	if err != nil {
+		log.Global.Error("error decoding the node id", err)
+		return nil, err
+	}
+
+	err = dht.PutValue(ctx, "/pk/"+string(peerIdMultiHash), marshalPublicKey)
 	if err != nil {
 		log.Global.Error("Error putting peer id and multi addr info into the dht", err)
+		return nil, err
 	}
 
 	// Create a gossipsub instance with helper functions
