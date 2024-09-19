@@ -51,7 +51,11 @@ func NewGossipSubManager(ctx context.Context, h host.Host) (*PubsubManager, erro
 	cfg.Dlo = 6
 	cfg.Dhi = 45
 	cfg.Dout = 20
-	ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(cfg))
+	tracer, err := pubsub.NewJSONTracer("nodelogs/gossiptracer.log") // Outputs events in JSON format to stdout
+	if err != nil {
+		return nil, err
+	}
+	ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(cfg), pubsub.WithEventTracer(tracer))
 	if err != nil {
 		return nil, err
 	}

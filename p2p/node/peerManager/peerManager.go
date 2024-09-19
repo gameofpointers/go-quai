@@ -29,7 +29,7 @@ import (
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
 
-	"github.com/libp2p/go-libp2p-kad-dht/dual"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pmetrics "github.com/libp2p/go-libp2p/core/metrics"
@@ -90,7 +90,7 @@ type PeerManager interface {
 	GetSelfID() p2p.PeerID
 
 	// Sets the DHT provided from the Host interface
-	SetDHT(*dual.DHT)
+	SetDHT(*kaddht.IpfsDHT)
 
 	// Sets the streamManager interface
 	SetStreamManager(streamManager.StreamManager)
@@ -143,7 +143,7 @@ type BasicPeerManager struct {
 	bootpeers []peer.AddrInfo
 
 	// DHT instance
-	dht *dual.DHT
+	dht *kaddht.IpfsDHT
 
 	// This peer's ID to distinguish self-broadcasts
 	selfID p2p.PeerID
@@ -361,7 +361,7 @@ func (pm *BasicPeerManager) RefreshBootpeers() []peer.AddrInfo {
 	return bootpeers
 }
 
-func (pm *BasicPeerManager) SetDHT(dht *dual.DHT) {
+func (pm *BasicPeerManager) SetDHT(dht *kaddht.IpfsDHT) {
 	pm.dht = dht
 }
 
@@ -626,6 +626,21 @@ func (pm *BasicPeerManager) recategorizePeer(peerID p2p.PeerID, topic *pubsubMan
 		if err != nil {
 			return errors.Wrap(err, "error putting peer in allPeersDB")
 		}
+	}
+	q := query.Query{
+		Limit: 3,
+	}
+	results, err := pm.peerDBs[topic.String()][LastResort].Query(context.Background(), q)
+	if err != nil {
+		return err
+	}
+	for result := range results.Next() {
+		peerID, err := peer.Decode(strings.TrimPrefix(result.Key, "/"))
+		if err != nil {
+			// If there is an error, move to the next peer
+			continue
+		}
+		log.Global.Info("Peer ID found in the database", result, peerID)
 	}
 
 	return nil

@@ -8,7 +8,6 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	dual "github.com/libp2p/go-libp2p-kad-dht/dual"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -70,7 +69,7 @@ type P2PNode struct {
 	host host.Host
 
 	// dht interface
-	dht *dual.DHT
+	dht *kaddht.IpfsDHT
 
 	// libp2p bandwidth counter
 	bandwidthCounter *libp2pmetrics.BandwidthCounter
@@ -108,8 +107,9 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	}
 	bwctr := libp2pmetrics.NewBandwidthCounter()
 
+	log.Global.Warn("listen addr strings", fmt.Sprintf("/ip4/%s/udp/%s/quic", ipAddr, port))
 	// Create the libp2p host
-	var dht *dual.DHT
+	var dht *kaddht.IpfsDHT
 	host, err := libp2p.New(
 		// Pass in the resource manager
 		libp2p.ResourceManager(rmgr),
@@ -165,15 +165,13 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 
 		// Let this host use the DHT to find other hosts
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			dht, err = dual.New(ctx, h,
-				dual.WanDHTOption(
-					kaddht.Mode(kaddht.ModeServer),
-					kaddht.BootstrapPeersFunc(func() []peer.AddrInfo {
-						return peerMgr.RefreshBootpeers()
-					}),
-					kaddht.ProtocolPrefix("/quai"),
-					kaddht.RoutingTableRefreshPeriod(1*time.Minute),
-				),
+			dht, err = kaddht.New(ctx, h,
+				kaddht.Mode(kaddht.ModeServer),
+				kaddht.BootstrapPeersFunc(func() []peer.AddrInfo {
+					return peerMgr.RefreshBootpeers()
+				}),
+				kaddht.ProtocolPrefix("/quai"),
+				kaddht.RoutingTableRefreshPeriod(1*time.Minute),
 			)
 			return dht, err
 		}),
@@ -207,10 +205,23 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	// Set the DHT for the peer manager
 	peerMgr.SetDHT(dht)
 
+	// Connect to a few bootstrap nodes
+	for _, addr := range peerMgr.RefreshBootpeers() {
+		if err := host.Connect(ctx, addr); err != nil {
+			log.Global.Error("Error connecting to the boot peers", err)
+		}
+	}
 	// Bootstrapping the DHT (this step is essential for peer discovery)
 	if err := dht.Bootstrap(ctx); err != nil {
 		log.Global.Info("Failed to bootstrap DHT:", err)
 	}
+
+	log.Global.Warn("value", nodeID.String(), []byte(host.Addrs()[0].String()))
+	err = dht.PutValue(ctx, nodeID.String(), []byte(host.Addrs()[0].String()))
+	if err != nil {
+		log.Global.Error("Error putting peer id and multi addr info into the dht", err)
+	}
+
 	// Create a gossipsub instance with helper functions
 	ps, err := pubsubManager.NewGossipSubManager(ctx, host)
 	if err != nil {
