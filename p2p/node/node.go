@@ -211,11 +211,11 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	peerMgr.SetDHT(dht)
 
 	// Connect to a few bootstrap nodes
-	for _, addr := range peerMgr.RefreshBootpeers() {
-		if err := host.Connect(ctx, addr); err != nil {
-			log.Global.Warn("Error connecting to the boot peers", err)
-		}
-	}
+	// for _, addr := range peerMgr.RefreshBootpeers() {
+	// 	if err := host.Connect(ctx, addr); err != nil {
+	// 		log.Global.Warn("Error connecting to the boot peers", err)
+	// 	}
+	// }
 	// Bootstrapping the DHT (this step is essential for peer discovery)
 	if err := dht.Bootstrap(ctx); err != nil {
 		log.Global.Info("Failed to bootstrap DHT:", err)
