@@ -527,14 +527,16 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 		badHashes = make(map[common.Hash]bool)
 		count := 0
 		var leaders []Node
+		hc.recentBlockMu.Lock()
 	search:
 		if len(leaders) > 0 {
 			circularShift(leaders)
 			badHashes = make(map[common.Hash]bool)
 		}
 
-		if count > 3*len(leaders) {
+		if count > 8*len(leaders) {
 			log.Global.Error("Too many iterations in the build pending headers, skipping generate")
+			hc.recentBlockMu.Unlock()
 			return
 		}
 		// Pick the leader among all the slices
@@ -543,7 +545,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 
 		constraintMap := make(map[string]common.Hash)
 		numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
-		hc.recentBlockMu.Lock()
 		for i := 0; i < int(numRegions); i++ {
 			for j := 0; j < int(numZones); j++ {
 				if _, exists := hc.recentBlocks[common.Location{byte(i), byte(j)}.Name()]; !exists {
@@ -577,7 +578,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 				}
 			}
 		}
-		hc.recentBlockMu.Unlock()
+
 		PrintConstraintMap(modifiedConstraintMap)
 
 		var bestPrime common.Hash
@@ -625,6 +626,30 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 					log.Global.WithFields(log.Fields{"hash": bestZone, "location": zoneLocation}).Debug("Best Zone doesnt satisfy pcrc")
 					count++
 					goto search
+				}
+			}
+		}
+
+		// Headers have been successfully computed, compute state.
+		hc.recentBlockMu.Unlock()
+
+		for i := 0; i < int(numRegions); i++ {
+			regionLocation := common.Location{byte(i)}.Name()
+			var bestRegion common.Hash
+			t, exists := modifiedConstraintMap[regionLocation]
+			if !exists {
+				bestRegion = defaultGenesisHash
+			} else {
+				bestRegion = t
+			}
+			for j := 0; j < int(numZones); j++ {
+				var bestZone common.Hash
+				zoneLocation := common.Location{byte(i), byte(j)}.Name()
+				t, exists := modifiedConstraintMap[zoneLocation]
+				if !exists {
+					bestZone = defaultGenesisHash
+				} else {
+					bestZone = t
 				}
 				wg.Add(1)
 				go hc.ComputePendingHeader(&wg, bestPrime, bestRegion, bestZone, common.Location{byte(i), byte(j)}, stopChan)
