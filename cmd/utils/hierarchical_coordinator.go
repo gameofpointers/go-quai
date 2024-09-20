@@ -481,6 +481,10 @@ func (hc *HierarchicalCoordinator) CalculateLeaders(badHashes map[common.Hash]bo
 		}
 	}
 
+	sort.Slice(nodeList, func(i, j int) bool {
+		return nodeList[i].entropy.Cmp(nodeList[j].entropy) > 0
+	})
+
 	return nodeList
 }
 
