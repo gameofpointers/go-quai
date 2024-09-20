@@ -523,10 +523,17 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 		log.Global.Warn("Build pending headers exited after timeout")
 		return
 	default:
-		badHashes := make(map[common.Hash]bool)
+		var badHashes map[common.Hash]bool
+		badHashes = make(map[common.Hash]bool)
 		count := 0
+		var leaders []Node
 	search:
-		if count > 10 {
+		if len(leaders) > 0 {
+			circularShift(leaders)
+			badHashes = make(map[common.Hash]bool)
+		}
+
+		if count > 3*len(leaders) {
 			log.Global.Error("Too many iterations in the build pending headers, skipping generate")
 			return
 		}
@@ -549,7 +556,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 			}
 		}
 
-		leaders := hc.CalculateLeaders(badHashes)
+		leaders = hc.CalculateLeaders(badHashes)
 		// Go through all the zones to update the constraint map
 		modifiedConstraintMap := constraintMap
 		first := true
@@ -626,6 +633,16 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 
 		wg.Wait()
 	}
+}
+
+func circularShift(arr []Node) []Node {
+	if len(arr) <= 1 {
+		return arr // No need to shift if array has 0 or 1 elements
+	}
+
+	shifted := arr[1:]
+
+	return append(shifted, arr[0])
 }
 
 // PCRC previous coincidence reference check makes sure there are not any cyclic references in the graph and calculates new termini and the block terminus
