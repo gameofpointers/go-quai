@@ -623,6 +623,8 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	hc.recentBlockMu.Lock()
 	// Get a block
 	// See if it can extend the best entropy
+	max_iterations := 100
+	var first bool = true
 	for i := 0; i < len(hc.pendingHeaders.order); i++ {
 		entropy := hc.pendingHeaders.order[i]
 		nodeSet, exists := hc.Get(entropy)
@@ -639,8 +641,21 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
 
 			hc.Add(newSetEntropy, newNodeSet)
-			hc.ComputePendingHeaders(newNodeSet)
-			break
+
+			// Always compute the pending header on the best node set
+			if first {
+				bestNodeSet, exists := hc.Get(hc.pendingHeaders.order[0])
+				if exists {
+					hc.ComputePendingHeaders(bestNodeSet)
+				} else {
+					log.Global.Error("best node set doesnt exist")
+				}
+			}
+			first = false
+
+			if i > max_iterations {
+				break
+			}
 		}
 	}
 	// we continue to update older valid extensions
