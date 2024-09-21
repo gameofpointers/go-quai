@@ -471,7 +471,11 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 }
 
 func (sl *Slice) ReadBestPh() *types.WorkObject {
-	return sl.bestPh.Load().(*types.WorkObject)
+	if sl.bestPh.Load() != nil {
+		return sl.bestPh.Load().(*types.WorkObject)
+	} else {
+		return nil
+	}
 }
 
 // CollectNewlyConfirmedEtxs collects all newly confirmed ETXs since the last coincident with the given location
