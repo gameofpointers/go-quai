@@ -26,7 +26,7 @@ const (
 	// c_expansionChSize is the size of the chain head channel listening to new
 	// expansion events
 	c_expansionChSize            = 10
-	c_recentBlockCacheSize       = 100
+	c_recentBlockCacheSize       = 1000
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
@@ -43,8 +43,17 @@ type Node struct {
 	entropy  *big.Int
 }
 
+type NodeSet struct {
+	nodes map[string]Node
+}
+
 func (ch *Node) Empty() bool {
 	return ch.hash == common.Hash{} && ch.location.Equal(common.Location{}) && ch.entropy == nil
+}
+
+type PendingHeaders struct {
+	collection map[string]NodeSet // Use string to store the big.Int value as a string key
+	order      []*big.Int         // Maintain the order of entropies
 }
 
 type HierarchicalCoordinator struct {
@@ -71,6 +80,56 @@ type HierarchicalCoordinator struct {
 	quitCh chan struct{}
 
 	treeExpansionTriggerStarted bool // flag to indicate if the tree expansion trigger has started
+
+	pendingHeaders *PendingHeaders
+}
+
+func NewPendingHeaders() *PendingHeaders {
+	return &PendingHeaders{
+		collection: make(map[string]NodeSet),
+		order:      []*big.Int{},
+	}
+}
+
+func (hc *HierarchicalCoordinator) InitPendingHeaders() {
+	nodeSet := NodeSet{
+		nodes: make(map[string]Node),
+	}
+
+	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
+	for i := 0; i < int(numRegions); i++ {
+		for j := 0; j < int(numZones); j++ {
+			backend := hc.GetBackend(common.Location{byte(i), byte(j)})
+			genesisBlock := backend.GetBlockByHash(backend.Config().DefaultGenesisHash)
+			entropy := backend.TotalLogS(genesisBlock)
+			newNode := Node{
+				hash:     genesisBlock.Hash(),
+				number:   genesisBlock.NumberArray(),
+				location: common.Location{byte(i), byte(j)},
+				entropy:  entropy,
+			}
+			nodeSet.nodes[common.Location{byte(i), byte(j)}.Name()] = newNode
+		}
+	}
+	hc.Add(new(big.Int).SetUint64(0), nodeSet)
+}
+
+func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
+	entropyStr := entropy.String()
+	if _, exists := hc.pendingHeaders.collection[entropyStr]; !exists {
+		hc.pendingHeaders.order = append(hc.pendingHeaders.order, new(big.Int).Set(entropy)) // Store a copy of the big.Int
+	}
+	hc.pendingHeaders.collection[entropyStr] = node
+
+	sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
+		return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) < 0 // Sort based on big.Int values
+	})
+}
+
+func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
+	entropyStr := entropy.String()
+	node, exists := hc.pendingHeaders.collection[entropyStr]
+	return node, exists
 }
 
 // NewHierarchicalCoordinator creates a new instance of the HierarchicalCoordinator
@@ -88,6 +147,7 @@ func NewHierarchicalCoordinator(p2p quai.NetworkingAPI, logLevel string, nodeWg 
 		treeExpansionTriggerStarted: false,
 		quitCh:                      quitCh,
 		recentBlocks:                make(map[string]*lru.Cache[common.Hash, Node]),
+		pendingHeaders:              NewPendingHeaders(),
 	}
 
 	if startingExpansionNumber > common.MaxExpansionNumber {
@@ -106,6 +166,8 @@ func NewHierarchicalCoordinator(p2p quai.NetworkingAPI, logLevel string, nodeWg 
 		log.Global.Fatal("Error starting the quai backend")
 	}
 	hc.consensus = backend
+
+	hc.InitPendingHeaders()
 
 	return hc
 }
@@ -532,107 +594,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
 		count := 0
 		var leaders []Node
 		hc.recentBlockMu.Lock()
-	search:
-		if len(leaders) > 0 {
-			circularShift(leaders)
-			badHashes = make(map[common.Hash]bool)
-		}
-
-		if count > 8*len(leaders) {
-			log.Global.Error("Too many iterations in the build pending headers, skipping generate")
-			hc.recentBlockMu.Unlock()
-			return
-		}
-		// Pick the leader among all the slices
-		backend := *hc.consensus.GetBackend(common.Location{0, 0})
-		defaultGenesisHash := backend.Config().DefaultGenesisHash
-
-		constraintMap := make(map[string]common.Hash)
-		numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
-		for i := 0; i < int(numRegions); i++ {
-			for j := 0; j < int(numZones); j++ {
-				if _, exists := hc.recentBlocks[common.Location{byte(i), byte(j)}.Name()]; !exists {
-					backend := hc.GetBackend(common.Location{byte(i), byte(j)})
-					genesisBlock := backend.GetBlockByHash(defaultGenesisHash)
-					lru, _ := lru.New[common.Hash, Node](c_recentBlockCacheSize)
-					lru.Add(genesisBlock.Hash(), Node{hash: genesisBlock.Hash(), number: genesisBlock.NumberArray(), location: common.Location{byte(i), byte(j)}, entropy: big.NewInt(0)})
-					hc.recentBlocks[common.Location{byte(i), byte(j)}.Name()] = lru
-				}
-			}
-		}
-
-		leaders = hc.CalculateLeaders(badHashes)
-		// Go through all the zones to update the constraint map
-		modifiedConstraintMap := constraintMap
-		first := true
-		for _, leader := range leaders {
-			log.Global.WithFields(log.Fields{"Header": leader.hash, "Number": leader.number, "Location": leader.location, "Entropy": leader.entropy}).Debug("Starting leader")
-			var err error
-			location := leader.location
-			backend := hc.GetBackend(location)
-			otherNodes := hc.GetNodeListForLocation(location, badHashes)
-			for _, node := range otherNodes {
-				leaderBlock := backend.GetBlockByHash(node.hash)
-				modifiedConstraintMap, err = hc.calculateFrontierPoints(modifiedConstraintMap, leaderBlock, first)
-				first = false
-				if err != nil {
-					log.Global.Errorf("error tracing back from block %s: %+v", leaderBlock.Hash().String(), err)
-				} else {
-					break
-				}
-			}
-		}
-
-		PrintConstraintMap(modifiedConstraintMap)
-
-		var bestPrime common.Hash
-		t, exists := modifiedConstraintMap[common.Location{}.Name()]
-		if !exists {
-			bestPrime = defaultGenesisHash
-		} else {
-			bestPrime = t
-		}
-
-		// Check if regions have twist
-		primeTermini := hc.GetBackend(common.Location{}).GetTerminiByHash(bestPrime)
-
-		var wg sync.WaitGroup
-
-		for i := 0; i < int(numRegions); i++ {
-			regionLocation := common.Location{byte(i)}.Name()
-			var bestRegion common.Hash
-			t, exists := modifiedConstraintMap[regionLocation]
-			if !exists {
-				bestRegion = defaultGenesisHash
-			} else {
-				bestRegion = t
-			}
-
-			if !hc.pcrc(bestRegion, primeTermini.SubTerminiAtIndex(i), common.Location{byte(i)}, common.REGION_CTX) {
-				badHashes[bestRegion] = true
-				log.Global.WithFields(log.Fields{"hash": bestRegion, "location": regionLocation}).Debug("Best Region doesnt satisfy pcrc")
-				count++
-				goto search
-			}
-			regionTermini := hc.GetBackend(common.Location{byte(i)}).GetTerminiByHash(bestRegion)
-
-			for j := 0; j < int(numZones); j++ {
-				var bestZone common.Hash
-				zoneLocation := common.Location{byte(i), byte(j)}.Name()
-				t, exists := modifiedConstraintMap[zoneLocation]
-				if !exists {
-					bestZone = defaultGenesisHash
-				} else {
-					bestZone = t
-				}
-				if !hc.pcrc(bestZone, regionTermini.SubTerminiAtIndex(j), common.Location{byte(i), byte(j)}, common.ZONE_CTX) {
-					badHashes[bestZone] = true
-					log.Global.WithFields(log.Fields{"hash": bestZone, "location": zoneLocation}).Debug("Best Zone doesnt satisfy pcrc")
-					count++
-					goto search
-				}
-			}
-		}
 
 		// Headers have been successfully computed, compute state.
 		hc.recentBlockMu.Unlock()
