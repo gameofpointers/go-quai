@@ -70,7 +70,8 @@ type HierarchicalCoordinator struct {
 
 	chainSubs []event.Subscription
 
-	recentBlockMu sync.RWMutex
+	pendingHeaderMu map[string]*sync.RWMutex
+	mutexMapMu      sync.RWMutex
 
 	expansionCh  chan core.ExpansionEvent
 	expansionSub event.Subscription
@@ -96,6 +97,7 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 		nodes: make(map[string]Node),
 	}
 
+	pendingHeaderMu := make(map[string]*sync.RWMutex)
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
 	//Initialize for prime
 	backend := hc.GetBackend(common.Location{})
@@ -108,6 +110,7 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 		entropy:  entropy,
 	}
 	nodeSet.nodes[common.Location{}.Name()] = newNode
+	pendingHeaderMu[common.Location{}.Name()] = &sync.RWMutex{}
 
 	for i := 0; i < int(numRegions); i++ {
 		backend := hc.GetBackend(common.Location{byte(i)})
@@ -115,15 +118,18 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 		newNode.location = common.Location{byte(i)}
 		newNode.entropy = entropy
 		nodeSet.nodes[common.Location{byte(i)}.Name()] = newNode
+		pendingHeaderMu[common.Location{byte(i)}.Name()] = &sync.RWMutex{}
 		for j := 0; j < int(numZones); j++ {
 			backend := hc.GetBackend(common.Location{byte(i), byte(j)})
 			entropy := backend.TotalLogS(genesisBlock)
 			newNode.location = common.Location{byte(i), byte(j)}
 			newNode.entropy = entropy
 			nodeSet.nodes[common.Location{byte(i), byte(j)}.Name()] = newNode
+			pendingHeaderMu[common.Location{byte(i), byte(j)}.Name()] = &sync.RWMutex{}
 		}
 	}
 	hc.Add(new(big.Int).SetUint64(0), nodeSet)
+	hc.pendingHeaderMu = pendingHeaderMu
 }
 
 func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
@@ -158,7 +164,9 @@ func (ns *NodeSet) Extendable(wo *types.WorkObject, order int) bool {
 			return true
 		}
 	case common.ZONE_CTX:
-		if wo.ParentHash(common.ZONE_CTX) == ns.nodes[wo.Location().Name()].hash {
+		nodeHash := ns.nodes[wo.Location().Name()].hash
+		parentHash := wo.ParentHash(common.ZONE_CTX)
+		if parentHash == nodeHash {
 			return true
 		}
 	}
@@ -552,14 +560,36 @@ func (hc *HierarchicalCoordinator) ChainEventLoop(chainEvent chan core.ChainEven
 	}
 }
 
+func (hc *HierarchicalCoordinator) GetLock(location common.Location, order int) []*sync.RWMutex {
+	hc.mutexMapMu.Lock()
+	defer hc.mutexMapMu.Unlock()
+	_, exists := hc.pendingHeaderMu[location.Name()]
+	if !exists {
+		hc.pendingHeaderMu[location.Name()] = &sync.RWMutex{}
+	}
+
+	var locks []*sync.RWMutex
+	for i := order; i <= 2; i++ {
+		name := location.NameAtOrder(i)
+		locks = append(locks, hc.pendingHeaderMu[name])
+	}
+
+	return locks
+}
+
 func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int) {
 	timer := time.NewTimer(c_buildPendingHeadersTimeout)
 	defer timer.Stop()
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
-	hc.recentBlockMu.Lock()
+
+	locks := hc.GetLock(wo.Location(), order)
+	for _, lock := range locks {
+		lock.Lock()
+		defer lock.Unlock()
+	}
 	// Get a block
 	// See if it can extend the best entropy
-	max_iterations := 100
+	max_iterations := 20
 	var first bool = true
 	for i := 0; i < len(hc.pendingHeaders.order); i++ {
 		entropy := hc.pendingHeaders.order[i]
@@ -594,13 +624,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			}
 		}
 	}
-	// we continue to update older valid extensions
-	// Once it can extend we create pending headers
-	// we continue to update older valid extensions
-
-	// Headers have been successfully computed, compute state.
-	hc.recentBlockMu.Unlock()
-
 }
 
 func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
