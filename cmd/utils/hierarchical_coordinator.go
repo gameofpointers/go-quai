@@ -97,17 +97,29 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 	}
 
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
+	//Initialize for prime
+	backend := hc.GetBackend(common.Location{})
+	genesisBlock := backend.GetBlockByHash(backend.Config().DefaultGenesisHash)
+	entropy := backend.TotalLogS(genesisBlock)
+	newNode := Node{
+		hash:     genesisBlock.Hash(),
+		number:   genesisBlock.NumberArray(),
+		location: common.Location{},
+		entropy:  entropy,
+	}
+	nodeSet.nodes[common.Location{}.Name()] = newNode
+
 	for i := 0; i < int(numRegions); i++ {
+		backend := hc.GetBackend(common.Location{byte(i)})
+		entropy := backend.TotalLogS(genesisBlock)
+		newNode.location = common.Location{byte(i)}
+		newNode.entropy = entropy
+		nodeSet.nodes[common.Location{byte(i)}.Name()] = newNode
 		for j := 0; j < int(numZones); j++ {
 			backend := hc.GetBackend(common.Location{byte(i), byte(j)})
-			genesisBlock := backend.GetBlockByHash(backend.Config().DefaultGenesisHash)
 			entropy := backend.TotalLogS(genesisBlock)
-			newNode := Node{
-				hash:     genesisBlock.Hash(),
-				number:   genesisBlock.NumberArray(),
-				location: common.Location{byte(i), byte(j)},
-				entropy:  entropy,
-			}
+			newNode.location = common.Location{byte(i), byte(j)}
+			newNode.entropy = entropy
 			nodeSet.nodes[common.Location{byte(i), byte(j)}.Name()] = newNode
 		}
 	}
@@ -130,6 +142,70 @@ func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
 	entropyStr := entropy.String()
 	node, exists := hc.pendingHeaders.collection[entropyStr]
 	return node, exists
+}
+
+func (ns *NodeSet) Extendable(wo *types.WorkObject, order int) bool {
+	switch order {
+	case common.PRIME_CTX:
+		if wo.ParentHash(common.PRIME_CTX) == ns.nodes[common.Location{}.Name()].hash &&
+			wo.ParentHash(common.REGION_CTX) == ns.nodes[common.Location{byte(wo.Location().Region())}.Name()].hash &&
+			wo.ParentHash(common.ZONE_CTX) == ns.nodes[wo.Location().Name()].hash {
+			return true
+		}
+	case common.REGION_CTX:
+		if wo.ParentHash(common.REGION_CTX) == ns.nodes[common.Location{byte(wo.Location().Region())}.Name()].hash &&
+			wo.ParentHash(common.ZONE_CTX) == ns.nodes[wo.Location().Name()].hash {
+			return true
+		}
+	case common.ZONE_CTX:
+		if wo.ParentHash(common.ZONE_CTX) == ns.nodes[wo.Location().Name()].hash {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (ns *NodeSet) Entropy(numRegions int, numZones int) *big.Int {
+	entropy := new(big.Int)
+
+	for i := 0; i < numRegions; i++ {
+		for j := 0; j < numZones; j++ {
+			entropy.Add(entropy, ns.nodes[common.Location{byte(i), byte(j)}.Name()].entropy)
+		}
+	}
+
+	return entropy
+}
+
+func (ns *NodeSet) Update(wo *types.WorkObject, entropy *big.Int, order int) {
+	newNode := Node{
+		hash:     wo.Hash(),
+		number:   wo.NumberArray(),
+		location: common.Location{},
+		entropy:  entropy,
+	}
+	switch order {
+	case common.PRIME_CTX:
+		ns.nodes[common.Location{}.Name()] = newNode
+		ns.nodes[common.Location{byte(wo.Location().Region())}.Name()] = newNode
+		ns.nodes[wo.Location().Name()] = newNode
+	case common.REGION_CTX:
+		ns.nodes[common.Location{byte(wo.Location().Region())}.Name()] = newNode
+		ns.nodes[wo.Location().Name()] = newNode
+	case common.ZONE_CTX:
+		ns.nodes[wo.Location().Name()] = newNode
+	}
+}
+
+func (ns *NodeSet) Copy() NodeSet {
+	newNodeSet := NodeSet{
+		nodes: make(map[string]Node),
+	}
+	for k, v := range ns.nodes {
+		newNodeSet.nodes[k] = v
+	}
+	return newNodeSet
 }
 
 // NewHierarchicalCoordinator creates a new instance of the HierarchicalCoordinator
@@ -467,49 +543,10 @@ func (hc *HierarchicalCoordinator) ChainEventLoop(chainEvent chan core.ChainEven
 		}
 	}()
 	defer hc.wg.Done()
-	stopChan := make(chan struct{})
 	for {
 		select {
 		case head := <-chainEvent:
-			backend := hc.GetBackend(head.Block.Location())
-			entropy := backend.TotalLogS(head.Block)
-			node := Node{
-				hash:     head.Block.Hash(),
-				number:   head.Block.NumberArray(),
-				entropy:  entropy,
-				location: head.Block.Location(),
-			}
-			close(stopChan)
-			stopChan = make(chan struct{})
-			hc.recentBlockMu.Lock()
-			locationCache, exists := hc.recentBlocks[head.Block.Location().Name()]
-			if !exists {
-				// create a new lru and add this block
-				lru, _ := lru.New[common.Hash, Node](c_recentBlockCacheSize)
-				lru.Add(head.Block.Hash(), node)
-				hc.recentBlocks[head.Block.Location().Name()] = lru
-				hc.recentBlockMu.Unlock()
-				log.Global.WithFields(log.Fields{"Hash": head.Block.Hash(), "Number": head.Block.NumberArray()}).Debug("Received a chain event and calling build pending headers")
-				hc.BuildPendingHeaders(stopChan)
-			} else {
-				bestBlockHash := locationCache.Keys()[len(locationCache.Keys())-1]
-				_, exists := locationCache.Peek(bestBlockHash)
-				if exists {
-					oldestBlockHash := locationCache.Keys()[0]
-					oldestBlock, exists := locationCache.Peek(oldestBlockHash)
-					if exists && oldestBlock.entropy.Cmp(node.entropy) < 0 {
-						locationCache.Add(head.Block.Hash(), node)
-						hc.recentBlocks[head.Block.Location().Name()] = locationCache
-						hc.recentBlockMu.Unlock()
-						log.Global.WithFields(log.Fields{"Hash": head.Block.Hash(), "Number": head.Block.NumberArray()}).Debug("Received a chain event and calling build pending headers")
-						hc.BuildPendingHeaders(stopChan)
-					} else {
-						hc.recentBlockMu.Unlock()
-					}
-				} else {
-					hc.recentBlockMu.Unlock()
-				}
-			}
+			hc.BuildPendingHeaders(head.Block, head.Order)
 		case <-sub.Err():
 			return
 		}
@@ -579,50 +616,57 @@ func PrintConstraintMap(constraintMap map[string]common.Hash) {
 	}
 }
 
-func (hc *HierarchicalCoordinator) BuildPendingHeaders(stopChan chan struct{}) {
+func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int) {
 	timer := time.NewTimer(c_buildPendingHeadersTimeout)
 	defer timer.Stop()
-	select {
-	case <-stopChan:
-		return
-	case <-timer.C:
-		log.Global.Warn("Build pending headers exited after timeout")
-		return
-	default:
-		var badHashes map[common.Hash]bool
-		badHashes = make(map[common.Hash]bool)
-		count := 0
-		var leaders []Node
-		hc.recentBlockMu.Lock()
-
-		// Headers have been successfully computed, compute state.
-		hc.recentBlockMu.Unlock()
-
-		for i := 0; i < int(numRegions); i++ {
-			regionLocation := common.Location{byte(i)}.Name()
-			var bestRegion common.Hash
-			t, exists := modifiedConstraintMap[regionLocation]
-			if !exists {
-				bestRegion = defaultGenesisHash
-			} else {
-				bestRegion = t
-			}
-			for j := 0; j < int(numZones); j++ {
-				var bestZone common.Hash
-				zoneLocation := common.Location{byte(i), byte(j)}.Name()
-				t, exists := modifiedConstraintMap[zoneLocation]
-				if !exists {
-					bestZone = defaultGenesisHash
-				} else {
-					bestZone = t
-				}
-				wg.Add(1)
-				go hc.ComputePendingHeader(&wg, bestPrime, bestRegion, bestZone, common.Location{byte(i), byte(j)}, stopChan)
-			}
+	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
+	hc.recentBlockMu.Lock()
+	// Get a block
+	// See if it can extend the best entropy
+	for i := 0; i < len(hc.pendingHeaders.order); i++ {
+		entropy := hc.pendingHeaders.order[i]
+		nodeSet, exists := hc.Get(entropy)
+		if !exists {
+			log.Global.Info("NodeSet not found for entropy", " entropy: ", entropy, " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
+			continue
 		}
+		if nodeSet.Extendable(wo, order) {
+			// update the nodeset
+			newNodeSet := nodeSet.Copy()
+			newNodeSet.Update(wo, entropy, order)
 
-		wg.Wait()
+			// Calculate new set entropy
+			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
+
+			hc.Add(newSetEntropy, newNodeSet)
+			hc.ComputePendingHeaders(newNodeSet)
+			break
+		}
 	}
+	// we continue to update older valid extensions
+	// Once it can extend we create pending headers
+	// we continue to update older valid extensions
+
+	// Headers have been successfully computed, compute state.
+	hc.recentBlockMu.Unlock()
+
+}
+
+func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
+	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
+	stopChan := make(chan struct{})
+	var wg sync.WaitGroup
+	primeLocation := common.Location{}.Name()
+	for i := 0; i < int(numRegions); i++ {
+		regionLocation := common.Location{byte(i)}.Name()
+		for j := 0; j < int(numZones); j++ {
+			zoneLocation := common.Location{byte(i), byte(j)}.Name()
+
+			wg.Add(1)
+			go hc.ComputePendingHeader(&wg, nodeSet.nodes[primeLocation].hash, nodeSet.nodes[regionLocation].hash, nodeSet.nodes[zoneLocation].hash, common.Location{byte(i), byte(j)}, stopChan)
+		}
+	}
+	wg.Wait()
 }
 
 func circularShift(arr []Node) []Node {

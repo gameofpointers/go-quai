@@ -18,6 +18,7 @@ type ChainEvent struct {
 	Block *types.WorkObject
 	Hash  common.Hash
 	Logs  []*types.Log
+	Order int
 }
 
 type ChainSideEvent struct {
