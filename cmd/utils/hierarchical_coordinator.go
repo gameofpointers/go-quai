@@ -15,6 +15,7 @@ import (
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/quai"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/spf13/viper"
 	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/protobuf/proto"
@@ -28,6 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
+	c_pendingHeaderSize          = 5000
 )
 
 var (
@@ -50,8 +52,8 @@ func (ch *Node) Empty() bool {
 }
 
 type PendingHeaders struct {
-	collection map[string]NodeSet // Use string to store the big.Int value as a string key
-	order      []*big.Int         // Maintain the order of entropies
+	collection *lru.Cache[string, NodeSet] // Use string to store the big.Int value as a string key
+	order      []*big.Int                  // Maintain the order of entropies
 }
 
 type HierarchicalCoordinator struct {
@@ -82,8 +84,9 @@ type HierarchicalCoordinator struct {
 }
 
 func NewPendingHeaders() *PendingHeaders {
+	newCollection, _ := lru.New[string, NodeSet](c_pendingHeaderSize)
 	return &PendingHeaders{
-		collection: make(map[string]NodeSet),
+		collection: newCollection,
 		order:      []*big.Int{},
 	}
 }
@@ -125,10 +128,10 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 
 func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 	entropyStr := entropy.String()
-	if _, exists := hc.pendingHeaders.collection[entropyStr]; !exists {
+	if _, exists := hc.pendingHeaders.collection.Peek(entropyStr); !exists {
 		hc.pendingHeaders.order = append(hc.pendingHeaders.order, new(big.Int).Set(entropy)) // Store a copy of the big.Int
 	}
-	hc.pendingHeaders.collection[entropyStr] = node
+	hc.pendingHeaders.collection.Add(entropyStr, node)
 
 	sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
 		return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) < 0 // Sort based on big.Int values
@@ -137,7 +140,7 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 
 func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
 	entropyStr := entropy.String()
-	node, exists := hc.pendingHeaders.collection[entropyStr]
+	node, exists := hc.pendingHeaders.collection.Peek(entropyStr)
 	return node, exists
 }
 
