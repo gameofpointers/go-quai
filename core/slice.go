@@ -343,7 +343,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 	time7 := common.PrettyDuration(time.Since(start))
 
 	if order == sl.NodeCtx() {
-		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order})
+		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogS(sl.hc, block)})
 	}
 
 	time8 := common.PrettyDuration(time.Since(start))

@@ -29,7 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
-	c_pendingHeaderSize          = 5000
+	c_pendingHeaderSize          = 50
 )
 
 var (
@@ -135,13 +135,21 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 	entropyStr := entropy.String()
 	if _, exists := hc.pendingHeaders.collection.Peek(entropyStr); !exists {
+		if len(hc.pendingHeaders.order) > c_pendingHeaderSize {
+			// Remove the last element
+			hc.pendingHeaders.order = hc.pendingHeaders.order[:len(hc.pendingHeaders.order)-1]
+		}
 		hc.pendingHeaders.order = append(hc.pendingHeaders.order, new(big.Int).Set(entropy)) // Store a copy of the big.Int
 	}
 	hc.pendingHeaders.collection.Add(entropyStr, node)
 
-	sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
-		return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) < 0 // Sort based on big.Int values
-	})
+	if hc.pendingHeaders.order[0].Cmp(entropy) < 0 {
+		go hc.ComputePendingHeaders(node)
+		sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
+			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) > 0 // Sort based on big.Int values
+		})
+	}
+
 }
 
 func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
@@ -553,7 +561,8 @@ func (hc *HierarchicalCoordinator) ChainEventLoop(chainEvent chan core.ChainEven
 	for {
 		select {
 		case head := <-chainEvent:
-			hc.BuildPendingHeaders(head.Block, head.Order)
+
+			hc.BuildPendingHeaders(head.Block, head.Order, head.Entropy)
 		case <-sub.Err():
 			return
 		}
@@ -568,16 +577,30 @@ func (hc *HierarchicalCoordinator) GetLock(location common.Location, order int) 
 		hc.pendingHeaderMu[location.Name()] = &sync.RWMutex{}
 	}
 
+	regionNum, zoneNum := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
 	var locks []*sync.RWMutex
-	for i := order; i <= 2; i++ {
-		name := location.NameAtOrder(i)
-		locks = append(locks, hc.pendingHeaderMu[name])
+	switch order {
+	case common.PRIME_CTX:
+		locks = append(locks, hc.pendingHeaderMu[common.Location{}.Name()])
+		for i := 0; i < int(regionNum); i++ {
+			locks = append(locks, hc.pendingHeaderMu[common.Location{byte(i)}.Name()])
+			for j := 0; j < int(zoneNum); j++ {
+				locks = append(locks, hc.pendingHeaderMu[common.Location{byte(i), byte(j)}.Name()])
+			}
+		}
+	case common.REGION_CTX:
+		locks = append(locks, hc.pendingHeaderMu[common.Location{byte(location.Region())}.Name()])
+		for j := 0; j < int(zoneNum); j++ {
+			locks = append(locks, hc.pendingHeaderMu[common.Location{byte(location.Region()), byte(j)}.Name()])
+		}
+	case common.ZONE_CTX:
+		locks = append(locks, hc.pendingHeaderMu[common.Location{byte(location.Region()), byte(location.Zone())}.Name()])
 	}
 
 	return locks
 }
 
-func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int) {
+func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int, newEntropy *big.Int) {
 	timer := time.NewTimer(c_buildPendingHeadersTimeout)
 	defer timer.Stop()
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
@@ -590,34 +613,22 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	// Get a block
 	// See if it can extend the best entropy
 	max_iterations := 20
-	var first bool = true
 	for i := 0; i < len(hc.pendingHeaders.order); i++ {
 		entropy := hc.pendingHeaders.order[i]
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", entropy, " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			continue
+			break
 		}
 		if nodeSet.Extendable(wo, order) {
 			// update the nodeset
 			newNodeSet := nodeSet.Copy()
-			newNodeSet.Update(wo, entropy, order)
+			newNodeSet.Update(wo, newEntropy, order)
 
 			// Calculate new set entropy
 			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
 
 			hc.Add(newSetEntropy, newNodeSet)
-
-			// Always compute the pending header on the best node set
-			if first {
-				bestNodeSet, exists := hc.Get(hc.pendingHeaders.order[0])
-				if exists {
-					hc.ComputePendingHeaders(bestNodeSet)
-				} else {
-					log.Global.Error("best node set doesnt exist")
-				}
-			}
-			first = false
 
 			if i > max_iterations {
 				break
@@ -627,6 +638,14 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 }
 
 func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Global.WithFields(log.Fields{
+				"error":      r,
+				"stacktrace": string(debug.Stack()),
+			}).Fatal("Go-Quai Panicked")
+		}
+	}()
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
 	stopChan := make(chan struct{})
 	var wg sync.WaitGroup
