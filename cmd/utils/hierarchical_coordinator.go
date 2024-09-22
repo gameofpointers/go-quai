@@ -89,11 +89,16 @@ type HierarchicalCoordinator struct {
 }
 
 func NewPendingHeaders() *PendingHeaders {
-	newCollection, _ := lru.New[string, NodeSet](c_pendingHeaderSize)
-	return &PendingHeaders{
-		collection: newCollection,
-		order:      []*big.Int{},
+	pendingHeaders := &PendingHeaders{
+		order: []*big.Int{},
 	}
+	pendingHeaders.collection, _ = lru.NewWithEvict[string, NodeSet](c_pendingHeaderSize, func(key string, value NodeSet) {
+		// On eviction, remove the corresponding value from the order slice
+		removeFromSlice(key, pendingHeaders)
+
+		fmt.Printf("Evicted key: %v, updated slice: %v\n", key)
+	})
+	return pendingHeaders
 }
 
 func (hc *HierarchicalCoordinator) InitPendingHeaders() {
@@ -139,10 +144,6 @@ func (hc *HierarchicalCoordinator) InitPendingHeaders() {
 func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 	entropyStr := entropy.String()
 	if _, exists := hc.pendingHeaders.collection.Peek(entropyStr); !exists {
-		if len(hc.pendingHeaders.order) > c_pendingHeaderSize {
-			// Remove the last element
-			hc.pendingHeaders.order = hc.pendingHeaders.order[:len(hc.pendingHeaders.order)-1]
-		}
 		hc.pendingHeaders.order = append(hc.pendingHeaders.order, new(big.Int).Set(entropy)) // Store a copy of the big.Int
 	}
 	hc.pendingHeaders.collection.Add(entropyStr, node)
@@ -178,6 +179,17 @@ func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
 	entropyStr := entropy.String()
 	node, exists := hc.pendingHeaders.collection.Peek(entropyStr)
 	return node, exists
+}
+
+func removeFromSlice(keyToRemove string, pendingHeaders *PendingHeaders) {
+	// Iterate from the end of the slice to the beginning
+	for i := len(pendingHeaders.order) - 1; i >= 0; i-- {
+		val := pendingHeaders.order[i]
+		if val.String() == keyToRemove {
+			// Remove the element by slicing around it
+			pendingHeaders.order = append(pendingHeaders.order[:i], pendingHeaders.order[i+1:]...)
+		}
+	}
 }
 
 func (ns *NodeSet) Extendable(wo *types.WorkObject, order int) bool {
