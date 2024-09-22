@@ -561,10 +561,31 @@ func (hc *HierarchicalCoordinator) ChainEventLoop(chainEvent chan core.ChainEven
 	for {
 		select {
 		case head := <-chainEvent:
-
-			hc.BuildPendingHeaders(head.Block, head.Order, head.Entropy)
+			go hc.ReapplicationLoop(head)
 		case <-sub.Err():
 			return
+		}
+	}
+}
+
+func (hc *HierarchicalCoordinator) ReapplicationLoop(head core.ChainEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Global.WithFields(log.Fields{
+				"error":      r,
+				"stacktrace": string(debug.Stack()),
+			}).Fatal("Go-Quai Panicked")
+		}
+	}()
+
+	sleepTime := 1
+
+	for {
+		time.Sleep(time.Duration(sleepTime) * time.Second)
+		hc.BuildPendingHeaders(head.Block, head.Order, head.Entropy)
+		sleepTime = sleepTime * 2
+		if sleepTime > 65 {
+			break
 		}
 	}
 }
