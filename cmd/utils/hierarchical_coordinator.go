@@ -143,9 +143,23 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 	}
 	hc.pendingHeaders.collection.Add(entropyStr, node)
 
+	log.Global.WithFields(log.Fields{
+		"entropy": entropy,
+		"order":   len(hc.pendingHeaders.order),
+		"node":    node,
+	}).Info("Extern entropy to pending headers")
+	for _, n := range node.nodes {
+		log.Global.WithFields(log.Fields{
+			"hash":     n.hash,
+			"number":   n.number,
+			"location": n.location,
+			"entropy":  n.entropy,
+		}).Info("Node in the node set")
+	}
 	if hc.pendingHeaders.order[0].Cmp(entropy) < 0 {
-		go hc.ComputePendingHeaders(node)
-		sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
+		log.Global.Info("Picking the Extern entropy to build pending headers")
+		hc.ComputePendingHeaders(node)
+		go sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
 			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) > 0 // Sort based on big.Int values
 		})
 	}
