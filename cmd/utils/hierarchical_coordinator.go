@@ -612,13 +612,12 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	}
 	// Get a block
 	// See if it can extend the best entropy
-	max_iterations := 20
 	for i := 0; i < len(hc.pendingHeaders.order); i++ {
 		entropy := hc.pendingHeaders.order[i]
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", entropy, " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			break
+			continue
 		}
 		if nodeSet.Extendable(wo, order) {
 			// update the nodeset
@@ -629,10 +628,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
 
 			hc.Add(newSetEntropy, newNodeSet)
-
-			if i > max_iterations {
-				break
-			}
 		}
 	}
 }
