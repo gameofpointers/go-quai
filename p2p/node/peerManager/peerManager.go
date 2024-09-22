@@ -374,7 +374,7 @@ func (pm *BasicPeerManager) Provide(ctx context.Context, location common.Locatio
 	log.Global.WithFields(log.Fields{
 		"topic": t.String(),
 		"cid":   pubsubManager.TopicToCid(t),
-	}).Info("Providing topic to DHT")
+	}).Debug("Providing topic to DHT")
 
 	return pm.dht.Provide(ctx, pubsubManager.TopicToCid(t), true)
 }
