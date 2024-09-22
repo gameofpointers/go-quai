@@ -145,21 +145,21 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 
 	log.Global.WithFields(log.Fields{
 		"entropy": entropy,
-		"order":   len(hc.pendingHeaders.order),
-		"node":    node,
 	}).Info("Extern entropy to pending headers")
-	for _, n := range node.nodes {
+
+	for nodeName, n := range node.nodes {
 		log.Global.WithFields(log.Fields{
 			"hash":     n.hash,
 			"number":   n.number,
 			"location": n.location,
 			"entropy":  n.entropy,
+			"node":     nodeName,
 		}).Info("Node in the node set")
 	}
 	if hc.pendingHeaders.order[0].Cmp(entropy) < 0 {
 		log.Global.Info("Picking the Extern entropy to build pending headers")
 		hc.ComputePendingHeaders(node)
-		go sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
+		sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
 			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) > 0 // Sort based on big.Int values
 		})
 	}
@@ -218,12 +218,17 @@ func (ns *NodeSet) Update(wo *types.WorkObject, entropy *big.Int, order int) {
 	switch order {
 	case common.PRIME_CTX:
 		ns.nodes[common.Location{}.Name()] = newNode
+		newNode.location = common.Location{byte(wo.Location().Region())}
 		ns.nodes[common.Location{byte(wo.Location().Region())}.Name()] = newNode
+		newNode.location = wo.Location()
 		ns.nodes[wo.Location().Name()] = newNode
 	case common.REGION_CTX:
+		newNode.location = common.Location{byte(wo.Location().Region())}
 		ns.nodes[common.Location{byte(wo.Location().Region())}.Name()] = newNode
+		newNode.location = wo.Location()
 		ns.nodes[wo.Location().Name()] = newNode
 	case common.ZONE_CTX:
+		newNode.location = wo.Location()
 		ns.nodes[wo.Location().Name()] = newNode
 	}
 }
