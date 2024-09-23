@@ -29,7 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
-	c_pendingHeaderSize          = 500
+	c_pendingHeaderSize          = 1000
 )
 
 var (
@@ -157,7 +157,7 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 		hc.bestEntropy = new(big.Int).Set(entropy)
 		go hc.ComputePendingHeaders(node)
 		sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
-			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) > 0 // Sort based on big.Int values
+			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) < 0 // Sort based on big.Int values
 		})
 	}
 
@@ -182,8 +182,8 @@ func (hc *HierarchicalCoordinator) Get(entropy *big.Int) (NodeSet, bool) {
 }
 
 func removeFromSlice(keyToRemove string, pendingHeaders *PendingHeaders) {
-	// Iterate from the end of the slice to the beginning
-	for i := len(pendingHeaders.order) - 1; i >= 0; i-- {
+	// Iterate from the beginning to the end of the slice
+	for i := 0; i < len(pendingHeaders.order); i++ {
 		val := pendingHeaders.order[i]
 		if val.String() == keyToRemove {
 			// Remove the element by slicing around it
@@ -680,17 +680,13 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	var entropy *big.Int
 	entropy = hc.bestEntropy
 	misses := 0
-	for i := 0; i < startingLen; i++ {
+	for i := startingLen - 1; i >= 0; i-- {
 		log.Global.Info("PendingHeadersOrderLen:", startingLen, " i: ", i)
 
 		log.Global.Info("Entropy: ", common.BigBitsToBits(entropy))
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			misses++
-			if misses > 100 {
-				break
-			}
 		}
 		//printNodeSet(nodeSet)
 		if nodeSet.Extendable(wo, order) {
@@ -707,6 +703,10 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
 		}
 		entropy = hc.pendingHeaders.order[i]
+		misses++
+		if misses > 100 {
+			break
+		}
 	}
 }
 
