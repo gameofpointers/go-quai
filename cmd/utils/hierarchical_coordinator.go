@@ -688,7 +688,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
 			misses++
-			if misses > 10 {
+			if misses > 30 {
 				break
 			}
 		}
