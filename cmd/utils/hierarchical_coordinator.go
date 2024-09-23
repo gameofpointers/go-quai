@@ -29,7 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
-	c_pendingHeaderSize          = 1000
+	c_pendingHeaderSize          = 2000
 )
 
 var (
