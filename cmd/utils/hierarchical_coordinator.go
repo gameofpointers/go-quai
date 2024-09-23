@@ -29,7 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
-	c_pendingHeaderSize          = 200
+	c_pendingHeaderSize          = 500
 )
 
 var (
@@ -688,7 +688,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
 			misses++
-			if misses > 30 {
+			if misses > 100 {
 				break
 			}
 		}
