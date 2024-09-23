@@ -680,7 +680,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	var entropy *big.Int
 	entropy = hc.bestEntropy
 	misses := 0
-	applies := 0
 	var threshold int
 	threshold = 30
 	if order == common.PRIME_CTX {
@@ -696,7 +695,6 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
 			//log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			misses++
 		}
 		//printNodeSet(nodeSet)
 		if nodeSet.Extendable(wo, order) {
@@ -709,12 +707,11 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			//log.Global.Info("New Set Entropy: ", common.BigBitsToBits(newSetEntropy))
 			//printNodeSet(newNodeSet)
 			hc.Add(newSetEntropy, newNodeSet)
-			applies++
 		} else {
 			//log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
-			misses++
 		}
 		entropy = hc.pendingHeaders.order[i]
+		misses++
 		if misses > threshold {
 			break
 		}
