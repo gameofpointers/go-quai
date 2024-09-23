@@ -623,9 +623,6 @@ func (hc *HierarchicalCoordinator) ReapplicationLoop(head core.ChainEvent) {
 
 	for {
 		hc.BuildPendingHeaders(head.Block, head.Order, head.Entropy)
-		if head.Order == common.ZONE_CTX {
-			break
-		}
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 		sleepTime = sleepTime * 2
 		if sleepTime > 65 {
