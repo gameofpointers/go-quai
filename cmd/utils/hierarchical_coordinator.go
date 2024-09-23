@@ -84,6 +84,8 @@ type HierarchicalCoordinator struct {
 	pendingHeaders *PendingHeaders
 
 	bestEntropy *big.Int
+
+	oneMu sync.Mutex
 }
 
 func NewPendingHeaders() *PendingHeaders {
@@ -265,6 +267,7 @@ func NewHierarchicalCoordinator(p2p quai.NetworkingAPI, logLevel string, nodeWg 
 		quitCh:                      quitCh,
 		pendingHeaders:              NewPendingHeaders(),
 		bestEntropy:                 new(big.Int).Set(common.Big0),
+		oneMu:                       sync.Mutex{},
 	}
 
 	if startingExpansionNumber > common.MaxExpansionNumber {
@@ -655,16 +658,19 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	defer timer.Stop()
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
 
-	locks := hc.GetLock(wo.Location(), order)
-	for _, lock := range locks {
-		lock.Lock()
-		defer lock.Unlock()
-	}
+	hc.oneMu.Lock()
+	defer hc.oneMu.Unlock()
+	// locks := hc.GetLock(wo.Location(), order)
+	// for _, lock := range locks {
+	// 	lock.Lock()
+	// 	defer lock.Unlock()
+	// }
 	// Get a block
 	// See if it can extend the best entropy
 	startingLen := len(hc.pendingHeaders.order)
 	var entropy *big.Int
 	entropy = hc.bestEntropy
+	misses := 0
 	for i := 0; i < startingLen; i++ {
 		log.Global.Info("PendingHeadersOrderLen:", startingLen, " i: ", i)
 
@@ -672,7 +678,10 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
 			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			break
+			misses++
+			if misses > 10 {
+				break
+			}
 		}
 		printNodeSet(nodeSet)
 		if nodeSet.Extendable(wo, order) {
