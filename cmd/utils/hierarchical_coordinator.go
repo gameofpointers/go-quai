@@ -29,7 +29,7 @@ const (
 	c_ancestorCheckDist          = 10000
 	c_chainEventChSize           = 1000
 	c_buildPendingHeadersTimeout = 5 * time.Second
-	c_pendingHeaderSize          = 50
+	c_pendingHeaderSize          = 200
 )
 
 var (
@@ -695,7 +695,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 				break
 			}
 		}
-		printNodeSet(nodeSet)
+		//printNodeSet(nodeSet)
 		if nodeSet.Extendable(wo, order) {
 			// update the nodeset
 			newNodeSet := nodeSet.Copy()
@@ -704,7 +704,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			// Calculate new set entropy
 			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
 			log.Global.Info("New Set Entropy: ", common.BigBitsToBits(newSetEntropy))
-			printNodeSet(newNodeSet)
+			//printNodeSet(newNodeSet)
 			hc.Add(newSetEntropy, newNodeSet)
 		} else {
 			log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
