@@ -707,10 +707,7 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			misses++
 		}
 		entropy = hc.pendingHeaders.order[i]
-		misses++
-		if misses > 200 || applies > 100 {
-			break
-		}
+
 	}
 }
 
