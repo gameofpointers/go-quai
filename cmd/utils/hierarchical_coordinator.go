@@ -682,12 +682,12 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	misses := 0
 	var threshold int
 	threshold = 30
-	if order == common.PRIME_CTX {
+	if order == common.PRIME_CTX || order == common.REGION_CTX {
 		threshold = int(numRegions) * int(numZones) * 2 * threshold
-	} else if order == common.REGION_CTX {
-		threshold = int(numZones) * 2 * threshold
 	}
 
+	var start time.Time
+	start = time.Now()
 	log.Global.Info("PendingHeadersOrderLen:", startingLen)
 	for i := startingLen - 1; i >= 0; i-- {
 
@@ -712,10 +712,11 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 		}
 		entropy = hc.pendingHeaders.order[i]
 		misses++
-		// if misses > threshold {
-		// 	break
-		// }
+		if misses > threshold {
+			break
+		}
 	}
+	log.Global.Info("Time taken to compute pending headers: ", time.Since(start))
 }
 
 func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
