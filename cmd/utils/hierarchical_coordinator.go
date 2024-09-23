@@ -82,6 +82,8 @@ type HierarchicalCoordinator struct {
 	treeExpansionTriggerStarted bool // flag to indicate if the tree expansion trigger has started
 
 	pendingHeaders *PendingHeaders
+
+	bestEntropy *big.Int
 }
 
 func NewPendingHeaders() *PendingHeaders {
@@ -147,8 +149,9 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 		"entropy": common.BigBitsToBits(entropy),
 	}).Info("Extern entropy to pending headers")
 
-	if hc.pendingHeaders.order[0].Cmp(entropy) < 0 {
+	if hc.bestEntropy.Cmp(entropy) < 0 {
 		log.Global.Info("Picking the Extern entropy to build pending headers")
+		hc.bestEntropy = new(big.Int).Set(entropy)
 		go hc.ComputePendingHeaders(node)
 		sort.Slice(hc.pendingHeaders.order, func(i, j int) bool {
 			return hc.pendingHeaders.order[i].Cmp(hc.pendingHeaders.order[j]) > 0 // Sort based on big.Int values
@@ -261,6 +264,7 @@ func NewHierarchicalCoordinator(p2p quai.NetworkingAPI, logLevel string, nodeWg 
 		treeExpansionTriggerStarted: false,
 		quitCh:                      quitCh,
 		pendingHeaders:              NewPendingHeaders(),
+		bestEntropy:                 new(big.Int).Set(common.Big0),
 	}
 
 	if startingExpansionNumber > common.MaxExpansionNumber {
@@ -603,11 +607,11 @@ func (hc *HierarchicalCoordinator) ReapplicationLoop(head core.ChainEvent) {
 	sleepTime := 1
 
 	for {
-		time.Sleep(time.Duration(sleepTime) * time.Second)
 		hc.BuildPendingHeaders(head.Block, head.Order, head.Entropy)
 		if head.Order == common.ZONE_CTX {
 			break
 		}
+		time.Sleep(time.Duration(sleepTime) * time.Second)
 		sleepTime = sleepTime * 2
 		if sleepTime > 65 {
 			break
@@ -659,14 +663,16 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	// Get a block
 	// See if it can extend the best entropy
 	startingLen := len(hc.pendingHeaders.order)
+	var entropy *big.Int
+	entropy = hc.bestEntropy
 	for i := 0; i < startingLen; i++ {
 		log.Global.Info("PendingHeadersOrderLen:", startingLen, " i: ", i)
-		entropy := hc.pendingHeaders.order[i]
-		log.Global.Info("Entropy: ", entropy)
+
+		log.Global.Info("Entropy: ", common.BigBitsToBits(entropy))
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
-			log.Global.Info("NodeSet not found for entropy", " entropy: ", entropy, " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
-			continue
+			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
+			break
 		}
 		printNodeSet(nodeSet)
 		if nodeSet.Extendable(wo, order) {
@@ -679,7 +685,10 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 			log.Global.Info("New Set Entropy: ", common.BigBitsToBits(newSetEntropy))
 			printNodeSet(newNodeSet)
 			hc.Add(newSetEntropy, newNodeSet)
+		} else {
+			log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
 		}
+		entropy = hc.pendingHeaders.order[i]
 	}
 }
 
