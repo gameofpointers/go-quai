@@ -145,8 +145,8 @@ func (hc *HierarchicalCoordinator) Add(entropy *big.Int, node NodeSet) {
 	entropyStr := entropy.String()
 	if _, exists := hc.pendingHeaders.collection.Peek(entropyStr); !exists {
 		hc.pendingHeaders.order = append(hc.pendingHeaders.order, new(big.Int).Set(entropy)) // Store a copy of the big.Int
+		hc.pendingHeaders.collection.Add(entropyStr, node)
 	}
-	hc.pendingHeaders.collection.Add(entropyStr, node)
 
 	log.Global.WithFields(log.Fields{
 		"entropy": common.BigBitsToBits(entropy),
