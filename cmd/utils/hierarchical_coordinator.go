@@ -681,13 +681,13 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 	entropy = hc.bestEntropy
 	misses := 0
 	applies := 0
+	log.Global.Info("PendingHeadersOrderLen:", startingLen)
 	for i := startingLen - 1; i >= 0; i-- {
-		log.Global.Info("PendingHeadersOrderLen:", startingLen, " i: ", i)
 
-		log.Global.Info("Entropy: ", common.BigBitsToBits(entropy))
+		//log.Global.Info("Entropy: ", common.BigBitsToBits(entropy))
 		nodeSet, exists := hc.Get(entropy)
 		if !exists {
-			log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
+			//log.Global.Info("NodeSet not found for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash())
 			misses++
 		}
 		//printNodeSet(nodeSet)
@@ -698,12 +698,12 @@ func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, ord
 
 			// Calculate new set entropy
 			newSetEntropy := newNodeSet.Entropy(int(numRegions), int(numZones))
-			log.Global.Info("New Set Entropy: ", common.BigBitsToBits(newSetEntropy))
+			//log.Global.Info("New Set Entropy: ", common.BigBitsToBits(newSetEntropy))
 			//printNodeSet(newNodeSet)
 			hc.Add(newSetEntropy, newNodeSet)
 			applies++
 		} else {
-			log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
+			//log.Global.Info("NodeSet not extendable for entropy", " entropy: ", common.BigBitsToBits(entropy), " order: ", order, " number: ", wo.NumberArray(), " hash: ", wo.Hash(), " location: ", wo.Location().Name(), " parentHash: ", wo.ParentHash(order))
 			misses++
 		}
 		entropy = hc.pendingHeaders.order[i]
