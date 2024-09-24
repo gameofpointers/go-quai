@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"runtime/debug"
@@ -72,6 +73,8 @@ type HierarchicalCoordinator struct {
 
 	pendingHeaderMu map[string]*sync.RWMutex
 	mutexMapMu      sync.RWMutex
+	recentBlocks    map[string]*lru.Cache[common.Hash, Node]
+	recentBlockMu   sync.RWMutex
 
 	expansionCh  chan core.ExpansionEvent
 	expansionSub event.Subscription
@@ -277,6 +280,7 @@ func NewHierarchicalCoordinator(p2p quai.NetworkingAPI, logLevel string, nodeWg 
 		slicesRunning:               GetRunningZones(),
 		treeExpansionTriggerStarted: false,
 		quitCh:                      quitCh,
+		recentBlocks:                make(map[string]*lru.Cache[common.Hash, Node]),
 		pendingHeaders:              NewPendingHeaders(),
 		bestEntropy:                 new(big.Int).Set(common.Big0),
 		oneMu:                       sync.Mutex{},
@@ -662,7 +666,70 @@ func (hc *HierarchicalCoordinator) GetLock(location common.Location, order int) 
 	return locks
 }
 
-func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int, newEntropy *big.Int) {
+func (hc *HierarchicalCoordinator) CalculateLeaders(badHashes map[common.Hash]bool) []Node {
+	nodeList := []Node{}
+	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
+	for i := 0; i < int(numRegions); i++ {
+		for j := 0; j < int(numZones); j++ {
+			cache, exists := hc.recentBlocks[common.Location{byte(i), byte(j)}.Name()]
+			if exists {
+				var bestNode Node
+				keys := cache.Keys()
+				for _, key := range keys {
+					if _, exists := badHashes[key]; exists {
+						continue
+					}
+					node, _ := cache.Peek(key)
+					if bestNode.Empty() {
+						bestNode = node
+					} else {
+						if bestNode.entropy.Cmp(node.entropy) < 0 {
+							bestNode = node
+						}
+					}
+				}
+				nodeList = append(nodeList, bestNode)
+			}
+		}
+	}
+
+	sort.Slice(nodeList, func(i, j int) bool {
+		return nodeList[i].entropy.Cmp(nodeList[j].entropy) > 0
+	})
+
+	return nodeList
+}
+
+func (hc *HierarchicalCoordinator) GetNodeListForLocation(location common.Location, badHashesList map[common.Hash]bool) []Node {
+	recentBlocksCache, exists := hc.recentBlocks[location.Name()]
+	if !exists || recentBlocksCache == nil {
+		return []Node{}
+	}
+	nodeList := []Node{}
+	for _, key := range recentBlocksCache.Keys() {
+		if _, exists := badHashesList[key]; exists {
+			continue
+		}
+		node, _ := recentBlocksCache.Peek(key)
+		if node.Empty() {
+			continue
+		}
+		nodeList = append(nodeList, node)
+	}
+	sort.Slice(nodeList, func(i, j int) bool {
+		return nodeList[i].entropy.Cmp(nodeList[j].entropy) > 0
+	})
+	return nodeList
+}
+
+func PrintConstraintMap(constraintMap map[string]common.Hash) {
+	log.Global.Debug("constraint map")
+	for location, child := range constraintMap {
+		log.Global.WithFields(log.Fields(log.Fields{"Location": location, "Header": child})).Debug("constraint map")
+	}
+}
+
+func (hc *HierarchicalCoordinator) BuildPendingHeaders(wo *types.WorkObject, order int) {
 	timer := time.NewTimer(c_buildPendingHeadersTimeout)
 	defer timer.Stop()
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.currentExpansionNumber)
@@ -744,6 +811,37 @@ func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
 	wg.Wait()
 }
 
+func circularShift(arr []Node) []Node {
+	if len(arr) <= 1 {
+		return arr // No need to shift if array has 0 or 1 elements
+	}
+
+	shifted := arr[1:]
+
+	return append(shifted, arr[0])
+}
+
+// PCRC previous coincidence reference check makes sure there are not any cyclic references in the graph and calculates new termini and the block terminus
+func (hc *HierarchicalCoordinator) pcrc(subParentHash common.Hash, domTerminus common.Hash, location common.Location, ctx int) bool {
+	backend := hc.GetBackend(location)
+	termini := backend.GetTerminiByHash(subParentHash)
+	if termini == nil {
+		return false
+	}
+	if termini.DomTerminus(location) != domTerminus {
+		return false
+	}
+	return true
+}
+
+func CopyConstraintMap(constraintMap map[string]common.Hash) map[string]common.Hash {
+	newMap := make(map[string]common.Hash)
+	for k, v := range constraintMap {
+		newMap[k] = v
+	}
+	return newMap
+}
+
 func (hc *HierarchicalCoordinator) GetBackend(location common.Location) quaiapi.Backend {
 	switch location.Context() {
 	case common.PRIME_CTX:
@@ -754,6 +852,181 @@ func (hc *HierarchicalCoordinator) GetBackend(location common.Location) quaiapi.
 		return *hc.consensus.GetBackend(location)
 	}
 	return nil
+}
+
+func (hc *HierarchicalCoordinator) GetContextLocation(location common.Location, ctx int) common.Location {
+	switch ctx {
+	case common.PRIME_CTX:
+		return common.Location{}
+	case common.REGION_CTX:
+		return common.Location{byte(location.Region())}
+	case common.ZONE_CTX:
+		return location
+	}
+	return nil
+}
+
+func (hc *HierarchicalCoordinator) calculateFrontierPoints(constraintMap map[string]common.Hash, leader *types.WorkObject, first bool) (map[string]common.Hash, error) {
+	leaderLocation := leader.Location()
+	leaderBackend := *hc.consensus.GetBackend(leaderLocation)
+
+	if leaderBackend.IsGenesisHash(leader.Hash()) {
+		return constraintMap, nil
+	}
+
+	// copy the starting constraint map
+	startingConstraintMap := CopyConstraintMap(constraintMap)
+
+	// trace back from the leader and stop after finding a prime block from each region or reach genesis
+	_, leaderOrder, err := leaderBackend.CalcOrder(leader)
+	if err != nil {
+		return startingConstraintMap, err
+	}
+
+	constraintMap[leader.Location().Name()] = leader.Hash()
+	currentOrder := leaderOrder
+	current := leader
+	iteration := 0
+	parent := current
+	parentOrder := currentOrder
+	finished := false
+
+	for !finished {
+		// If there is a change in order update constraint or break
+		if parentOrder < currentOrder || iteration == 0 {
+			t, exists := constraintMap[string(hc.GetContextLocation(parent.Location(), parentOrder).Name())]
+			switch parentOrder {
+			case common.PRIME_CTX:
+				primeBackend := hc.GetBackend(common.Location{})
+				primeTermini := primeBackend.GetTerminiByHash(parent.Hash())
+				if primeTermini == nil {
+					return startingConstraintMap, errors.New("prime termini shouldnt be nil")
+				}
+				regionBackend := hc.GetBackend(hc.GetContextLocation(parent.Location(), common.REGION_CTX))
+				regionTermini := regionBackend.GetTerminiByHash(parent.Hash())
+				if regionTermini == nil {
+					return startingConstraintMap, errors.New("region termini shouldnt be nil")
+				}
+				if exists {
+					parentHeader := primeBackend.GetHeaderByHash(parent.Hash())
+					if parentHeader == nil {
+						return startingConstraintMap, err
+					}
+					isAncestor := hc.IsAncestor(t, parent.Hash(), parentHeader.Location(), common.PRIME_CTX)
+					isProgeny := hc.IsAncestor(parent.Hash(), t, hc.GetContextLocation(parent.Location(), common.PRIME_CTX), common.PRIME_CTX)
+					if isAncestor || isProgeny {
+						if isAncestor {
+							if !isProgeny {
+								constraintMap[string(hc.GetContextLocation(parent.Location(), common.PRIME_CTX).Name())] = parent.Hash()
+							}
+
+						}
+						regionConstraint, exists := constraintMap[hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name()]
+						if exists {
+							isRegionProgeny := hc.IsAncestor(parent.Hash(), regionConstraint, hc.GetContextLocation(parent.Location(), common.REGION_CTX), common.REGION_CTX)
+							if !isRegionProgeny {
+								constraintMap[string(hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name())] = parent.Hash()
+							}
+						} else {
+							constraintMap[string(hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name())] = parent.Hash()
+						}
+						if !first {
+							finished = true
+						}
+					} else {
+						return startingConstraintMap, errors.New("zone not in region constraint")
+					}
+				} else {
+					if parent.NumberU64(parentOrder) == 0 {
+						constraintMap[common.Location{}.Name()] = current.Hash()
+						constraintMap[string(hc.GetContextLocation(current.Location(), common.REGION_CTX).Name())] = current.Hash()
+						finished = true
+					} else {
+						if parentOrder == common.PRIME_CTX && currentOrder == common.REGION_CTX {
+							constraintMap[string(hc.GetContextLocation(parent.Location(), common.PRIME_CTX).Name())] = parent.Hash()
+						} else if parentOrder == common.PRIME_CTX {
+							constraintMap[string(hc.GetContextLocation(parent.Location(), common.PRIME_CTX).Name())] = parent.Hash()
+							constraintMap[string(hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name())] = parent.Hash()
+						}
+					}
+				}
+
+			case common.REGION_CTX:
+				regionBackend := hc.GetBackend(hc.GetContextLocation(parent.Location(), common.REGION_CTX))
+				regionTermini := regionBackend.GetTerminiByHash(parent.Hash())
+				if regionTermini == nil {
+					return startingConstraintMap, errors.New("termini shouldnt be nil in region")
+				}
+				if exists {
+					parentHeader := regionBackend.GetHeaderByHash(parent.Hash())
+					if parentHeader == nil {
+						return startingConstraintMap, errors.New("prime parent header shouldnt be nil")
+					}
+					isAncestor := hc.IsAncestor(t, parent.Hash(), parentHeader.Location(), common.REGION_CTX)
+					isProgeny := hc.IsAncestor(parent.Hash(), t, hc.GetContextLocation(parent.Location(), common.REGION_CTX), common.REGION_CTX)
+					if isAncestor || isProgeny {
+						if isAncestor && !isProgeny {
+							constraintMap[string(hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name())] = parent.Hash()
+						}
+					} else {
+						return startingConstraintMap, errors.New("zone not in region constraint")
+					}
+
+				} else {
+					constraintMap[string(hc.GetContextLocation(parent.Location(), common.REGION_CTX).Name())] = parent.Hash()
+				}
+
+			case common.ZONE_CTX:
+				constraintMap[parent.Location().Name()] = parent.Hash()
+			}
+		}
+
+		current = parent
+		currentOrder = min(parentOrder, currentOrder)
+		var backend quaiapi.Backend
+		switch currentOrder {
+		case common.PRIME_CTX:
+			backend = hc.GetBackend(common.Location{})
+		case common.REGION_CTX:
+			backend = hc.GetBackend(common.Location{byte(current.Location().Region())})
+		case common.ZONE_CTX:
+			backend = hc.GetBackend(current.Location())
+		}
+
+		if backend.IsGenesisHash(parent.ParentHash(currentOrder)) || backend.IsGenesisHash(parent.Hash()) {
+			break
+		}
+		parent = backend.GetHeaderByHash(parent.ParentHash(currentOrder))
+
+		_, parentOrder, err = backend.CalcOrder(parent)
+		if err != nil {
+			return startingConstraintMap, err
+		}
+		iteration++
+
+		if currentOrder == common.PRIME_CTX {
+			break
+		}
+
+	}
+	return constraintMap, nil
+}
+
+func (hc *HierarchicalCoordinator) IsAncestor(ancestor common.Hash, header common.Hash, headerLoc common.Location, order int) bool {
+	if ancestor == header {
+		return true
+	}
+	backend := hc.GetBackend(hc.GetContextLocation(headerLoc, order))
+	for i := 0; i < c_ancestorCheckDist; i++ {
+		parent := backend.GetHeaderByHash(header)
+		if parent != nil {
+			if parent.ParentHash(order) == ancestor {
+				return true
+			}
+			header = parent.ParentHash(order)
+		}
+	}
+	return false
 }
 
 func (hc *HierarchicalCoordinator) ComputePendingHeader(wg *sync.WaitGroup, primeNode, regionNode, zoneNode common.Hash, location common.Location, stopChan chan struct{}) {
