@@ -15,7 +15,6 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
-	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -197,7 +196,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 
 	time0_1 := common.PrettyDuration(time.Since(start))
 	// Check if the header hash exists in the BadHashes list
-	if sl.IsBlockHashABadHash(header.Hash()) {
+	if sl.IsBlockHashABadHash(header.Hash()) || sl.IsBlockHashABadHash(header.ParentHash(sl.NodeCtx())) {
 		return nil, ErrBadBlockHash
 	}
 	time0_2 := common.PrettyDuration(time.Since(start))
@@ -1284,11 +1283,16 @@ func (sl *Slice) CheckForBadHashAndRecover() {
 		badBlock = sl.hc.GetBlockByHash(badHash)
 		// Node has a bad block in the database
 		if badBlock != nil {
+			sl.logger.Warn("BAD BLOCK: bad block found", badHash, "resetting the chain back to parent of the hash")
 			// Start from the current tip and delete every block from the database until this bad hash block
 			sl.cleanCacheAndDatabaseTillBlock(badBlock.ParentHash(nodeCtx))
-			if nodeCtx == common.PRIME_CTX {
-				sl.SetHeadBackToRecoveryState(nil, badBlock.ParentHash(nodeCtx))
-			}
+
+			go func() {
+				time.Sleep(5 * time.Second)
+				if nodeCtx == common.PRIME_CTX {
+					sl.SetHeadBackToRecoveryState(nil, badBlock.ParentHash(nodeCtx))
+				}
+			}()
 		}
 	}
 }
@@ -1297,11 +1301,15 @@ func (sl *Slice) CheckForBadHashAndRecover() {
 func (sl *Slice) SetHeadBackToRecoveryState(pendingHeader *types.WorkObject, hash common.Hash) types.PendingHeader {
 	nodeCtx := sl.NodeLocation().Context()
 	if nodeCtx == common.PRIME_CTX {
-		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(hash)
-		sl.GenerateRecoveryPendingHeader(localPendingHeaderWithTermini.WorkObject(), localPendingHeaderWithTermini.Termini())
+		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(sl.hc.CurrentBlock().Hash())
+		err := sl.GenerateRecoveryPendingHeader(localPendingHeaderWithTermini.WorkObject(), localPendingHeaderWithTermini.Termini())
+		if err != nil {
+			sl.logger.Error("Error generating recovery pending header", err)
+			return types.PendingHeader{}
+		}
 		sl.SetBestPh(localPendingHeaderWithTermini.WorkObject())
 	} else {
-		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(hash)
+		localPendingHeaderWithTermini := sl.ComputeRecoveryPendingHeader(sl.hc.CurrentBlock().Hash())
 		localPendingHeaderWithTermini.SetHeader(sl.combinePendingHeader(localPendingHeaderWithTermini.WorkObject(), pendingHeader, nodeCtx, true))
 		localPendingHeaderWithTermini.WorkObject().WorkObjectHeader().SetLocation(sl.NodeLocation())
 		sl.SetBestPh(localPendingHeaderWithTermini.WorkObject())
@@ -1359,11 +1367,12 @@ func (sl *Slice) cleanCacheAndDatabaseTillBlock(hash common.Hash) {
 	currentHeader = sl.hc.GetHeaderByHash(hash)
 	sl.hc.currentHeader.Store(currentHeader)
 	rawdb.WriteHeadBlockHash(sl.sliceDb, currentHeader.Hash())
+	log.Global.Error("Updating the current header", currentHeader.Hash())
 
 	// Recover the snaps
-	if nodeCtx == common.ZONE_CTX && sl.ProcessingState() {
-		sl.hc.bc.processor.snaps, _ = snapshot.New(sl.sliceDb, sl.hc.bc.processor.stateCache.TrieDB(), sl.hc.bc.processor.cacheConfig.SnapshotLimit, currentHeader.EVMRoot(), true, true, sl.logger)
-	}
+	// if nodeCtx == common.ZONE_CTX && sl.ProcessingState() {
+	// 	sl.hc.bc.processor.snaps, _ = snapshot.New(sl.sliceDb, sl.hc.bc.processor.stateCache.TrieDB(), sl.hc.bc.processor.cacheConfig.SnapshotLimit, currentHeader.EVMRoot(), true, true, sl.logger)
+	// }
 }
 
 func (sl *Slice) GenerateRecoveryPendingHeader(pendingHeader *types.WorkObject, checkPointHashes types.Termini) error {
@@ -1372,14 +1381,20 @@ func (sl *Slice) GenerateRecoveryPendingHeader(pendingHeader *types.WorkObject, 
 	if nodeCtx == common.PRIME_CTX {
 		for i := 0; i < int(regions); i++ {
 			if sl.subInterface[i] != nil {
-				sl.subInterface[i].GenerateRecoveryPendingHeader(pendingHeader, checkPointHashes)
+				err := sl.subInterface[i].GenerateRecoveryPendingHeader(pendingHeader, checkPointHashes)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	} else if nodeCtx == common.REGION_CTX {
 		newPendingHeader := sl.SetHeadBackToRecoveryState(pendingHeader, checkPointHashes.SubTerminiAtIndex(sl.NodeLocation().Region()))
 		for i := 0; i < int(zones); i++ {
 			if sl.subInterface[i] != nil {
-				sl.subInterface[i].GenerateRecoveryPendingHeader(newPendingHeader.WorkObject(), newPendingHeader.Termini())
+				err := sl.subInterface[i].GenerateRecoveryPendingHeader(newPendingHeader.WorkObject(), newPendingHeader.Termini())
+				if err != nil {
+					return err
+				}
 			}
 		}
 	} else {
@@ -1395,7 +1410,7 @@ func (sl *Slice) ComputeRecoveryPendingHeader(hash common.Hash) types.PendingHea
 	block := sl.hc.GetBlockByHash(hash)
 	pendingHeader, err := sl.miner.worker.GeneratePendingHeader(block, false, nil, false)
 	if err != nil {
-		sl.logger.Error("Error generating pending header during the checkpoint recovery process")
+		sl.logger.Error("Error generating pending header during the checkpoint recovery process", err)
 		return types.PendingHeader{}
 	}
 	termini := sl.hc.GetTerminiByHash(hash)

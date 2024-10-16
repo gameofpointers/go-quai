@@ -24,4 +24,18 @@ type HeirarchyBadHashes struct {
 	ZoneContext   [][]common.Hash
 }
 
-var BadHashes = []HeirarchyBadHashes{}
+var badHash common.Hash = common.HexToHash("0x000006ec7435264bf14bae2ffbcc5998b58a14a10d30009f1eabca026a2cae9b")
+
+var BadHashes = []HeirarchyBadHashes{
+	{
+		PrimeContext: badHash,
+		RegionContext: []common.Hash{
+			badHash,
+		},
+		ZoneContext: [][]common.Hash{
+			{
+				badHash,
+			},
+		},
+	},
+}
