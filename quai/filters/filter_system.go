@@ -53,6 +53,8 @@ const (
 	BlocksSubscription
 	// ChainHeadSubscription queries for the chain head block
 	ChainHeadSubscription
+	// UnlocksSubscription queries balances that are recently unlocked
+	UnlocksSubscription
 	// LastSubscription keeps track of the last index
 	LastIndexSubscription
 )
@@ -66,7 +68,8 @@ const (
 	// logsChanSize is the size of channel listening to LogsEvent.
 	logsChanSize = 10
 	// chainEvChanSize is the size of channel listening to ChainEvent.
-	chainEvChanSize = 10
+	chainEvChanSize   = 10
+	unlocksEvChanSize = 10
 )
 
 type subscription struct {
@@ -77,6 +80,7 @@ type subscription struct {
 	logs      chan []*types.Log
 	hashes    chan []common.Hash
 	headers   chan *types.WorkObject
+	unlocks   chan core.UnlocksEvent
 	header    chan *types.WorkObject
 	installed chan struct{} // closed when the filter is installed
 	err       chan error    // closed when the filter is uninstalled
@@ -95,6 +99,7 @@ type EventSystem struct {
 	pendingLogsSub event.Subscription // Subscription for pending log event
 	chainSub       event.Subscription // Subscription for new chain event
 	chainHeadSub   event.Subscription // Subscription for new head event
+	unlocksSub     event.Subscription // Subscription for new unlocks event
 
 	// Channels
 	install       chan *subscription         // install filter for event notification
@@ -105,6 +110,7 @@ type EventSystem struct {
 	rmLogsCh      chan core.RemovedLogsEvent // Channel to receive removed log event
 	chainCh       chan core.ChainEvent       // Channel to receive new chain event
 	chainHeadCh   chan core.ChainHeadEvent   // Channel to receive new chain event
+	unlocksCh     chan core.UnlocksEvent     // Channel to receive newly unlocked coinbases
 }
 
 // NewEventSystem creates a new manager that listens for event on the given mux,
@@ -124,6 +130,7 @@ func NewEventSystem(backend Backend) *EventSystem {
 		pendingLogsCh: make(chan []*types.Log, logsChanSize),
 		chainCh:       make(chan core.ChainEvent, chainEvChanSize),
 		chainHeadCh:   make(chan core.ChainHeadEvent, chainEvChanSize),
+		unlocksCh:     make(chan core.UnlocksEvent, unlocksEvChanSize),
 	}
 
 	nodeCtx := backend.NodeCtx()
@@ -132,6 +139,7 @@ func NewEventSystem(backend Backend) *EventSystem {
 		m.logsSub = m.backend.SubscribeLogsEvent(m.logsCh)
 		m.rmLogsSub = m.backend.SubscribeRemovedLogsEvent(m.rmLogsCh)
 		m.pendingLogsSub = m.backend.SubscribePendingLogsEvent(m.pendingLogsCh)
+		m.unlocksSub = m.backend.SubscribeUnlocksEvent(m.unlocksCh)
 	}
 	m.chainSub = m.backend.SubscribeChainEvent(m.chainCh)
 
@@ -139,7 +147,7 @@ func NewEventSystem(backend Backend) *EventSystem {
 
 	// Make sure none of the subscriptions are empty
 	if nodeCtx == common.ZONE_CTX && backend.ProcessingState() {
-		if m.logsSub == nil || m.rmLogsSub == nil || m.chainSub == nil || m.pendingLogsSub == nil || m.chainHeadCh == nil {
+		if m.logsSub == nil || m.rmLogsSub == nil || m.chainSub == nil || m.pendingLogsSub == nil || m.unlocksSub == nil || m.chainHeadCh == nil {
 			backend.Logger().Fatal("Subscribe for event system failed")
 		}
 	} else {
@@ -180,6 +188,7 @@ func (sub *Subscription) Unsubscribe() {
 			case <-sub.f.logs:
 			case <-sub.f.hashes:
 			case <-sub.f.headers:
+			case <-sub.f.unlocks:
 			}
 		}
 
@@ -310,8 +319,23 @@ func (es *EventSystem) SubscribeChainHeadEvent(headers chan *types.WorkObject) *
 		typ:       ChainHeadSubscription,
 		created:   time.Now(),
 		logs:      make(chan []*types.Log),
-		hashes:    make(chan []common.Hash),
 		headers:   headers,
+		hashes:    make(chan []common.Hash),
+		installed: make(chan struct{}),
+		err:       make(chan error),
+	}
+	return es.subscribe(sub)
+}
+
+// SubscribeUnlocks creates a subscription that writes the recently unlocked balances
+func (es *EventSystem) SubscribeUnlocks(unlocks chan core.UnlocksEvent) *Subscription {
+	sub := &subscription{
+		id:        rpc.NewID(),
+		typ:       UnlocksSubscription,
+		created:   time.Now(),
+		logs:      make(chan []*types.Log),
+		hashes:    make(chan []common.Hash),
+		unlocks:   unlocks,
 		installed: make(chan struct{}),
 		err:       make(chan error),
 	}
@@ -412,6 +436,12 @@ func (es *EventSystem) handleChainHeadEvent(filters filterIndex, ev core.ChainHe
 	}
 }
 
+func (es *EventSystem) handleUnlocksEvent(filters filterIndex, ev core.UnlocksEvent) {
+	for _, f := range filters[UnlocksSubscription] {
+		f.unlocks <- ev
+	}
+}
+
 // eventLoop (un)installs filters and processes mux events.
 func (es *EventSystem) eventLoop() {
 	defer func() {
@@ -429,6 +459,7 @@ func (es *EventSystem) eventLoop() {
 			es.logsSub.Unsubscribe()
 			es.rmLogsSub.Unsubscribe()
 			es.pendingLogsSub.Unsubscribe()
+			es.unlocksSub.Unsubscribe()
 		}
 		es.chainSub.Unsubscribe()
 		es.chainHeadSub.Unsubscribe()
@@ -489,6 +520,8 @@ func (es *EventSystem) handleZoneEventLoop(index filterIndex) {
 			es.handleRemovedLogs(index, ev)
 		case ev := <-es.pendingLogsCh:
 			es.handlePendingLogs(index, ev)
+		case ev := <-es.unlocksCh:
+			es.handleUnlocksEvent(index, ev)
 		case f := <-es.install:
 			if f.typ == MinedAndPendingLogsSubscription {
 				// the type are logs and pending logs subscriptions
