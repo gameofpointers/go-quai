@@ -51,6 +51,8 @@ const (
 	PendingTransactionsSubscription
 	// BlocksSubscription queries hashes for blocks that are imported
 	BlocksSubscription
+	// ChainHeadSubscription queries for the chain head block
+	ChainHeadSubscription
 	// LastSubscription keeps track of the last index
 	LastIndexSubscription
 )
@@ -92,6 +94,7 @@ type EventSystem struct {
 	rmLogsSub      event.Subscription // Subscription for removed log event
 	pendingLogsSub event.Subscription // Subscription for pending log event
 	chainSub       event.Subscription // Subscription for new chain event
+	chainHeadSub   event.Subscription // Subscription for new head event
 
 	// Channels
 	install       chan *subscription         // install filter for event notification
@@ -101,6 +104,7 @@ type EventSystem struct {
 	pendingLogsCh chan []*types.Log          // Channel to receive new log event
 	rmLogsCh      chan core.RemovedLogsEvent // Channel to receive removed log event
 	chainCh       chan core.ChainEvent       // Channel to receive new chain event
+	chainHeadCh   chan core.ChainHeadEvent   // Channel to receive new chain event
 }
 
 // NewEventSystem creates a new manager that listens for event on the given mux,
@@ -119,6 +123,7 @@ func NewEventSystem(backend Backend) *EventSystem {
 		rmLogsCh:      make(chan core.RemovedLogsEvent, rmLogsChanSize),
 		pendingLogsCh: make(chan []*types.Log, logsChanSize),
 		chainCh:       make(chan core.ChainEvent, chainEvChanSize),
+		chainHeadCh:   make(chan core.ChainHeadEvent, chainEvChanSize),
 	}
 
 	nodeCtx := backend.NodeCtx()
@@ -130,9 +135,11 @@ func NewEventSystem(backend Backend) *EventSystem {
 	}
 	m.chainSub = m.backend.SubscribeChainEvent(m.chainCh)
 
+	m.chainHeadSub = m.backend.SubscribeChainHeadEvent(m.chainHeadCh)
+
 	// Make sure none of the subscriptions are empty
 	if nodeCtx == common.ZONE_CTX && backend.ProcessingState() {
-		if m.logsSub == nil || m.rmLogsSub == nil || m.chainSub == nil || m.pendingLogsSub == nil {
+		if m.logsSub == nil || m.rmLogsSub == nil || m.chainSub == nil || m.pendingLogsSub == nil || m.chainHeadCh == nil {
 			backend.Logger().Fatal("Subscribe for event system failed")
 		}
 	} else {
@@ -296,6 +303,21 @@ func (es *EventSystem) SubscribeNewHeads(headers chan *types.WorkObject) *Subscr
 	return es.subscribe(sub)
 }
 
+// SubscribeChainHeadEvent subscribes to the chain head feed
+func (es *EventSystem) SubscribeChainHeadEvent(headers chan *types.WorkObject) *Subscription {
+	sub := &subscription{
+		id:        rpc.NewID(),
+		typ:       ChainHeadSubscription,
+		created:   time.Now(),
+		logs:      make(chan []*types.Log),
+		hashes:    make(chan []common.Hash),
+		headers:   headers,
+		installed: make(chan struct{}),
+		err:       make(chan error),
+	}
+	return es.subscribe(sub)
+}
+
 // SubscribePendingTxs creates a subscription that writes transaction hashes for
 // transactions that enter the transaction pool.
 func (es *EventSystem) SubscribePendingTxs(hashes chan []common.Hash) *Subscription {
@@ -384,6 +406,12 @@ func (es *EventSystem) handleChainEvent(filters filterIndex, ev core.ChainEvent)
 	}
 }
 
+func (es *EventSystem) handleChainHeadEvent(filters filterIndex, ev core.ChainHeadEvent) {
+	for _, f := range filters[ChainHeadSubscription] {
+		f.headers <- ev.Block
+	}
+}
+
 // eventLoop (un)installs filters and processes mux events.
 func (es *EventSystem) eventLoop() {
 	defer func() {
@@ -403,6 +431,7 @@ func (es *EventSystem) eventLoop() {
 			es.pendingLogsSub.Unsubscribe()
 		}
 		es.chainSub.Unsubscribe()
+		es.chainHeadSub.Unsubscribe()
 
 	}()
 
@@ -419,6 +448,9 @@ func (es *EventSystem) eventLoop() {
 		select {
 		case ev := <-es.chainCh:
 			es.handleChainEvent(index, ev)
+
+		case ev := <-es.chainHeadCh:
+			es.handleChainHeadEvent(index, ev)
 
 		case f := <-es.install:
 			if f.typ != MinedAndPendingLogsSubscription {
