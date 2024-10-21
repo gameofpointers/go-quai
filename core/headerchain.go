@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"os"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/trie"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1515,4 +1517,97 @@ func (hc *HeaderChain) DeleteUTXOSetAndReplaceFromLatest() (*common.Hash, error)
 	}
 	hc.logger.Infof("Reset UTXO set from block hash %v height %d utxo set size %d", newHeadBlockHash, highestBlockHeight, i)
 	return &newHeadBlockHash, nil
+}
+
+func (hc *HeaderChain) ExportUtxoSet(blockHash common.Hash) error {
+	// Ideally need to use the blockHash to get a specific utxo set
+	// and write it to a database file in go-quai folder
+	dataDir := "utxoset"
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		err := os.MkdirAll(dataDir, 0755)
+		if err != nil {
+			log.Global.Errorf("error creating data directory: %s", err)
+			return err
+		}
+	}
+
+	db, err := leveldb.OpenFile(dataDir, nil)
+	if err != nil {
+		return err
+	}
+
+	// Go through the database
+	it := hc.Database().NewIterator(rawdb.UtxoPrefix, nil)
+
+	var highestBlockHeight uint64
+	highestBlockHeightKey := make([]byte, len(rawdb.DuplicateUtxoSetPrefix)+common.HashLength+8)
+	it = hc.Database().NewIterator(rawdb.DuplicateUtxoSetPrefix, nil)
+	for it.Next() {
+		if len(it.Key()) != len(rawdb.DuplicateUtxoSetPrefix)+common.HashLength+8 {
+			hc.logger.Errorf("Error pruning duplicate utxo set: Invalid key length: %+v", it.Key())
+			continue
+		}
+		numberStart := len(rawdb.DuplicateUtxoSetPrefix) + common.HashLength
+		height := binary.BigEndian.Uint64(it.Key()[numberStart:])
+		if highestBlockHeight == 0 || height > highestBlockHeight {
+			highestBlockHeight = height
+			copy(highestBlockHeightKey, it.Key())
+		}
+	}
+	it.Release()
+
+	// Get the UTXO set of the latest block
+	utxoSet, utxoKeys, err := rawdb.ReadDuplicateUTXOSet(hc.headerDb, highestBlockHeightKey[len(rawdb.DuplicateUtxoSetPrefix):])
+	if err != nil {
+		hc.logger.Errorf("Error reading duplicate utxo set: %v", err)
+		return fmt.Errorf("error reading duplicate utxo set: %v", err)
+	}
+	if len(utxoSet) != len(utxoKeys) {
+		hc.logger.Errorf("Error duplicating Utxo set: UTXO set and keys are not the same length")
+		return fmt.Errorf("error duplicating Utxo set: UTXO set and keys are not the same length")
+	}
+
+	addressOutpoints := make(map[string]map[string]*types.OutpointAndDenomination)
+
+	// Write the UTXO set to the database
+	for i, key := range utxoKeys {
+		txhash, index, err := rawdb.ReverseUtxoKey(key)
+		if err != nil {
+			hc.logger.Errorf("Error duplicating Utxo set: Failed to reverse UTXO key: %v", err)
+			continue
+		}
+
+		utxo := &types.UtxoEntry{Denomination: utxoSet[i].Denomination, Address: utxoSet[i].Address, Lock: utxoSet[i].Lock}
+		utxoProto, err := utxo.ProtoEncode()
+		if err != nil {
+			return err
+		}
+
+		// Now, marshal utxoProto to protobuf bytes
+		data, err := proto.Marshal(utxoProto)
+		if err != nil {
+			hc.logger.WithField("err", err).Warn("Failed to rlp encode utxo")
+			return err
+		}
+
+		// And finally, store the data in the database under the appropriate key
+		db.Put(rawdb.UtxoKey(txhash, index), data, nil)
+
+		outpointAndDenom := &types.OutpointAndDenomination{TxHash: txhash, Index: index, Denomination: utxoSet[i].Denomination}
+		address := common.BytesToAddress(utxoSet[i].Address, hc.NodeLocation()).Hex()
+		if _, ok := addressOutpoints[address]; !ok {
+			addressOutpoints[address] = make(map[string]*types.OutpointAndDenomination)
+		}
+		addressOutpoints[address][outpointAndDenom.Key()] = outpointAndDenom
+		i++
+	}
+
+	db.Close() // close the db once all the writes are done
+
+	return nil
+}
+
+func (hc *HeaderChain) ImportUtxoSet() error {
+
+	return nil
 }
