@@ -282,25 +282,49 @@ func (c *ChainIndexer) indexerLoop(currentHeader *types.WorkObject, qiIndexerCh 
 				// If indexAddressUtxos flag is enabled, update the address utxo map
 				// TODO: Need to be able to turn on/off indexer and fix corrupted state
 				if c.indexAddressUtxos {
-					reorgHeaders := make([]*types.WorkObject, 0)
-					for prev := prevHeader; prev.Hash() != commonHeader.Hash(); {
-
-						reorgHeaders = append(reorgHeaders, prev)
-
-						prevNumber := rawdb.ReadHeaderNumber(c.chainDb, prev.ParentHash(nodeCtx))
-						if prevNumber == nil {
+					// Delete each header and rollback state processor until common header
+					// Accumulate the hash slice stack
+					var hashStack []*types.WorkObject
+					newHeader := types.CopyWorkObject(block)
+					for {
+						if newHeader.Hash() == commonHeader.Hash() {
 							break
 						}
-						prev = rawdb.ReadHeader(c.chainDb, *prevNumber, prev.ParentHash(nodeCtx))
-
+						hashStack = append(hashStack, newHeader)
+						newHeader = c.GetHeaderByHash(newHeader.ParentHash(nodeCtx))
+						if newHeader == nil {
+							c.logger.Error("Could not find new canonical header during reorg")
+						}
+						// genesis check to not delete the genesis block
+						if rawdb.IsGenesisHash(c.chainDb, newHeader.Hash()) {
+							break
+						}
 					}
 
-					c.logger.Warn("ChainIndexer: Reorging the utxo indexer of len", len(reorgHeaders))
+					var prevHashStack []*types.WorkObject
+					prev := types.CopyWorkObject(prevHeader)
+					for {
+						if prev.Hash() == commonHeader.Hash() {
+							break
+						}
+						prevHashStack = append(prevHashStack, prev)
+						prev = c.GetHeaderByHash(prev.ParentHash(nodeCtx))
+						if prev == nil {
+							c.logger.Error("Could not find previously canonical header during reorg")
+							break
+						}
+						// genesis check to not delete the genesis block
+						if rawdb.IsGenesisHash(c.chainDb, prev.Hash()) {
+							break
+						}
+					}
+
+					c.logger.Warn("ChainIndexer: Reorging the utxo indexer of len", len(prevHashStack))
 
 					time3 = time.Since(start)
 
 					// Reorg out all outpoints of the reorg headers
-					err := c.reorgUtxoIndexer(reorgHeaders, addressOutpoints, nodeCtx, config)
+					err := c.reorgUtxoIndexer(prevHashStack, addressOutpoints, nodeCtx)
 					if err != nil {
 						c.logger.Error("Failed to reorg utxo indexer", "err", err)
 						validUtxoIndex = false
@@ -308,19 +332,13 @@ func (c *ChainIndexer) indexerLoop(currentHeader *types.WorkObject, qiIndexerCh 
 
 					time4 = time.Since(start)
 
-					// Roll backwards to common header to grab the new canonical chain
-					rollForwardHeaders := make([]*types.WorkObject, 0)
-					for curr := block; curr.Hash() != commonHeader.Hash(); {
-						rollForwardHeaders = append(rollForwardHeaders, curr)
-						prevNumber := rawdb.ReadHeaderNumber(c.chainDb, block.ParentHash(nodeCtx))
-						if prevNumber == nil {
-							break
-						}
-						curr = rawdb.ReadWorkObject(c.chainDb, *prevNumber, block.ParentHash(nodeCtx), types.BlockObject)
-					}
-
 					// Add new blocks from common ancestor to new head
-					for i := len(rollForwardHeaders) - 1; i >= 0; i-- {
+					for i := len(hashStack) - 1; i >= 0; i-- {
+						block := rawdb.ReadWorkObject(c.chainDb, hashStack[i].NumberU64(nodeCtx), hashStack[i].Hash(), types.BlockObject)
+						if block == nil {
+							c.logger.Error("Failed to read block during reorg")
+							continue
+						}
 						c.addOutpointsToIndexer(addressOutpoints, nodeCtx, config, block)
 					}
 				}
@@ -847,7 +865,7 @@ func (c *ChainIndexer) addOutpointsToIndexer(addressOutpointsWithBlockHeight map
 
 // reorgUtxoIndexer adds back previously removed outpoints and removes newly added outpoints.
 // This is done in reverse order from the old header to the common ancestor.
-func (c *ChainIndexer) reorgUtxoIndexer(headers []*types.WorkObject, addressOutpoints map[[20]byte][]*types.OutpointAndDenomination, nodeCtx int, config params.ChainConfig) error {
+func (c *ChainIndexer) reorgUtxoIndexer(headers []*types.WorkObject, addressOutpoints map[[20]byte][]*types.OutpointAndDenomination, nodeCtx int) error {
 	for _, header := range headers {
 
 		sutxos, err := rawdb.ReadSpentUTXOs(c.chainDb, header.Hash())
@@ -924,4 +942,22 @@ func (c *ChainIndexer) reorgUtxoIndexer(headers []*types.WorkObject, addressOutp
 
 	}
 	return nil
+}
+
+// GetHeaderByHash retrieves a block header from the database by hash, caching it if
+// found.
+func (c *ChainIndexer) GetHeaderByHash(hash common.Hash) *types.WorkObject {
+	termini := rawdb.ReadTermini(c.chainDb, hash)
+	if termini == nil {
+		return nil
+	}
+	number := rawdb.ReadHeaderNumber(c.chainDb, hash)
+	if number == nil {
+		return nil
+	}
+	header := rawdb.ReadHeader(c.chainDb, *number, hash)
+	if header == nil {
+		return nil
+	}
+	return header
 }
