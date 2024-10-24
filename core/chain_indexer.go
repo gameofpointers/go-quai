@@ -741,7 +741,17 @@ func (c *ChainIndexer) addOutpointsToIndexer(addressOutpoints map[string]map[str
 	for _, tx := range block.Body().ExternalTransactions() {
 		if tx.EtxType() == types.CoinbaseType && tx.To().IsInQiLedgerScope() {
 			lockupByte := tx.Data()[0]
-			lockup := new(big.Int).SetUint64(params.LockupByteToBlockDepth[lockupByte])
+			// After the BigSporkFork the minimum conversion period changes to 7200 blocks
+			var lockup *big.Int
+			if lockupByte == 0 {
+				if block.NumberU64(common.ZONE_CTX) < params.BigSporkForkNumber {
+					lockup = new(big.Int).SetUint64(params.OldConversionLockPeriod)
+				} else {
+					lockup = new(big.Int).SetUint64(params.NewConversionLockPeriod)
+				}
+			} else {
+				lockup = new(big.Int).SetUint64(params.LockupByteToBlockDepth[lockupByte])
+			}
 			lockup.Add(lockup, block.Number(nodeCtx))
 
 			coinbaseAddr := tx.To().Hex()
@@ -775,7 +785,13 @@ func (c *ChainIndexer) addOutpointsToIndexer(addressOutpoints map[string]map[str
 				}
 			}
 		} else if tx.EtxType() == types.ConversionType && tx.To().IsInQiLedgerScope() {
-			lock := new(big.Int).Add(block.Number(nodeCtx), new(big.Int).SetUint64(params.ConversionLockPeriod))
+			var lockup *big.Int
+			if block.NumberU64(common.ZONE_CTX) < params.BigSporkForkNumber {
+				lockup = new(big.Int).SetUint64(params.OldConversionLockPeriod)
+			} else {
+				lockup = new(big.Int).SetUint64(params.NewConversionLockPeriod)
+			}
+			lock := new(big.Int).Add(block.Number(nodeCtx), lockup)
 			value := tx.Value()
 			addr := tx.To().Hex()
 			txGas := tx.Gas()

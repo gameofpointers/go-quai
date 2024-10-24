@@ -19,6 +19,10 @@ func CalcStateLimit(parent *types.WorkObject, stateCeil uint64) uint64 {
 	}
 
 	parentStateLimit := parent.StateLimit()
+	// Updating the parent state limit to the 10M at the fork block
+	if parent.NumberU64(common.ZONE_CTX) == params.BigSporkForkNumber {
+		parentStateLimit = params.MinGasLimit * 2
+	}
 
 	delta := parentStateLimit/params.StateLimitBoundDivisor - 1
 	limit := parentStateLimit

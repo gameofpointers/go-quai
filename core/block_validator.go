@@ -403,6 +403,10 @@ func CalcGasLimit(parent *types.WorkObject, gasCeil uint64) uint64 {
 	}
 
 	parentGasLimit := parent.GasLimit()
+	// Updating the parent gas limit to 10 M at the fork block
+	if parent.NumberU64(common.ZONE_CTX) == params.BigSporkForkNumber {
+		parentGasLimit = params.MinGasLimit * 2
+	}
 
 	delta := parentGasLimit/params.GasLimitBoundDivisor - 1
 	limit := parentGasLimit

@@ -149,7 +149,8 @@ const (
 	// infrastructure, if needed, to account for the upcoming network change.
 	TREE_EXPANSION_WAIT_COUNT = 1024
 
-	ConversionLockPeriod          uint64 = 10 // The number of zone blocks that a conversion output is locked for
+	OldConversionLockPeriod       uint64 = 10 // The number of zone blocks that a conversion output is locked for
+	NewConversionLockPeriod       uint64 = 7200
 	MinQiConversionDenomination          = 10
 	ConversionConfirmationContext        = common.PRIME_CTX // A conversion requires a single coincident Dom confirmation
 	SoftMaxUTXOSetSize                   = 10000000         // The soft maximum number of UTXOs that can be stored in the UTXO set
@@ -194,11 +195,15 @@ var (
 	BaseFeeMultiplier             = big.NewInt(50)
 )
 
+const (
+	BigSporkForkNumber = 200000
+)
+
 func init() {
-	LockupByteToBlockDepth[0] = ConversionLockPeriod // minimum lockup period
-	LockupByteToBlockDepth[1] = 30240                // 1.75 days
-	LockupByteToBlockDepth[2] = 60480                // 3.5 days
-	LockupByteToBlockDepth[3] = 120960               // 7 days
+	LockupByteToBlockDepth[0] = OldConversionLockPeriod
+	LockupByteToBlockDepth[1] = 30240  // 1.75 days
+	LockupByteToBlockDepth[2] = 60480  // 3.5 days
+	LockupByteToBlockDepth[3] = 120960 // 7 days
 
 	LockupByteToRewardsRatio[1] = big.NewInt(24) // additional 16% WPY
 	LockupByteToRewardsRatio[2] = big.NewInt(10) // additional 20% WPY
