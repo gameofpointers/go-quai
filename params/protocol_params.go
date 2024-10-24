@@ -197,7 +197,7 @@ var (
 )
 
 const (
-	BigSporkForkNumber = 200000
+	BigSporkForkNumber = 2000
 )
 
 func init() {

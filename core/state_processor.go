@@ -491,7 +491,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 							}
 							utxosCreatedDeleted.UtxosCreatedHashes = append(utxosCreatedDeleted.UtxosCreatedHashes, types.UTXOHash(etx.Hash(), outputIndex, utxo))
 							utxosCreatedDeleted.UtxosCreatedKeys = append(utxosCreatedDeleted.UtxosCreatedKeys, rawdb.UtxoKeyWithDenomination(etx.Hash(), outputIndex, utxo.Denomination))
-							p.logger.Debugf("Creating UTXO for coinbase %032x with denomination %d index %d\n", tx.Hash(), denomination, outputIndex)
+							p.logger.Infof("Creating UTXO for coinbase %032x with denomination %d index %d\n", tx.Hash(), denomination, outputIndex)
 							outputIndex++
 						}
 					}
@@ -911,7 +911,7 @@ func RedeemLockedQuai(hc *HeaderChain, header *types.WorkObject, parent *types.W
 							continue
 						}
 					}
-					hc.logger.Debugf("Redeeming %s locked Quai for %s at block depth %d", balance.String(), internal.Hex(), blockDepth)
+					hc.logger.Infof("Redeeming %s locked Quai for %s at block depth %d", balance.String(), internal.Hex(), blockDepth)
 					statedb.AddBalance(internal, balance)
 					unlocks = append(unlocks, common.Unlock{
 						Addr: internal,
@@ -938,7 +938,7 @@ func RedeemLockedQuai(hc *HeaderChain, header *types.WorkObject, parent *types.W
 						continue
 					}
 				}
-				hc.logger.Debugf("Redeeming %s converted Quai for %s at block depth %d", balance.String(), internal.Hex(), blockDepth)
+				hc.logger.Infof("Redeeming %s converted Quai for %s at block depth %d", balance.String(), internal.Hex(), blockDepth)
 				statedb.AddBalance(internal, balance)
 				unlocks = append(unlocks, common.Unlock{
 					Addr: internal,
