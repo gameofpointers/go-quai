@@ -107,8 +107,11 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 	}
 	etxEligibleSlices := primeTerminusHeader.EtxEligibleSlices()
 	maxBaseFee, err := chain.CalcMaxBaseFee(parent)
-	if err != nil {
-		return vm.BlockContext{}, err
+	if maxBaseFee == nil && !chain.IsGenesisHash(parent.Hash()) {
+		return vm.BlockContext{}, fmt.Errorf("could not calculate max base fee %s", err)
+	}
+	if maxBaseFee == nil {
+		maxBaseFee = big.NewInt(0)
 	}
 
 	return vm.BlockContext{
