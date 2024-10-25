@@ -149,7 +149,7 @@ const (
 	TREE_EXPANSION_WAIT_COUNT = 1024
 
 	OldConversionLockPeriod       uint64 = 10 // The number of zone blocks that a conversion output is locked for
-	NewConversionLockPeriod       uint64 = 7200
+	NewConversionLockPeriod       uint64 = 100
 	MinQiConversionDenomination          = 10
 	ConversionConfirmationContext        = common.PRIME_CTX // A conversion requires a single coincident Dom confirmation
 	SoftMaxUTXOSetSize                   = math.MaxInt      // The soft maximum number of UTXOs that can be stored in the UTXO set
@@ -196,8 +196,8 @@ var (
 )
 
 const (
-	GoldenAgeForkNumberV1    = 180000
-	GoldenAgeForkGraceNumber = 4000
+	GoldenAgeForkNumberV1    = 500
+	GoldenAgeForkGraceNumber = 20
 )
 
 func init() {
