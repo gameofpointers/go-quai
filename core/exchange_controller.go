@@ -22,7 +22,7 @@ func CalculateExchangeRate(hc *HeaderChain, block *types.WorkObject, newTokenCho
 		return nil, nil, nil, errors.New("could not find the betas stored for parent hash")
 	}
 
-	if block.NumberU64(common.ZONE_CTX) < types.C_tokenChoiceSetSize {
+	if block.NumberU64(common.PRIME_CTX) < types.C_tokenChoiceSetSize {
 		return params.ExchangeRate, betas.Beta0(), betas.Beta1(), nil
 	}
 
@@ -52,7 +52,7 @@ func CalculateTokenChoicesSet(hc *HeaderChain, block *types.WorkObject, etxs typ
 	}
 
 	// Look up prior tokenChoiceSet and update
-	parentTokenChoicesSet := rawdb.ReadTokenChoicesSet(hc.headerDb, block.ParentHash(common.ZONE_CTX))
+	parentTokenChoicesSet := rawdb.ReadTokenChoicesSet(hc.headerDb, block.ParentHash(common.PRIME_CTX))
 	if parentTokenChoicesSet == nil {
 		return types.TokenChoiceSet{}, errors.New("cannot find the token choice set for the parent hash")
 	}
@@ -79,8 +79,8 @@ func CalculateTokenChoicesSet(hc *HeaderChain, block *types.WorkObject, etxs typ
 
 	// Until block number 100 is reached, we need to just accumulate to the
 	// set and then after block 100 we trim and add the new element
-	if block.NumberU64(common.ZONE_CTX) <= types.C_tokenChoiceSetSize {
-		if hc.IsGenesisHash(block.ParentHash(common.ZONE_CTX)) { // parent is genesis
+	if block.NumberU64(common.PRIME_CTX) <= types.C_tokenChoiceSetSize {
+		if hc.IsGenesisHash(block.ParentHash(common.PRIME_CTX)) { // parent is genesis
 			newTokenChoiceSet[0] = tokenChoices
 		} else {
 			// go through the parent token choice set and copy it to the new
@@ -90,7 +90,7 @@ func CalculateTokenChoicesSet(hc *HeaderChain, block *types.WorkObject, etxs typ
 				newTokenChoiceSet[i] = prevTokenChoices
 			}
 			// add the elements from the current block at the end
-			newTokenChoiceSet[block.NumberU64(common.ZONE_CTX)-1] = tokenChoices
+			newTokenChoiceSet[block.NumberU64(common.PRIME_CTX)-1] = tokenChoices
 		}
 	} else {
 		// Once block 100 is reached, the first element in the token set has

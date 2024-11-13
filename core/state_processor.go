@@ -729,50 +729,6 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		emittedEtxs = append(emittedEtxs, types.NewTx(&types.ExternalTx{To: &uncleCoinbase, Gas: params.TxGas, Value: reward, EtxType: types.CoinbaseType, OriginatingTxHash: originHash, ETXIndex: uint16(len(emittedEtxs)), Sender: uncleCoinbase, Data: []byte{uncle.Lock()}}))
 	}
 
-	updatedTokenChoiceSet, err := CalculateTokenChoicesSet(p.hc, parent, emittedEtxs)
-	if err != nil {
-		return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
-	}
-	var exchangeRate *big.Int
-	var beta0, beta1 *big.Float
-	if parent.NumberU64(common.ZONE_CTX) > params.ControllerKickInBlock {
-		exchangeRate, beta0, beta1, err = CalculateExchangeRate(p.hc, parent, updatedTokenChoiceSet)
-		if err != nil {
-			return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
-		}
-	} else {
-		exchangeRate = parent.ExchangeRate()
-		betas := rawdb.ReadBetas(p.hc.headerDb, parent.Hash())
-		beta0 = betas.Beta0()
-		beta1 = betas.Beta1()
-	}
-	err = rawdb.WriteTokenChoicesSet(batch, block.Hash(), &updatedTokenChoiceSet)
-	if err != nil {
-		return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
-	}
-	err = rawdb.WriteBetas(batch, block.Hash(), beta0, beta1)
-	if err != nil {
-		return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
-	}
-	if block.ExchangeRate().Cmp(exchangeRate) != 0 {
-		return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("invalid exchange rate used (remote: %d local: %d)", block.ExchangeRate(), exchangeRate)
-	}
-	for _, etx := range emittedEtxs {
-		// If the etx is conversion
-		if types.IsConversionTx(etx) {
-			value := etx.Value()
-			// If to is in Qi, convert the value into Qi
-			if etx.To().IsInQiLedgerScope() {
-				value = misc.QuaiToQi(block, value)
-			}
-			// If to is in Quai, convert the value into Quai
-			if etx.To().IsInQuaiLedgerScope() {
-				value = misc.QiToQuai(block, value)
-			}
-			etx.SetValue(value)
-		}
-	}
-
 	time4 := common.PrettyDuration(time.Since(start))
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	multiSet, utxoSetSize, err := p.engine.Finalize(p.hc, batch, block, statedb, false, parentUtxoSetSize, utxosCreatedDeleted.UtxosCreatedHashes, utxosCreatedDeleted.UtxosDeletedHashes)

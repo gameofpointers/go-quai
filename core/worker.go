@@ -674,42 +674,25 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool, txs t
 
 	}
 
-	if nodeCtx == common.ZONE_CTX {
+	if nodeCtx == common.PRIME_CTX {
 		var exchangeRate *big.Int
 		if w.hc.IsGenesisHash(block.Hash()) {
 			exchangeRate = params.ExchangeRate
 		} else {
-			if block.NumberU64(common.ZONE_CTX) > params.ControllerKickInBlock {
-				// convert map to a slice
-				updatedTokenChoiceSet, err := CalculateTokenChoicesSet(w.hc, block, work.etxs)
-				if err != nil {
-					return nil, err
-				}
-				exchangeRate, _, _, err = CalculateExchangeRate(w.hc, block, updatedTokenChoiceSet)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				exchangeRate = block.ExchangeRate()
+			// Read the inbound etxs written for this block and then update the
+			newInboundEtxs := rawdb.ReadInboundEtxs(w.hc.headerDb, block.Hash())
+			// convert map to a slice
+			updatedTokenChoiceSet, err := CalculateTokenChoicesSet(w.hc, block, newInboundEtxs)
+			if err != nil {
+				return nil, err
+			}
+			exchangeRate, _, _, err = CalculateExchangeRate(w.hc, block, updatedTokenChoiceSet)
+			if err != nil {
+				return nil, err
 			}
 		}
+		// update the exchange rate for the next block
 		work.wo.Header().SetExchangeRate(exchangeRate)
-
-		for _, etx := range work.etxs {
-			// If the etx is conversion
-			if types.IsConversionTx(etx) {
-				value := etx.Value()
-				// If to is in Qi, convert the value into Qi
-				if etx.To().IsInQiLedgerScope() {
-					value = misc.QuaiToQi(work.wo, value)
-				}
-				// If To is in Quai, convert the value into Quai
-				if etx.To().IsInQuaiLedgerScope() {
-					value = misc.QiToQuai(work.wo, value)
-				}
-				etx.SetValue(value)
-			}
-		}
 	}
 
 	// If there are no transcations in the env, reset the BaseFee to zero

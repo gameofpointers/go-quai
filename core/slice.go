@@ -14,6 +14,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
+	"github.com/dominant-strategies/go-quai/consensus/misc"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
@@ -286,6 +287,51 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 				return nil, ErrSubNotSyncedToDom
 			}
 			sl.inboundEtxsCache.Add(block.Hash(), newInboundEtxs)
+		}
+	}
+
+	// Prime collects the pending etxs and applies the new exchange rate
+	// before passing the etxs into the sub
+	if nodeCtx == common.PRIME_CTX {
+		parent := sl.hc.GetBlockByHash(block.ParentHash(common.PRIME_CTX))
+		if parent == nil {
+			return nil, errors.New("parent not found for the block")
+		}
+		updatedTokenChoiceSet, err := CalculateTokenChoicesSet(sl.hc, block, newInboundEtxs)
+		if err != nil {
+			return nil, err
+		}
+		var exchangeRate *big.Int
+		var beta0, beta1 *big.Float
+		exchangeRate, beta0, beta1, err = CalculateExchangeRate(sl.hc, parent, updatedTokenChoiceSet)
+		if err != nil {
+			return nil, err
+		}
+		err = rawdb.WriteTokenChoicesSet(batch, block.Hash(), &updatedTokenChoiceSet)
+		if err != nil {
+			return nil, err
+		}
+		err = rawdb.WriteBetas(batch, block.Hash(), beta0, beta1)
+		if err != nil {
+			return nil, err
+		}
+		if block.ExchangeRate().Cmp(exchangeRate) != 0 {
+			return nil, fmt.Errorf("invalid exchange rate used (remote: %d local: %d)", block.ExchangeRate(), exchangeRate)
+		}
+		for _, etx := range newInboundEtxs {
+			// If the etx is conversion
+			if types.IsConversionTx(etx) {
+				value := etx.Value()
+				// If to is in Qi, convert the value into Qi
+				if etx.To().IsInQiLedgerScope() {
+					value = misc.QuaiToQi(block, value)
+				}
+				// If to is in Quai, convert the value into Quai
+				if etx.To().IsInQuaiLedgerScope() {
+					value = misc.QiToQuai(block, value)
+				}
+				etx.SetValue(value)
+			}
 		}
 	}
 
@@ -916,6 +962,7 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.Header().SetThresholdCount(header.ThresholdCount())
 		combinedPendingHeader.Header().SetEtxEligibleSlices(header.EtxEligibleSlices())
 		combinedPendingHeader.Header().SetInterlinkRootHash(header.InterlinkRootHash())
+		combinedPendingHeader.Header().SetExchangeRate(header.ExchangeRate())
 	}
 
 	if inSlice {
@@ -945,7 +992,6 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.Header().SetPrimeTerminusHash(header.PrimeTerminusHash())
 		combinedPendingHeader.Header().SetSecondaryCoinbase(header.SecondaryCoinbase())
 		combinedPendingHeader.Header().SetExpansionNumber(header.ExpansionNumber())
-		combinedPendingHeader.Header().SetExchangeRate(header.ExchangeRate())
 		combinedPendingHeader.Header().SetQiToQuai(header.QiToQuai())
 		combinedPendingHeader.Header().SetQuaiToQi(header.QuaiToQi())
 
