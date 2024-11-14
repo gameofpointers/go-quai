@@ -33,7 +33,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var exponentialBackoffCeilingSecs int64 = 60 // 1 minute
+var exponentialBackoffCeilingSecs int64 = 60 * 60 // 1 hour
 
 // Client defines typed wrappers for the Quai RPC API.
 type Client struct {
