@@ -1224,7 +1224,7 @@ func (hc *HeaderChain) ComputeExpansionNumber(parent *types.WorkObject) (uint8, 
 	}
 
 	// If the Prime Terminus is genesis the expansion number is the genesis expansion number
-	if hc.IsGenesisHash(primeTerminusHash) && hc.NodeLocation().Equal(common.Location{0, 0}) {
+	if hc.IsGenesisHash(primeTerminusHash) && hc.NodeLocation().Equal(common.Location{0, 0}) || hc.config.StartingExpansionNumber != 0 {
 		return primeTerminus.ExpansionNumber(), nil
 	} else {
 		// check if the prime terminus is the block where the threshold count
@@ -1363,7 +1363,12 @@ func (hc *HeaderChain) GetMaxTxInWorkShare() uint64 {
 	currentGasLimit := hc.CurrentHeader().GasLimit()
 	maxEoaInBlock := currentGasLimit / params.TxGas
 	// (maxEoaInBlock*2)/(2^bits)
-	return (maxEoaInBlock * 2) / uint64(math.Pow(2, float64(params.WorkSharesThresholdDiff)))
+	currentHeader := hc.CurrentHeader()
+	if currentHeader != nil && currentHeader.NumberU64(common.ZONE_CTX) < params.GoldenAgeForkNumberV2 {
+		return (maxEoaInBlock * 2) / uint64(math.Pow(2, float64(params.OldWorkSharesThresholdDiff)))
+	} else {
+		return (maxEoaInBlock * 2) / uint64(math.Pow(2, float64(params.NewWorkSharesThresholdDiff)))
+	}
 }
 
 func (hc *HeaderChain) Database() ethdb.Database {
