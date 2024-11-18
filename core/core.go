@@ -633,7 +633,11 @@ func (c *Core) WriteBlock(block *types.WorkObject) {
 	}
 
 	if c.GetHeaderOrCandidateByHash(block.Hash()) == nil {
-		c.sl.WriteBlock(block)
+		if err := c.sl.validator.SanityCheckWorkObjectBlockViewBody(block); err == nil {
+			c.sl.WriteBlock(block)
+		} else {
+			c.logger.Error("the block did not pass the sanity check before writing to the disk ", block.Hash())
+		}
 	}
 
 }
