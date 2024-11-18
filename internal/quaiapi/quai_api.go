@@ -955,3 +955,9 @@ func (s *PublicBlockChainQuaiAPI) SuggestFinalityDepth(ctx context.Context, qiVa
 	}
 	return hexutil.Uint64(depth.Uint64()), nil
 }
+
+func (s *PublicBlockChainQuaiAPI) DeleteBlockFromDatabase(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNr rpc.BlockNumber) {
+	if hash, ok := blockNrOrHash.Hash(); ok {
+		rawdb.DeleteWorkObject(s.b.ChainDb(), hash, uint64(blockNr), types.BlockObject)
+	}
+}
