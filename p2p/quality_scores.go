@@ -14,17 +14,17 @@ func boundedAdj(current int, adj int) int {
 }
 
 func QualityAdjOnBroadcast(current int) int {
-	return boundedAdj(current, 1)
-}
-func QualityAdjOnResponse(current int) int {
 	return boundedAdj(current, 10)
 }
+func QualityAdjOnResponse(current int) int {
+	return boundedAdj(current, 50)
+}
 func QualityAdjOnNack(current int) int {
-	return boundedAdj(current, -10)
+	return boundedAdj(current, 0)
 }
 func QualityAdjOnTimeout(current int) int {
-	return boundedAdj(current, -20)
+	return boundedAdj(current, 0)
 }
 func QualityAdjOnBadResponse(curent int) int {
-	return boundedAdj(curent, -40)
+	return boundedAdj(curent, 0)
 }
