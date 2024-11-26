@@ -13,6 +13,7 @@ import (
 
 var (
 	c_learningRate = big.NewFloat(0.001)
+	c_lambda       = big.NewFloat(0.5)
 	c_epochLength  = 100
 )
 
@@ -86,6 +87,26 @@ func (lr *LogisticRegression) Train(x []*big.Int, y []*big.Int) {
 		// Compute gradient averages
 		dw.Quo(dw, nSamplesFloat)
 		db.Quo(db, nSamplesFloat)
+
+		// Apply L2 Regularization (Ridge Regression)
+		// L2 gradient for weight is lambda * beta1
+		lambdaL2 := new(big.Float).Set(c_lambda) // Regularization strength
+		l2Penalty := new(big.Float).Mul(lambdaL2, lr.beta1)
+		dw.Add(dw, l2Penalty) // Adjust gradient for weight
+
+		// Apply L1 Regularization (Lasso Regression)
+		// L1 gradient is sign(beta1) * lambda
+		lambdaL1 := new(big.Float).Set(c_lambda)
+		signBeta1 := new(big.Float).Copy(lr.beta1)
+		if lr.beta1.Sign() > 0 {
+			signBeta1.SetFloat64(1)
+		} else if lr.beta1.Sign() < 0 {
+			signBeta1.SetFloat64(-1)
+		} else {
+			signBeta1.SetFloat64(0)
+		}
+		l1Penalty := new(big.Float).Mul(lambdaL1, signBeta1)
+		dw.Add(dw, l1Penalty) // Adjust gradient for weight
 
 		// Update weight: beta1 = beta1 - LearningRate * dw
 		lrUpdateW := new(big.Float).Mul(c_learningRate, dw)
