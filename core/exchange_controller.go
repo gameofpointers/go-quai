@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"math/big"
+	"sort"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/logistic"
@@ -11,6 +12,76 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
 )
+
+func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.WorkObject, newTokenChoiceSet types.TokenChoiceSet) (*big.Int, *big.Float, *big.Float, error) {
+	betas := rawdb.ReadBetas(hc.headerDb, block.Hash())
+	if betas == nil {
+		return nil, nil, nil, errors.New("could not find the betas stored for parent hash")
+	}
+
+	if block.NumberU64(common.ZONE_CTX) < types.C_tokenChoiceSetSize {
+		return params.ExchangeRate, betas.Beta0(), betas.Beta1(), nil
+	}
+
+	var totalQiChoices uint64 = 0
+	var totalQuaiChoices uint64 = 0
+
+	tokenChoicesSet := make([]types.TokenChoices, 0)
+	for _, tokenChoices := range newTokenChoiceSet {
+		totalQuaiChoices += tokenChoices.Quai
+		totalQiChoices += tokenChoices.Qi
+		tokenChoicesSet = append(tokenChoicesSet, tokenChoices)
+	}
+
+	sort.Slice(tokenChoicesSet, func(i, j int) bool {
+		return tokenChoicesSet[i].Diff.Cmp(tokenChoicesSet[j].Diff) < 0
+	})
+
+	bestScore := uint64(0)
+	bestDiff := big.NewInt(0)
+
+	var left_zeros, right_zeros, left_ones, right_ones uint64 = 0, 0, 0, 0
+	// once the tokenchoices set is sorted the difficulty values are looked from
+	// smallest to the largest. The goal of this algorithm is to find the difficulty point
+	// at which the number of choices of Qi and Quai are equal
+	for i, choice := range tokenChoicesSet {
+		left_zeros = left_zeros + choice.Quai
+		right_zeros = totalQuaiChoices - left_zeros
+
+		left_ones = left_ones + choice.Qi
+		right_ones = totalQiChoices - left_ones
+
+		score := left_zeros - right_zeros + right_ones - left_ones
+		if i == 0 {
+			bestDiff = new(big.Int).Set(choice.Diff)
+			bestScore = score
+		} else {
+			if score > bestScore {
+				bestScore = score
+				bestDiff = new(big.Int).Set(choice.Diff)
+			}
+		}
+	}
+
+	// using the old saved beta values and converting that into the diff value
+	// taking the average of the old diff value and the new
+	oldDiff := new(big.Float).Mul(betas.Beta0(), big.NewFloat(-2))
+	newBeta0 := new(big.Float).Add(new(big.Float).Mul(big.NewFloat(99), oldDiff), new(big.Float).Mul(big.NewFloat(1), new(big.Float).SetInt(bestDiff)))
+	newBeta0 = new(big.Float).Quo(newBeta0, big.NewFloat(100))
+	newBeta0 = new(big.Float).Quo(newBeta0, big.NewFloat(-2))
+
+	// convert the beta values into the big numbers so that in the exchange rate
+	// computation
+	bigBeta0 := new(big.Float).Mul(newBeta0, new(big.Float).SetInt(common.Big2e64))
+	bigBeta0Int, _ := bigBeta0.Int(nil)
+	bigBeta1 := new(big.Float).Mul(betas.Beta1(), new(big.Float).SetInt(common.Big2e64))
+	bigBeta1Int, _ := bigBeta1.Int(nil)
+
+	// If parent is genesis, there is nothing to train
+	exchangeRate := misc.CalculateKQuai(block, bigBeta0Int, bigBeta1Int)
+
+	return exchangeRate, newBeta0, betas.Beta1(), nil
+}
 
 // CalculateExchangeRate takes in the parent block and the etxs generated in the
 // current block and calculates the new exchange rate
