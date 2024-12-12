@@ -215,6 +215,9 @@ func CalculateLockupByteRewardsRatio(lockupByte uint8, blockNumber uint64) (*big
 	// The time slot is every 6 months, and then in 4 years, there will not be
 	// any extra bonus for locking up the coinbase
 	rewardsRatio := LockupByteToRewardsRatio[lockupByte].Uint64() + LockupByteToRewardsRatio[lockupByte].Uint64()*blockNumber/(BlocksPerYear*2)
+	if rewardsRatio > 100 {
+		rewardsRatio = 100
+	}
 	return big.NewInt(int64(rewardsRatio)), nil
 }
 
