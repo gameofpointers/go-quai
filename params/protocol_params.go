@@ -17,6 +17,7 @@
 package params
 
 import (
+	"errors"
 	"math"
 	"math/big"
 
@@ -169,13 +170,15 @@ var (
 	LighthouseDurationLimit           = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(1) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	TimeToStartTx              uint64 = 5 * BlocksPerDay
-	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 12 second block time
+	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 5 second block time
+	BlocksPerYear              uint64 = 365 * BlocksPerDay                                          // BlocksPerYear is the number of blocks per year assuming 5 secs blocks
 	DifficultyAdjustmentPeriod        = big.NewInt(720)                                             // This is the number of blocks over which the average has to be taken
 	DifficultyAdjustmentFactor int64  = 40                                                          // This is the factor that divides the log of the change in the difficulty
 	MinQuaiConversionAmount           = new(big.Int).Mul(big.NewInt(10000000000), big.NewInt(GWei)) // 0.000000001 Quai
 	MaxWorkShareCount                 = 25
 	WorkSharesThresholdDiff           = 4 // Number of bits lower than the target that the default consensus engine uses
 	WorkSharesInclusionDepth          = 3 // Number of blocks upto which the work shares can be referenced and this is protocol enforced
+	MaxLockupByte                     = 4 // Max lockup byte allowed in the transactions for coinbase
 	LockupByteToBlockDepth            = make(map[uint8]uint64)
 	LockupByteToRewardsRatio          = make(map[uint8]*big.Int)
 	ExchangeRate                      = big.NewInt(86196385918997143) // This is the initial exchange rate in Qi per Quai in Its/Qit // Garden = big.NewInt(166666666666666667)
@@ -201,6 +204,18 @@ func init() {
 	LockupByteToRewardsRatio[1] = big.NewInt(24) // additional 16% WPY
 	LockupByteToRewardsRatio[2] = big.NewInt(10) // additional 20% WPY
 	LockupByteToRewardsRatio[3] = big.NewInt(4)  // additional 25% WPY
+}
+
+func CalculateLockupByteRewardsRatio(lockupByte uint8, blockNumber uint64) (*big.Int, error) {
+	if lockupByte < 0 || lockupByte > uint8(MaxLockupByte) {
+		return nil, errors.New("invalid lockup byte used")
+	}
+	// The lockup rewards ratio is increased slowly based on a discrete slope decay
+	// based on the block height. This will sunset the block rewards after few years
+	// The time slot is every 6 months, and then in 4 years, there will not be
+	// any extra bonus for locking up the coinbase
+	rewardsRatio := LockupByteToRewardsRatio[lockupByte].Uint64() + LockupByteToRewardsRatio[lockupByte].Uint64()*blockNumber/(BlocksPerYear*2)
+	return big.NewInt(int64(rewardsRatio)), nil
 }
 
 // This is TimeFactor*TimeFactor*common.NumZonesInRegion*common.NumRegionsInPrime
@@ -278,11 +293,12 @@ func CalculateGasWithStateScaling(stateSize, contractSize *big.Int, baseRate uin
 	return new(big.Int).Div(num, den).Uint64()
 }
 
-func CalculateCoinbaseValueWithLockup(value *big.Int, lockupByte uint8) *big.Int {
+func CalculateCoinbaseValueWithLockup(value *big.Int, lockupByte uint8, blockNumber uint64) *big.Int {
 	if lockupByte == 0 {
 		return value
 	}
-	return new(big.Int).Add(value, new(big.Int).Div(value, LockupByteToRewardsRatio[lockupByte]))
+	rewardsRatio, _ := CalculateLockupByteRewardsRatio(lockupByte, blockNumber)
+	return new(big.Int).Add(value, new(big.Int).Div(value, rewardsRatio))
 }
 
 func CalculateQiGasWithUTXOSetSizeScalingFactor(scalingFactor float64, baseRate uint64) uint64 {
