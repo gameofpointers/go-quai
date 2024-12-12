@@ -736,7 +736,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 	var exchangeRate *big.Int
 	var beta0, beta1 *big.Float
 	if parent.NumberU64(common.ZONE_CTX) > params.ControllerKickInBlock {
-		exchangeRate, beta0, beta1, err = CalculateExchangeRate(p.hc, parent, updatedTokenChoiceSet)
+		exchangeRate, beta0, beta1, err = CalculateBetaFromMiningChoiceAndConversions(p.hc, parent, updatedTokenChoiceSet)
 		if err != nil {
 			return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
 		}
