@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/dominant-strategies/go-quai/common"
-	"github.com/dominant-strategies/go-quai/common/logistic"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/types"
@@ -62,13 +61,19 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 			}
 		}
 	}
+	// Note: All the calculations below assume that the beta1 is constant and it
+	// is not changed per block
 
-	// using the old saved beta values and converting that into the diff value
-	// taking the average of the old diff value and the new
-	oldDiff := new(big.Float).Mul(betas.Beta0(), big.NewFloat(-2))
-	newBeta0 := new(big.Float).Add(new(big.Float).Mul(big.NewFloat(99), oldDiff), new(big.Float).Mul(big.NewFloat(1), new(big.Float).SetInt(bestDiff)))
-	newBeta0 = new(big.Float).Quo(newBeta0, big.NewFloat(100))
-	newBeta0 = new(big.Float).Quo(newBeta0, big.NewFloat(-2))
+	// Firstly calculated the new beta from the best diff calculated from the previous step
+	// Since, -B0/B1 = diff/log(diff)
+	newBeta0 := new(big.Float).Mul(betas.Beta1(), new(big.Float).SetInt(bestDiff))
+	newBeta0 = new(big.Float).Quo(newBeta0, new(big.Float).SetInt(common.LogBig(bestDiff)))
+	newBeta0 = new(big.Float).Mul(newBeta0, big.NewFloat(-1))
+
+	// Beta to be used for the calculation of the exchange rate is the moving
+	// average value so that large changes in the beta value can be smoothed out
+	beta0 := new(big.Float).Add(new(big.Float).Mul(big.NewFloat(99), betas.Beta0()), new(big.Float).Mul(big.NewFloat(1), newBeta0))
+	newBeta0 = new(big.Float).Quo(beta0, big.NewFloat(100))
 
 	// convert the beta values into the big numbers so that in the exchange rate
 	// computation
@@ -81,37 +86,6 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 	exchangeRate := misc.CalculateKQuai(block, bigBeta0Int, bigBeta1Int)
 
 	return exchangeRate, newBeta0, betas.Beta1(), nil
-}
-
-// CalculateExchangeRate takes in the parent block and the etxs generated in the
-// current block and calculates the new exchange rate
-func CalculateExchangeRate(hc *HeaderChain, block *types.WorkObject, newTokenChoiceSet types.TokenChoiceSet) (*big.Int, *big.Float, *big.Float, error) {
-
-	// Read the parents beta values
-	betas := rawdb.ReadBetas(hc.headerDb, block.Hash())
-	if betas == nil {
-		return nil, nil, nil, errors.New("could not find the betas stored for parent hash")
-	}
-
-	if block.NumberU64(common.ZONE_CTX) < types.C_tokenChoiceSetSize {
-		return params.ExchangeRate, betas.Beta0(), betas.Beta1(), nil
-	}
-
-	// Do the regression to calculate new betas
-	diff, tokenChoice := SerializeTokenChoiceSet(newTokenChoiceSet)
-	var exchangeRate *big.Int
-
-	if len(tokenChoice) != 0 {
-		r := logistic.NewLogisticRegression(betas.Beta0(), betas.Beta1())
-		// If parent is genesis, there is nothing to train
-		exchangeRate = misc.CalculateKQuai(block, r.BigBeta0(), r.BigBeta1())
-
-		r.Train(diff, tokenChoice)
-
-		return exchangeRate, r.Beta0(), r.Beta1(), nil
-	} else {
-		return block.ExchangeRate(), betas.Beta0(), betas.Beta1(), nil
-	}
 }
 
 // CalculateTokenChoicesSet reads the block token choices set and adds in the
@@ -189,23 +163,4 @@ func NormalizeConversionValueToBlock(block *types.WorkObject, value *big.Int, ch
 
 	numBlocks := int(new(big.Int).Quo(value, reward).Uint64())
 	return uint64(numBlocks)
-}
-
-// serialize tokenChoiceSet
-func SerializeTokenChoiceSet(tokenChoiceSet types.TokenChoiceSet) ([]*big.Int, []*big.Int) {
-	var diff []*big.Int
-	var token []*big.Int
-
-	for _, tokenChoices := range tokenChoiceSet {
-		for i := 0; i < int(tokenChoices.Quai); i++ {
-			diff = append(diff, tokenChoices.Diff)
-			token = append(token, big.NewInt(0))
-		}
-		for i := 0; i < int(tokenChoices.Qi); i++ {
-			diff = append(diff, tokenChoices.Diff)
-			token = append(token, big.NewInt(1))
-		}
-	}
-
-	return diff, token
 }
