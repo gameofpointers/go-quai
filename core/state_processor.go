@@ -777,8 +777,29 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 	} else {
 		// Read the conversion flow amount saved for the parent block hash
 		conversionFlowAmount := rawdb.ReadConversionFlowAmount(p.hc.headerDb, block.ParentHash(common.ZONE_CTX))
-		qiInConversionFlowAmount := misc.HashToQi(block, conversionFlowAmount)
-		quaiInConversionFlowAmount := misc.HashToQuai(block, conversionFlowAmount)
+
+		conversionAmountInHash := big.NewInt(0)
+
+		for _, etx := range emittedEtxs {
+			// If the etx is conversion
+			if types.IsConversionTx(etx) {
+				value := etx.Value()
+				// If to is in Qi, convert the value into Qi
+				if etx.To().IsInQiLedgerScope() {
+					value = misc.QuaiToQi(block, value)
+					conversionAmountInHash = new(big.Int).Add(conversionAmountInHash, misc.QiToHash(block, value))
+				}
+				// If To is in Quai, convert the value into Quai
+				if etx.To().IsInQuaiLedgerScope() {
+					value = misc.QiToQuai(block, value)
+					conversionAmountInHash = new(big.Int).Add(conversionAmountInHash, misc.QuaiToHash(block, value))
+				}
+			}
+		}
+
+		discountedConversionAmount := p.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(conversionAmountInHash), new(big.Float).SetInt(conversionFlowAmount))
+
+		discountedConversionAmountInInt, _ := discountedConversionAmount.Int64()
 
 		newConversionAmount := big.NewInt(0)
 
@@ -790,23 +811,21 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 				if etx.To().IsInQiLedgerScope() {
 					value = misc.QuaiToQi(block, value)
 
-					// add the original conversion amount value in hash to the newconversion amount
-					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QiToHash(block, value))
+					// Apply the slip to each conversion
+					value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
+					value = new(big.Int).Div(value, conversionAmountInHash)
 
-					valueInFloat := p.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(qiInConversionFlowAmount))
-					valueInInt, _ := valueInFloat.Int64()
-					value = new(big.Int).SetInt64(valueInInt)
+					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QiToHash(block, value))
 				}
 				// If To is in Quai, convert the value into Quai
 				if etx.To().IsInQuaiLedgerScope() {
 					value = misc.QiToQuai(block, value)
 
-					// add the original conversion amount value in hash to the newconversion amount
-					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QuaiToHash(block, value))
+					// Apply the slip to each conversion
+					value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
+					value = new(big.Int).Div(value, conversionAmountInHash)
 
-					valueInFloat := p.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(quaiInConversionFlowAmount))
-					valueInInt, _ := valueInFloat.Int64()
-					value = new(big.Int).SetInt64(valueInInt)
+					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QuaiToHash(block, value))
 				}
 				etx.SetValue(value)
 			}

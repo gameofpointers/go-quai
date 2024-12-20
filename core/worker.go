@@ -714,8 +714,8 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool, txs t
 		} else {
 			// Read the conversion flow amount saved for the parent block hash
 			conversionFlowAmount := rawdb.ReadConversionFlowAmount(w.hc.headerDb, block.ParentHash(common.ZONE_CTX))
-			qiInConversionFlowAmount := misc.HashToQi(work.wo, conversionFlowAmount)
-			quaiInConversionFlowAmount := misc.HashToQuai(work.wo, conversionFlowAmount)
+
+			conversionAmountInHash := big.NewInt(0)
 
 			for _, etx := range work.etxs {
 				// If the etx is conversion
@@ -724,16 +724,39 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool, txs t
 					// If to is in Qi, convert the value into Qi
 					if etx.To().IsInQiLedgerScope() {
 						value = misc.QuaiToQi(work.wo, value)
-						valueInFloat := w.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(qiInConversionFlowAmount))
-						valueInInt, _ := valueInFloat.Int64()
-						value = new(big.Int).SetInt64(valueInInt)
+						conversionAmountInHash = new(big.Int).Add(conversionAmountInHash, misc.QiToHash(work.wo, value))
 					}
 					// If To is in Quai, convert the value into Quai
 					if etx.To().IsInQuaiLedgerScope() {
 						value = misc.QiToQuai(work.wo, value)
-						valueInFloat := w.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(quaiInConversionFlowAmount))
-						valueInInt, _ := valueInFloat.Int64()
-						value = new(big.Int).SetInt64(valueInInt)
+						conversionAmountInHash = new(big.Int).Add(conversionAmountInHash, misc.QuaiToHash(work.wo, value))
+					}
+				}
+			}
+
+			discountedConversionAmount := w.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(conversionAmountInHash), new(big.Float).SetInt(conversionFlowAmount))
+
+			discountedConversionAmountInInt, _ := discountedConversionAmount.Int64()
+
+			for _, etx := range work.etxs {
+				// If the etx is conversion
+				if types.IsConversionTx(etx) {
+					value := etx.Value()
+					// If to is in Qi, convert the value into Qi
+					if etx.To().IsInQiLedgerScope() {
+						value = misc.QuaiToQi(work.wo, value)
+
+						// Apply the slip to each conversion
+						value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
+						value = new(big.Int).Div(value, conversionAmountInHash)
+					}
+					// If To is in Quai, convert the value into Quai
+					if etx.To().IsInQuaiLedgerScope() {
+						value = misc.QiToQuai(work.wo, value)
+
+						// Apply the slip to each conversion
+						value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
+						value = new(big.Int).Div(value, conversionAmountInHash)
 					}
 					etx.SetValue(value)
 				}
