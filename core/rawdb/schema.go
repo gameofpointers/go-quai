@@ -102,6 +102,7 @@ var (
 	manifestPrefix          = []byte("ma")    // manifestPrefix + hash -> Manifest at block
 	interlinkPrefix         = []byte("il")    // interlinkPrefix + hash -> Interlink at block
 	bloomPrefix             = []byte("bl")    // bloomPrefix + hash -> bloom at block
+	conversionFlowPrefix    = []byte("cf")    // conversionFlowPrefix + hash -> conversion flow amount at block
 
 	txLookupPrefix        = []byte("l") // txLookupPrefix + hash -> transaction/receipt lookup metadata
 	BloomBitsPrefix       = []byte("B") // bloomBitsPrefix + bit (uint16 big endian) + section (uint64 big endian) + hash -> bloom bits
@@ -386,4 +387,8 @@ func utxoToBlockHeightKey(txHash common.Hash, index uint16) []byte {
 	txHash[common.HashLength-1] = indexBytes[0]
 	txHash[common.HashLength-2] = indexBytes[1]
 	return append(utxoToBlockHeightPrefix, txHash[:]...)
+}
+
+func conversionFlowAmountKey(hash common.Hash) []byte {
+	return append(conversionFlowPrefix, hash.Bytes()...)
 }

@@ -757,20 +757,62 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 	if block.ExchangeRate().Cmp(exchangeRate) != 0 {
 		return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("invalid exchange rate used (remote: %d local: %d)", block.ExchangeRate(), exchangeRate)
 	}
-	for _, etx := range emittedEtxs {
-		// If the etx is conversion
-		if types.IsConversionTx(etx) {
-			value := etx.Value()
-			// If to is in Qi, convert the value into Qi
-			if etx.To().IsInQiLedgerScope() {
-				value = misc.QuaiToQi(block, value)
+
+	if block.NumberU64(common.ZONE_CTX) <= params.GoldenAgeForkNumberV3 {
+		for _, etx := range emittedEtxs {
+			// If the etx is conversion
+			if types.IsConversionTx(etx) {
+				value := etx.Value()
+				// If to is in Qi, convert the value into Qi
+				if etx.To().IsInQiLedgerScope() {
+					value = misc.QuaiToQi(block, value)
+				}
+				// If to is in Quai, convert the value into Quai
+				if etx.To().IsInQuaiLedgerScope() {
+					value = misc.QiToQuai(block, value)
+				}
+				etx.SetValue(value)
 			}
-			// If to is in Quai, convert the value into Quai
-			if etx.To().IsInQuaiLedgerScope() {
-				value = misc.QiToQuai(block, value)
-			}
-			etx.SetValue(value)
 		}
+	} else {
+		// Read the conversion flow amount saved for the parent block hash
+		conversionFlowAmount := rawdb.ReadConversionFlowAmount(p.hc.headerDb, block.ParentHash(common.ZONE_CTX))
+		qiInConversionFlowAmount := misc.HashToQi(block, conversionFlowAmount)
+		quaiInConversionFlowAmount := misc.HashToQuai(block, conversionFlowAmount)
+
+		newConversionAmount := big.NewInt(0)
+
+		for _, etx := range emittedEtxs {
+			// If the etx is conversion
+			if types.IsConversionTx(etx) {
+				value := etx.Value()
+				// If to is in Qi, convert the value into Qi
+				if etx.To().IsInQiLedgerScope() {
+					value = misc.QuaiToQi(block, value)
+
+					// add the original conversion amount value in hash to the newconversion amount
+					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QiToHash(block, value))
+
+					valueInFloat := p.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(qiInConversionFlowAmount))
+					valueInInt, _ := valueInFloat.Int64()
+					value = new(big.Int).SetInt64(valueInInt)
+				}
+				// If To is in Quai, convert the value into Quai
+				if etx.To().IsInQuaiLedgerScope() {
+					value = misc.QiToQuai(block, value)
+
+					// add the original conversion amount value in hash to the newconversion amount
+					newConversionAmount = new(big.Int).Add(newConversionAmount, misc.QuaiToHash(block, value))
+
+					valueInFloat := p.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(quaiInConversionFlowAmount))
+					valueInInt, _ := valueInFloat.Int64()
+					value = new(big.Int).SetInt64(valueInInt)
+				}
+				etx.SetValue(value)
+			}
+		}
+
+		rawdb.WriteConversionFlowAmount(p.hc.headerDb, block.Hash(), p.hc.ComputeConversionFlowAmount(block, newConversionAmount))
 	}
 
 	time4 := common.PrettyDuration(time.Since(start))

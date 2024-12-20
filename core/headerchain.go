@@ -1324,6 +1324,39 @@ func (hc *HeaderChain) CheckIfEtxIsEligible(etxEligibleSlices common.Hash, to co
 	return etxEligibleSlices[byteIndex]&(1<<bitIndex) != 0
 }
 
+// ApplyQuadraticDiscount applies the slippage based on the historical
+// converted amounts and apply the
+func (hc *HeaderChain) ApplyQuadraticDiscount(value, mean *big.Float) *big.Float {
+	tenTimesAverage := new(big.Float).Mul(mean, new(big.Float).SetInt64(10))
+	if value.Cmp(mean) <= 0 {
+		value = new(big.Float).Mul(value, new(big.Float).SetInt64(99))
+		value = new(big.Float).Quo(value, new(big.Float).SetInt64(100))
+		return value
+	} else if value.Cmp(tenTimesAverage) > 0 {
+		return new(big.Float).SetInt64(0)
+	} else {
+		normalizedValue := new(big.Float).Quo(value, tenTimesAverage)
+		normalizedValueSquare := new(big.Float).Mul(normalizedValue, normalizedValue)
+		normalizedValueSquareOverTwo := new(big.Float).Quo(normalizedValueSquare, new(big.Float).SetInt64(2))
+		discountedValue := new(big.Float).Sub(new(big.Float).SetInt64(1), normalizedValueSquareOverTwo)
+		// Make sure that discounted value is greater than zero as a sanity check
+		if discountedValue.Cmp(new(big.Float).SetInt64(0)) <= 0 {
+			return new(big.Float).SetInt64(0)
+		} else {
+			return discountedValue
+		}
+	}
+}
+
+// ComputeConversionFlowAmount computes a moving average conversion flow amount
+func (hc *HeaderChain) ComputeConversionFlowAmount(block *types.WorkObject, currentBlockConversionAmount *big.Int) *big.Int {
+	prevBlockConversionFlowAmount := rawdb.ReadConversionFlowAmount(hc.headerDb, block.ParentHash(common.ZONE_CTX))
+	newConversionFlowAmount := new(big.Int).Mul(prevBlockConversionFlowAmount, big.NewInt(99))
+	newConversionFlowAmount = new(big.Int).Add(newConversionFlowAmount, currentBlockConversionAmount)
+	newConversionFlowAmount = new(big.Int).Div(newConversionFlowAmount, big.NewInt(100))
+	return newConversionFlowAmount
+}
+
 // IsGenesisHash checks if a hash is a genesis hash
 func (hc *HeaderChain) IsGenesisHash(hash common.Hash) bool {
 	return rawdb.IsGenesisHash(hc.headerDb, hash)

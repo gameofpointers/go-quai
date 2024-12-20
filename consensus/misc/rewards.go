@@ -44,6 +44,42 @@ func QuaiToQi(header *types.WorkObject, quaiAmt *big.Int) *big.Int {
 	return new(big.Int).Quo(qiByQuai, CalculateQuaiReward(header))
 }
 
+// QuaiToHash takes the quai amount and converts it into the hash amount
+func QuaiToHash(header *types.WorkObject, quaiAmt *big.Int) *big.Int {
+	numerator := new(big.Int).Exp(big.NewInt(2), quaiAmt, big.NewInt(common.MantBits))
+	denominator := new(big.Int).Exp(big.NewInt(2), header.ExchangeRate(), big.NewInt(common.MantBits))
+	hash := new(big.Int).Div(numerator, denominator)
+	// Making sure that the hash value is not negative
+	if hash.Cmp(common.Big0) <= 0 {
+		return big.NewInt(0)
+	}
+	return hash
+}
+
+// HashToQuai converts the hash value given into the quai amount
+func HashToQuai(header *types.WorkObject, hash *big.Int) *big.Int {
+	numerator := new(big.Int).Mul(header.ExchangeRate(), LogBig(hash))
+	quai := new(big.Int).Quo(numerator, common.Big2e64)
+	if quai.Cmp(common.Big0) == 0 {
+		quai = big.NewInt(1)
+	}
+	return quai
+}
+
+// QuaiToHash takes the quai amount and converts it into the hash amount
+func QiToHash(header *types.WorkObject, qiAmt *big.Int) *big.Int {
+	return new(big.Int).Mul(params.OneOverKqi, qiAmt)
+}
+
+// HashToQuai converts the hash amount into Quai
+func HashToQi(header *types.WorkObject, hash *big.Int) *big.Int {
+	qi := new(big.Int).Quo(hash, params.OneOverKqi)
+	if qi.Cmp(common.Big0) == 0 {
+		qi = big.NewInt(1)
+	}
+	return qi
+}
+
 // CalculateQuaiReward calculates the quai that can be recieved for mining a block and returns value in its
 // k_quai = state["K Quai"]
 // alpha = params["Controller Alpha Parameter"]

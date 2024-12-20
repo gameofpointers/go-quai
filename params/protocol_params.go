@@ -197,6 +197,7 @@ var (
 const (
 	GoldenAgeForkNumberV1       = 180000
 	GoldenAgeForkNumberV2       = 588000
+	GoldenAgeForkNumberV3       = 1100000
 	GoldenAgeForkGraceNumber    = 100
 	GoldenAgeGracePaymentPeriod = 6000
 )

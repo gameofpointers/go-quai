@@ -695,22 +695,53 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool, txs t
 		}
 		work.wo.Header().SetExchangeRate(exchangeRate)
 
-		for _, etx := range work.etxs {
-			// If the etx is conversion
-			if types.IsConversionTx(etx) {
-				value := etx.Value()
-				// If to is in Qi, convert the value into Qi
-				if etx.To().IsInQiLedgerScope() {
-					value = misc.QuaiToQi(work.wo, value)
+		if block.NumberU64(common.ZONE_CTX) <= params.GoldenAgeForkNumberV3 {
+			for _, etx := range work.etxs {
+				// If the etx is conversion
+				if types.IsConversionTx(etx) {
+					value := etx.Value()
+					// If to is in Qi, convert the value into Qi
+					if etx.To().IsInQiLedgerScope() {
+						value = misc.QuaiToQi(work.wo, value)
+					}
+					// If To is in Quai, convert the value into Quai
+					if etx.To().IsInQuaiLedgerScope() {
+						value = misc.QiToQuai(work.wo, value)
+					}
+					etx.SetValue(value)
 				}
-				// If To is in Quai, convert the value into Quai
-				if etx.To().IsInQuaiLedgerScope() {
-					value = misc.QiToQuai(work.wo, value)
+			}
+		} else {
+			// Read the conversion flow amount saved for the parent block hash
+			conversionFlowAmount := rawdb.ReadConversionFlowAmount(w.hc.headerDb, block.ParentHash(common.ZONE_CTX))
+			qiInConversionFlowAmount := misc.HashToQi(work.wo, conversionFlowAmount)
+			quaiInConversionFlowAmount := misc.HashToQuai(work.wo, conversionFlowAmount)
+
+			for _, etx := range work.etxs {
+				// If the etx is conversion
+				if types.IsConversionTx(etx) {
+					value := etx.Value()
+					// If to is in Qi, convert the value into Qi
+					if etx.To().IsInQiLedgerScope() {
+						value = misc.QuaiToQi(work.wo, value)
+						valueInFloat := w.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(qiInConversionFlowAmount))
+						valueInInt, _ := valueInFloat.Int64()
+						value = new(big.Int).SetInt64(valueInInt)
+					}
+					// If To is in Quai, convert the value into Quai
+					if etx.To().IsInQuaiLedgerScope() {
+						value = misc.QiToQuai(work.wo, value)
+						valueInFloat := w.hc.ApplyQuadraticDiscount(new(big.Float).SetInt(value), new(big.Float).SetInt(quaiInConversionFlowAmount))
+						valueInInt, _ := valueInFloat.Int64()
+						value = new(big.Int).SetInt64(valueInInt)
+					}
+					etx.SetValue(value)
 				}
-				etx.SetValue(value)
 			}
 		}
 	}
+
+	// Need a variable to calculate the total hash value that is being converted
 
 	// If there are no transcations in the env, reset the BaseFee to zero
 	if len(work.txs) == 0 {

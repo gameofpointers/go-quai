@@ -24,9 +24,9 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/crypto/multiset"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/crypto/multiset"
 	"github.com/dominant-strategies/go-quai/params"
 	"google.golang.org/protobuf/proto"
 )
@@ -1708,5 +1708,25 @@ func WriteUtxoToBlockHeight(db ethdb.KeyValueWriter, txHash common.Hash, index u
 func DeleteUtxoToBlockHeight(db ethdb.KeyValueWriter, txHash common.Hash, index uint16) {
 	if err := db.Delete(utxoToBlockHeightKey(txHash, index)); err != nil {
 		db.Logger().WithField("err", err).Fatal("Failed to delete utxo to block height")
+	}
+}
+
+func ReadConversionFlowAmount(db ethdb.Reader, hash common.Hash) *big.Int {
+	data, _ := db.Get(conversionFlowAmountKey(hash))
+	if len(data) == 0 {
+		return big.NewInt(0)
+	}
+	return new(big.Int).SetBytes(data)
+}
+
+func WriteConversionFlowAmount(db ethdb.KeyValueWriter, hash common.Hash, amount *big.Int) {
+	if err := db.Put(conversionFlowAmountKey(hash), amount.Bytes()); err != nil {
+		db.Logger().WithField("err", err).Fatal("Failed to get the conversion flow amount for the block hash")
+	}
+}
+
+func DeleteConversionFlowAmount(db ethdb.KeyValueWriter, hash common.Hash) {
+	if err := db.Delete(conversionFlowAmountKey(hash)); err != nil {
+		db.Logger().WithField("err", err).Fatal("Failed to delete the conversion flow amount")
 	}
 }
