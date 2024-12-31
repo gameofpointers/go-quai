@@ -196,9 +196,9 @@ var (
 )
 
 const (
-	GoldenAgeForkNumberV1       = 180000
-	GoldenAgeForkNumberV2       = 588000
-	GoldenAgeForkNumberV3       = 1333000
+	GoldenAgeForkNumberV1       = 200
+	GoldenAgeForkNumberV2       = 400
+	GoldenAgeForkNumberV3       = 600
 	GoldenAgeForkGraceNumber    = 100
 	GoldenAgeGracePaymentPeriod = 6000
 )
