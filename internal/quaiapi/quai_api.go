@@ -138,9 +138,6 @@ func (s *PublicBlockChainQuaiAPI) GetBalance(ctx context.Context, address common
 
 		balance := big.NewInt(0)
 		for _, utxo := range utxos {
-			if utxo.Lock != nil && currHeader.Number(nodeCtx).Cmp(utxo.Lock) < 0 {
-				continue
-			}
 			value := types.Denominations[utxo.Denomination]
 			balance.Add(balance, value)
 		}
