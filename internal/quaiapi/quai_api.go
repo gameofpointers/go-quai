@@ -1101,6 +1101,7 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 
 // ReceiveMinedHeader will run checks on the block and add to canonical chain if valid.
 func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw hexutil.Bytes) error {
+	return nil
 	nodeCtx := s.b.NodeCtx()
 	protoWorkObject := &types.ProtoWorkObject{}
 	err := proto.Unmarshal(raw, protoWorkObject)
@@ -1150,6 +1151,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw he
 }
 
 func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw hexutil.Bytes) error {
+	return nil
 	nodeCtx := s.b.NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
 		return errors.New("work shares cannot be broadcasted in non-zone chain")

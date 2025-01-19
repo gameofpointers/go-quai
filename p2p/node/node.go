@@ -126,9 +126,9 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 		libp2p.Identity(peerKey),
 
 		// pass the ip address and port to listen on
-		libp2p.ListenAddrStrings(
-			fmt.Sprintf("/ip4/%s/tcp/%s", ipAddr, port),
-		),
+		// libp2p.ListenAddrStrings(
+		// 	fmt.Sprintf("/ip4/%s/tcp/%s", ipAddr, port),
+		// ),
 
 		// support all transports
 		libp2p.DefaultTransports,
@@ -205,13 +205,13 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	peerMgr.SetSelfID(nodeID)
 
 	// Set the DHT for the peer manager
-	peerMgr.SetDHT(dht)
+	// peerMgr.SetDHT(dht)
 
 	// Bootstrapping the DHT (this step is essential for peer discovery)
-	if err := dht.Bootstrap(ctx); err != nil {
-		log.Global.Info("Failed to bootstrap DHT:", err)
-		return nil, err
-	}
+	// if err := dht.Bootstrap(ctx); err != nil {
+	// 	log.Global.Info("Failed to bootstrap DHT:", err)
+	// 	return nil, err
+	// }
 
 	// Create a gossipsub instance with helper functions
 	ps, err := pubsubManager.NewGossipSubManager(ctx, host)

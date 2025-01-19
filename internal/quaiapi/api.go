@@ -1529,6 +1529,7 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.
 func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input hexutil.Bytes) (common.Hash, error) {
+	return common.Hash{}, nil
 	tx := new(types.Transaction)
 	protoTransaction := new(types.ProtoTransaction)
 	err := proto.Unmarshal(input, protoTransaction)

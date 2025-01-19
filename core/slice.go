@@ -169,6 +169,7 @@ func (sl *Slice) SetDomInterface(domInterface CoreBackend) {
 // If this is called from a dominant context a domTerminus must be provided else a common.Hash{} should be used and domOrigin should be set to true.
 // Return of this function is the Etxs generated in the Zone Block, subReorg bool that tells dom if should be mined on, setHead bool that determines if we should set the block as the current head and the error
 func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, error) {
+	return nil, nil
 	start := time.Now()
 	nodeCtx := sl.NodeCtx()
 
