@@ -1057,15 +1057,6 @@ func (sl *Slice) ConstructLocalMinedBlock(wo *types.WorkObject) (*types.WorkObje
 			sl.hc.chainHeadFeed.Send(ChainHeadEvent{sl.hc.CurrentHeader()})
 			return nil, ErrBodyNotFound
 		}
-		if wo.NumberU64(common.ZONE_CTX) > uint64(params.WorkSharesInclusionDepth) && len(pendingBlockBody.OutboundEtxs()) == 0 {
-			sl.logger.WithFields(log.Fields{"wo.Hash": wo.Hash(),
-				"wo.Header":       wo.HeaderHash(),
-				"wo.ParentHash":   wo.ParentHash(common.ZONE_CTX),
-				"wo.Difficulty()": wo.Difficulty(),
-				"wo.Location()":   wo.Location(),
-			}).Error("Pending Block Body has no transactions")
-			return nil, ErrBodyNotFound
-		}
 	} else {
 		// If the context is PRIME, there is the interlink hashes that needs to be returned from the database
 		var interlinkHashes common.Hashes

@@ -932,7 +932,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 	}
 	// The fees from transactions in the block is given, in the block itself
 	// go through the last WorkSharesInclusionDepth of blocks
-	if block.NumberU64(common.ZONE_CTX) > uint64(params.WorkSharesInclusionDepth) {
+	if block.NumberU64(common.ZONE_CTX) > uint64(params.WorkSharesInclusionDepth) && block.NumberU64(common.ZONE_CTX) <= 1000 {
 
 		targetBlockNumber := block.NumberU64(common.ZONE_CTX) - uint64(params.WorkSharesInclusionDepth)
 

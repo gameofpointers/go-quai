@@ -620,7 +620,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 		work.wo.Header().SetTotalFees(expectedTotalFees)
 		// The fees from transactions in the block is given, in the block itself
 		// go through the last WorkSharesInclusionDepth of blocks
-		if work.wo.NumberU64(common.ZONE_CTX) > uint64(params.WorkSharesInclusionDepth) {
+		if work.wo.NumberU64(common.ZONE_CTX) > uint64(params.WorkSharesInclusionDepth) && work.wo.NumberU64(common.ZONE_CTX) <= 1000 {
 
 			targetBlockNumber := work.wo.NumberU64(common.ZONE_CTX) - uint64(params.WorkSharesInclusionDepth)
 

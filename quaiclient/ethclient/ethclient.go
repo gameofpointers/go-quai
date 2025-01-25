@@ -85,7 +85,7 @@ func (ec *Client) BlockByHash(ctx context.Context, hash common.Hash) (*types.Wor
 // Note that loading full blocks requires two requests. Use HeaderByNumber
 // if you don't need all transactions or uncle headers.
 func (ec *Client) BlockByNumber(ctx context.Context, number *big.Int) (*types.WorkObject, error) {
-	return ec.getBlock(ctx, "eth_getBlockByNumber", toBlockNumArg(number), true)
+	return ec.getBlock(ctx, "quai_getBlockByNumber", toBlockNumArg(number), true)
 }
 
 func (ec *Client) BlockOrCandidateByHash(ctx context.Context, hash common.Hash) (*types.WorkObject, error) {
@@ -104,6 +104,7 @@ type rpcBlock struct {
 	Header          *types.Header             `json:"header"`
 	Transactions    []rpcTransaction          `json:"transactions"`
 	UncleHashes     []*types.WorkObjectHeader `json:"uncles"`
+	WorkShares      []*types.WorkObjectHeader `json:"workShares"`
 	OutboundEtxs    []rpcTransaction          `json:"outboundEtxs"`
 	SubManifest     types.BlockManifest       `json:"manifest"`
 	InterlinkHashes common.Hashes             `json:"interlinkHashes"`
@@ -143,7 +144,11 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	copy(manifest, body.SubManifest)
 	var interlinkHashes common.Hashes
 	copy(interlinkHashes, body.InterlinkHashes)
-	return types.NewWorkObjectWithHeaderAndTx(head.WorkObjectHeader(), nil).WithBody(body.Header, txs, etxs, body.UncleHashes, manifest, interlinkHashes), nil
+
+	// combine the uncles and workshares
+	uncles := append(body.UncleHashes, body.WorkShares...)
+
+	return types.NewWorkObjectWithHeaderAndTx(head.WorkObjectHeader(), nil).WithBody(body.Header, txs, etxs, uncles, manifest, interlinkHashes), nil
 }
 
 // HeaderByHash returns the block header with the given hash.
