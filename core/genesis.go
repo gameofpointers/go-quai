@@ -383,7 +383,7 @@ func DefaultOrchardGenesisBlock(consensusEngine string, nonce uint64, extra []by
 		Nonce:      nonce,
 		ExtraData:  extra,
 		GasLimit:   12000000,
-		Difficulty: big.NewInt(30000000000),
+		Difficulty: big.NewInt(5000),
 	}
 	if consensusEngine == "blake3" {
 		genesis.Config = params.Blake3PowOrchardChainConfig
