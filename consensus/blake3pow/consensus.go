@@ -216,6 +216,9 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}
+		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+			return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
+		}
 
 		// make sure that the work can be computed
 		_, err = blake3pow.ComputePowHash(uncle)
@@ -390,6 +393,25 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		}
 	}
 
+	if nodeCtx == common.PRIME_CTX {
+		if header.PrimeStateRoot() != types.EmptyRootHash {
+			return fmt.Errorf("invalid prime state root: have %v, want %v", header.PrimeStateRoot(), types.EmptyRootHash)
+		}
+	}
+
+	if nodeCtx == common.REGION_CTX {
+		if header.RegionStateRoot() != types.EmptyRootHash {
+			return fmt.Errorf("invalid region state root: have %v, want %v", header.RegionStateRoot(), types.EmptyRootHash)
+		}
+	}
+
+	if nodeCtx == common.PRIME_CTX {
+		expectedMinerDifficulty := chain.ComputeMinerDifficulty(parent)
+		if header.MinerDifficulty().Cmp(expectedMinerDifficulty) != 0 {
+			return fmt.Errorf("invalid miner difficulty: have %v, want %v", header.MinerDifficulty(), expectedMinerDifficulty)
+		}
+	}
+
 	if nodeCtx == common.ZONE_CTX {
 		var expectedExpansionNumber uint8
 		expectedExpansionNumber, err := chain.ComputeExpansionNumber(parent)
@@ -399,6 +421,9 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		if header.ExpansionNumber() != expectedExpansionNumber {
 			return fmt.Errorf("invalid expansion number: have %v, want %v", header.ExpansionNumber(), expectedExpansionNumber)
 		}
+		if header.PrimaryCoinbase().IsInQiLedgerScope() && header.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+			return fmt.Errorf("Qi coinbase is not allowed before block %v", params.ControllerKickInBlock)
+		}
 	}
 
 	if nodeCtx == common.ZONE_CTX {
@@ -406,21 +431,6 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		_, err := header.PrimaryCoinbase().InternalAddress()
 		if err != nil {
 			return fmt.Errorf("out-of-scope primary coinbase in the header: %v location: %v nodeLocation: %v, err %s", header.PrimaryCoinbase(), header.Location(), blake3pow.config.NodeLocation, err)
-		}
-		_, err = header.SecondaryCoinbase().InternalAddress()
-		if err != nil {
-			return fmt.Errorf("out-of-scope secondary coinbase in the header: %v location: %v nodeLocation: %v, err %s", header.SecondaryCoinbase(), header.Location(), blake3pow.config.NodeLocation, err)
-		}
-		// One of the coinbases has to be Quai and the other one has to be Qi
-		quaiAddress := header.PrimaryCoinbase().IsInQuaiLedgerScope()
-		if quaiAddress {
-			if !header.SecondaryCoinbase().IsInQiLedgerScope() {
-				return fmt.Errorf("primary coinbase: %v is in quai ledger but secondary coinbase: %v is not in Qi ledger", header.PrimaryCoinbase(), header.SecondaryCoinbase())
-			}
-		} else {
-			if !header.SecondaryCoinbase().IsInQuaiLedgerScope() {
-				return fmt.Errorf("primary coinbase: %v is in qi ledger but secondary coinbase: %v is not in Quai ledger", header.PrimaryCoinbase(), header.SecondaryCoinbase())
-			}
 		}
 		if header.NumberU64(common.ZONE_CTX) < 2*params.BlocksPerMonth && header.Lock() != 0 {
 			return fmt.Errorf("header lock byte: %v is not valid: it has to be %v for the first two months", header.Lock(), 0)
@@ -752,7 +762,7 @@ func TrimBlock(chain consensus.ChainHeaderReader, batch ethdb.Batch, denominatio
 		}
 		// Only the coinbase and conversion txs are allowed to have lockups that
 		// is non zero
-		if utxo.Lock.Sign() == 0 {
+		if utxo.Lock.Sign() != 0 {
 			continue
 		}
 		txHash, index, err := rawdb.ReverseUtxoKey(key)

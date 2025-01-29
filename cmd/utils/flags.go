@@ -237,7 +237,7 @@ var (
 	P2PPortFlag = Flag{
 		Name:         c_NodeFlagPrefix + "port",
 		Abbreviation: "p",
-		Value:        "4001",
+		Value:        "4002",
 		Usage:        "p2p port to listen on" + generateEnvDoc(c_NodeFlagPrefix+"port"),
 	}
 
@@ -1586,7 +1586,7 @@ func MakeGenesis() *core.Genesis {
 	case params.LighthouseName:
 		genesis = core.DefaultLighthouseGenesisBlock(consensusEngine, nonce, extra)
 	case params.LocalName:
-		genesis = core.DefaultLocalGenesisBlock(consensusEngine, nonce, extra)
+		genesis = core.DefaultLocalGenesisBlock(consensusEngine, 0, []byte{})
 	case params.DevName:
 		Fatalf("Developer chains are ephemeral")
 	default:

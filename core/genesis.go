@@ -293,10 +293,10 @@ func (g *Genesis) ToBlock(startingExpansionNumber uint64) *types.WorkObject {
 	wo.Header().SetStateLimit(params.InitialStateLimit)
 	wo.Header().SetStateUsed(0)
 	wo.Header().SetEtxSetRoot(types.EmptyRootHash)
-	wo.Header().SetSecondaryCoinbase(common.Zero)
 	wo.Header().SetExchangeRate(params.ExchangeRate)
-	wo.Header().SetQuaiToQi(params.QuaiToQiConversionBase)
-	wo.Header().SetQiToQuai(params.QiToQuaiConversionBase)
+	wo.Header().SetKQuaiDiscount(params.StartingKQuaiDiscount)
+	wo.Header().SetConversionFlowAmount(params.StartingConversionFlowAmount)
+	wo.Header().SetMinerDifficulty(g.Difficulty)
 
 	if g.GasLimit == 0 {
 		wo.Header().SetGasLimit(params.GenesisGasLimit)
@@ -423,10 +423,10 @@ func DefaultLighthouseGenesisBlock(consensusEngine string, nonce uint64, extra [
 func DefaultLocalGenesisBlock(consensusEngine string, nonce uint64, extra []byte) *Genesis {
 	genesis := &Genesis{
 		Config:     params.ProgpowLocalChainConfig,
-		Nonce:      nonce,
-		ExtraData:  extra,
+		Nonce:      0,
+		ExtraData:  []byte{},
 		GasLimit:   12000000,
-		Difficulty: big.NewInt(1000),
+		Difficulty: big.NewInt(2000),
 	}
 	if consensusEngine == "blake3" {
 		genesis.Config = params.Blake3PowLocalChainConfig

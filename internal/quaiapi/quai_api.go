@@ -855,7 +855,8 @@ func (s *PublicBlockChainQuaiAPI) EstimateGas(ctx context.Context, args Transact
 		if err != nil {
 			return 0, err
 		}
-		estimatedQiAmount := misc.QuaiToQi(header, args.Value.ToInt())
+		primeTerminus := s.b.GetBlockByHash(header.PrimeTerminusHash())
+		estimatedQiAmount := misc.QuaiToQi(header, primeTerminus.ExchangeRate(), header.Difficulty(), args.Value.ToInt())
 		usedGas := uint64(0)
 
 		usedGas += params.TxGas
@@ -928,7 +929,11 @@ func (s *PublicBlockChainQuaiAPI) BaseFee(ctx context.Context, txType bool) (*he
 		return (*hexutil.Big)(s.b.CurrentBlock().BaseFee()), nil
 	} else {
 		quaiBaseFee := s.b.CurrentBlock().BaseFee()
-		qiBaseFee := misc.QuaiToQi(header, quaiBaseFee)
+		primeTerminus := s.b.GetBlockByHash(s.b.CurrentBlock().PrimeTerminusHash())
+		if primeTerminus == nil {
+			return nil, errors.New("prime terminus not found")
+		}
+		qiBaseFee := misc.QuaiToQi(header, primeTerminus.ExchangeRate(), header.Difficulty(), quaiBaseFee)
 		if qiBaseFee.Cmp(big.NewInt(0)) == 0 {
 			// Minimum base fee is 1 qit or smallest unit
 			return (*hexutil.Big)(types.Denominations[0]), nil
@@ -963,7 +968,13 @@ func (s *PublicBlockChainQuaiAPI) EstimateFeeForQi(ctx context.Context, args Tra
 	currentBaseFee = new(big.Int).Mul(currentBaseFee, big.NewInt(120))
 	currentBaseFee = new(big.Int).Div(currentBaseFee, big.NewInt(100))
 	feeInQuai := new(big.Int).Mul(new(big.Int).SetUint64(uint64(gas)), currentBaseFee)
-	feeInQi := misc.QuaiToQi(header, feeInQuai)
+
+	primeTerminus := s.b.GetBlockByHash(s.b.CurrentBlock().PrimeTerminusHash())
+	if primeTerminus == nil {
+		return nil, errors.New("cannot find prime terminus for the current block")
+	}
+	exchangeRate := primeTerminus.ExchangeRate()
+	feeInQi := misc.QuaiToQi(header, exchangeRate, header.Difficulty(), feeInQuai)
 	if feeInQi.Cmp(big.NewInt(0)) == 0 {
 		// Minimum fee is 1 qit or smallest unit
 		return (*hexutil.Big)(types.Denominations[0]), nil
@@ -1209,13 +1220,17 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 		}
 		if pendingBlockBody == nil {
 			s.b.Logger().Warn("Could not get the pending Block body", "err", err)
-			return nil
+			return err
 		}
 		wo := types.NewWorkObject(workShare, pendingBlockBody.Body(), nil)
 		shareView := wo.ConvertToWorkObjectShareView(txs)
 		err = s.b.BroadcastWorkShare(shareView, s.b.NodeLocation())
 		if err != nil {
-			s.b.Logger().WithField("err", err).Error("Error broadcasting work share")
+			s.b.Logger().WithFields(log.Fields{
+				"hash": shareView.Hash(),
+				"err":  err,
+			}).Error("Error broadcasting work share")
+			return err
 		}
 		txEgressCounter.Add(float64(len(shareView.WorkObject.Transactions())))
 		s.b.Logger().WithFields(log.Fields{"tx count": len(txs)}).Info("Broadcasted workshares with txs")
@@ -1277,7 +1292,12 @@ func (s *PublicBlockChainQuaiAPI) QiToQuai(ctx context.Context, qiAmount hexutil
 	} else if header == nil {
 		return nil
 	}
-	return (*hexutil.Big)(misc.QiToQuai(header, qiAmount.ToInt()))
+	primeTerminus := s.b.GetBlockByHash(header.PrimeTerminusHash())
+	if primeTerminus == nil {
+		return nil
+	} else {
+		return (*hexutil.Big)(misc.QiToQuai(header, primeTerminus.ExchangeRate(), primeTerminus.MinerDifficulty(), qiAmount.ToInt()))
+	}
 }
 
 // Calculate the amount of Qi that Quai can be converted to. Expect the current Header and the Quai amount in "its", returns the Qi amount in "qits"
@@ -1301,7 +1321,12 @@ func (s *PublicBlockChainQuaiAPI) QuaiToQi(ctx context.Context, quaiAmount hexut
 	} else if header == nil {
 		return nil
 	}
-	return (*hexutil.Big)(misc.QuaiToQi(header, quaiAmount.ToInt()))
+	primeTerminus := s.b.GetBlockByHash(s.b.CurrentBlock().PrimeTerminusHash())
+	if primeTerminus == nil {
+		return nil
+	} else {
+		return (*hexutil.Big)(misc.QuaiToQi(header, primeTerminus.ExchangeRate(), primeTerminus.MinerDifficulty(), quaiAmount.ToInt()))
+	}
 }
 
 func (s *PublicBlockChainQuaiAPI) CalcOrder(ctx context.Context, raw hexutil.Bytes) (hexutil.Uint, error) {
@@ -1344,6 +1369,23 @@ func (s *PublicBlockChainQuaiAPI) SetWorkShareP2PThreshold(ctx context.Context, 
 	s.b.SetWorkShareP2PThreshold(int(threshold))
 
 	return nil
+}
+
+func (s *PublicBlockChainQuaiAPI) GetKQuaiAndUpdateBit(ctx context.Context, blockHash common.Hash) (map[string]interface{}, error) {
+	if !s.b.NodeLocation().Equal(common.Location{0, 0}) {
+		return nil, errors.New("cannot call GetKQuaiAndUpdateBit in any other chain than cyprus-1")
+	}
+
+	kQuai, updateBit, err := s.b.GetKQuaiAndUpdateBit(blockHash)
+	if err != nil {
+		return nil, err
+	}
+
+	fields := make(map[string]interface{})
+	fields["kQuai"] = kQuai.String()
+	fields["updateBit"] = updateBit
+
+	return fields, nil
 }
 
 // GetTransactionReceipt returns the transaction receipt for the given transaction hash.
