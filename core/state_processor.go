@@ -588,45 +588,53 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 						}
 						receipt = &types.Receipt{Type: tx.Type(), Status: types.ReceiptStatusLocked, GasUsed: gasUsedForCoinbase, TxHash: tx.Hash()}
 					} else if len(tx.Data()) == common.AddressLength+1 || len(tx.Data()) == common.AddressLength+common.AddressLength+1 {
-						contractAddr := common.BytesToAddress(tx.Data()[1:common.AddressLength+1], nodeLocation)
-						internal, err := contractAddr.InternalAndQuaiAddress()
-						if err != nil {
-							return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("coinbase tx %x has invalid contract: %w", tx.Hash(), err)
-						}
-						if statedb.GetCode(internal) == nil {
-							// No code at contract address
+
+						if true {
+							// Coinbase data is either too long or too small
 							// Coinbase reward is lost
-							// Justification: We should not store a coinbase lockup that can never be claimed
 							receipt = &types.Receipt{Type: tx.Type(), Status: types.ReceiptStatusFailed, GasUsed: gasUsedForCoinbase, TxHash: tx.Hash()}
 						} else {
-							var delegate common.Address
-							if len(tx.Data()) == common.AddressLength+common.AddressLength+1 {
-								delegate = common.BytesToAddress(tx.Data()[common.AddressLength+1:], nodeLocation)
+							contractAddr := common.BytesToAddress(tx.Data()[1:common.AddressLength+1], nodeLocation)
+							internal, err := contractAddr.InternalAndQuaiAddress()
+							if err != nil {
+								return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("coinbase tx %x has invalid contract: %w", tx.Hash(), err)
+							}
+							if statedb.GetCode(internal) == nil {
+								// No code at contract address
+								// Coinbase reward is lost
+								// Justification: We should not store a coinbase lockup that can never be claimed
+								receipt = &types.Receipt{Type: tx.Type(), Status: types.ReceiptStatusFailed, GasUsed: gasUsedForCoinbase, TxHash: tx.Hash()}
 							} else {
-								delegate = common.Zero
-							}
-							oldCoinbaseLockupKey, newCoinbaseLockupKey, oldCoinbaseLockupHash, newCoinbaseLockupHash, err := vm.AddNewLock(statedb, batch, contractAddr, *etx.To(), delegate, common.OneInternal(nodeLocation), lockupByte, lockup.Uint64(), coinbaseLockupEpoch, value, nodeLocation, true)
-							if err != nil || newCoinbaseLockupHash == nil {
-								return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("could not add new lock: %w", err)
-							}
-							// Store the new lockup key every time
-							utxosCreatedDeleted.CoinbaseLockupsCreatedHashes[string(newCoinbaseLockupKey)] = *newCoinbaseLockupHash
-
-							if oldCoinbaseLockupHash != nil {
-								// We deleted (updated) the old lockup, write it to deleted list but only the first time
-								if _, exists := utxosCreatedDeleted.CoinbaseLockupsDeletedHashes[string(oldCoinbaseLockupKey)]; !exists {
-									if _, exists := utxosCreatedDeleted.RotatedEpochs[string(newCoinbaseLockupKey)]; !exists {
-										// We only want to add a delete if we have not rotated the epoch (we haven't created a new lock) because otherwise there is nothing to delete
-										utxosCreatedDeleted.CoinbaseLockupsDeletedHashes[string(oldCoinbaseLockupKey)] = *oldCoinbaseLockupHash
-										utxosCreatedDeleted.UtxosDeletedHashes = append(utxosCreatedDeleted.UtxosDeletedHashes, *oldCoinbaseLockupHash)
-									}
+								var delegate common.Address
+								if len(tx.Data()) == common.AddressLength+common.AddressLength+1 {
+									delegate = common.BytesToAddress(tx.Data()[common.AddressLength+1:], nodeLocation)
+								} else {
+									delegate = common.Zero
 								}
-							} else {
-								// If we did not delete, we are rotating the epoch and need to store it
-								utxosCreatedDeleted.RotatedEpochs[string(newCoinbaseLockupKey)] = struct{}{}
+								oldCoinbaseLockupKey, newCoinbaseLockupKey, oldCoinbaseLockupHash, newCoinbaseLockupHash, err := vm.AddNewLock(statedb, batch, contractAddr, *etx.To(), delegate, common.OneInternal(nodeLocation), lockupByte, lockup.Uint64(), coinbaseLockupEpoch, value, nodeLocation, true)
+								if err != nil || newCoinbaseLockupHash == nil {
+									return nil, nil, nil, nil, 0, 0, 0, nil, nil, fmt.Errorf("could not add new lock: %w", err)
+								}
+								// Store the new lockup key every time
+								utxosCreatedDeleted.CoinbaseLockupsCreatedHashes[string(newCoinbaseLockupKey)] = *newCoinbaseLockupHash
+
+								if oldCoinbaseLockupHash != nil {
+									// We deleted (updated) the old lockup, write it to deleted list but only the first time
+									if _, exists := utxosCreatedDeleted.CoinbaseLockupsDeletedHashes[string(oldCoinbaseLockupKey)]; !exists {
+										if _, exists := utxosCreatedDeleted.RotatedEpochs[string(newCoinbaseLockupKey)]; !exists {
+											// We only want to add a delete if we have not rotated the epoch (we haven't created a new lock) because otherwise there is nothing to delete
+											utxosCreatedDeleted.CoinbaseLockupsDeletedHashes[string(oldCoinbaseLockupKey)] = *oldCoinbaseLockupHash
+											utxosCreatedDeleted.UtxosDeletedHashes = append(utxosCreatedDeleted.UtxosDeletedHashes, *oldCoinbaseLockupHash)
+										}
+									}
+								} else {
+									// If we did not delete, we are rotating the epoch and need to store it
+									utxosCreatedDeleted.RotatedEpochs[string(newCoinbaseLockupKey)] = struct{}{}
+								}
+								receipt = &types.Receipt{Type: tx.Type(), Status: types.ReceiptStatusLocked, GasUsed: gasUsedForCoinbase, TxHash: tx.Hash()} // todo: consider adding the reward to the receipt in a log
 							}
-							receipt = &types.Receipt{Type: tx.Type(), Status: types.ReceiptStatusLocked, GasUsed: gasUsedForCoinbase, TxHash: tx.Hash()} // todo: consider adding the reward to the receipt in a log
 						}
+
 					} else {
 						// Coinbase data is either too long or too small
 						// Coinbase reward is lost
