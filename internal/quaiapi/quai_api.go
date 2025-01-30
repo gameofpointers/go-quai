@@ -1133,12 +1133,11 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw he
 		return err
 	}
 
-	woHeader := &types.WorkObject{}
-	err = woHeader.ProtoDecode(protoWorkObject, s.b.NodeLocation(), types.PEtxObject)
+	block := &types.WorkObject{}
+	err = block.ProtoDecode(protoWorkObject, s.b.NodeLocation(), types.BlockObject)
 	if err != nil {
 		return err
 	}
-	block, err := s.b.ConstructLocalMinedBlock(woHeader)
 	if err != nil && err.Error() == core.ErrBadSubManifest.Error() && nodeCtx < common.ZONE_CTX {
 		s.b.Logger().Info("filling sub manifest")
 		// If we just mined this block, and we have a subordinate chain, its possible
@@ -1249,10 +1248,37 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil
 	} else if pendingHeader == nil {
 		return nil, errors.New("no pending header found")
 	}
+	protoWo, err := pendingHeader.ProtoEncode(types.BlockObject)
+	if err != nil {
+		return nil, err
+	}
+	data, err := proto.Marshal(protoWo)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (s *PublicBlockChainQuaiAPI) GeneratePendingHeader(ctx context.Context, raw hexutil.Bytes) (hexutil.Bytes, error) {
+	protoWorkObject := &types.ProtoWorkObject{}
+	err := proto.Unmarshal(raw, protoWorkObject)
+	if err != nil {
+		return nil, err
+	}
+
+	woHeader := &types.WorkObject{}
+	err = woHeader.ProtoDecode(protoWorkObject, s.b.NodeLocation(), types.BlockObject)
+	if err != nil {
+		return nil, err
+	}
+	pendingHeader, err := s.b.GeneratePendingHeader(woHeader, false)
+	if err != nil {
+		return nil, err
+	}
 	// Only keep the Header in the body
 	pendingHeaderForMining := pendingHeader.WithBody(pendingHeader.Header(), nil, nil, nil, nil, nil)
 	// Marshal the response.
-	protoWo, err := pendingHeaderForMining.ProtoEncode(types.PEtxObject)
+	protoWo, err := pendingHeaderForMining.ProtoEncode(types.BlockObject)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,7 +1364,7 @@ func (s *PublicBlockChainQuaiAPI) CalcOrder(ctx context.Context, raw hexutil.Byt
 	}
 
 	woHeader := &types.WorkObject{}
-	err = woHeader.ProtoDecode(protoWorkObject, s.b.NodeLocation(), types.PEtxObject)
+	err = woHeader.ProtoDecode(protoWorkObject, s.b.NodeLocation(), types.BlockObject)
 	if err != nil {
 		return 0, err
 	}

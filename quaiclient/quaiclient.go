@@ -128,7 +128,7 @@ func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, erro
 		return nil, err
 	}
 	wo := &types.WorkObject{}
-	err = wo.ProtoDecode(protoWo, protoWo.GetWoHeader().GetLocation().Value, types.PEtxObject)
+	err = wo.ProtoDecode(protoWo, protoWo.GetWoHeader().GetLocation().Value, types.BlockObject)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (ec *Client) GetWorkShareThreshold(ctx context.Context) (int, error) {
 
 // ReceiveMinedHeader sends a mined block back to the node
 func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.WorkObject) error {
-	protoWo, err := header.ProtoEncode(types.PEtxObject)
+	protoWo, err := header.ProtoEncode(types.BlockObject)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func (ec *Client) SubmitSubWorkshare(ctx context.Context, wo *types.WorkObject) 
 }
 
 func (ec *Client) CalcOrder(ctx context.Context, header *types.WorkObject) (int, error) {
-	protoWo, err := header.ProtoEncode(types.PEtxObject)
+	protoWo, err := header.ProtoEncode(types.BlockObject)
 	if err != nil {
 		return -1, err
 	}
@@ -359,4 +359,31 @@ func (ec *Client) GetWorkShareP2PThreshold(ctx context.Context) uint64 {
 		return uint64(params.WorkSharesThresholdDiff)
 	}
 	return uint64(threshold)
+}
+
+func (ec *Client) GeneratePendingHeader(ctx context.Context, block *types.WorkObject) (*types.WorkObject, error) {
+	protoWo, err := block.ProtoEncode(types.BlockObject)
+	if err != nil {
+		return nil, err
+	}
+	data, err := proto.Marshal(protoWo)
+	if err != nil {
+		return nil, err
+	}
+	var raw hexutil.Bytes
+	err = ec.c.CallContext(ctx, &raw, "quai_generatePendingHeader", hexutil.Bytes(data))
+	if err != nil {
+		return nil, err
+	}
+	protoWo = &types.ProtoWorkObject{}
+	err = proto.Unmarshal(raw, protoWo)
+	if err != nil {
+		return nil, err
+	}
+	wo := &types.WorkObject{}
+	err = wo.ProtoDecode(protoWo, protoWo.GetWoHeader().GetLocation().Value, types.BlockObject)
+	if err != nil {
+		return nil, err
+	}
+	return wo, nil
 }

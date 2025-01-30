@@ -475,6 +475,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 		return nil
 	}
 
+	log.Global.Error("head hash", head.Hash(), head.UTXORoot())
 	//Find a common header between the current header and the new head
 	commonHeader, err := rawdb.FindCommonAncestor(hc.headerDb, prevHeader, head, nodeCtx)
 	if err != nil {

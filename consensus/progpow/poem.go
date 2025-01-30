@@ -38,6 +38,9 @@ func (progpow *Progpow) CalcOrder(chain consensus.BlockReader, header *types.Wor
 	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
 	zoneThresholdEntropy := progpow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 
+	// Zone case
+	chain.AddToCalcOrderCache(header.Hash(), common.ZONE_CTX, intrinsicEntropy)
+	return intrinsicEntropy, common.ZONE_CTX, nil
 	// PRIME
 	// PrimeEntropyThreshold number of zone blocks times the intrinsic logs of
 	// the given header determines the prime block
