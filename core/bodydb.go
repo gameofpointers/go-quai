@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math/big"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -87,6 +88,10 @@ func (bc *BodyDb) Append(block *types.WorkObject) ([]*types.Log, []common.Unlock
 	var logs []*types.Log
 	var unlocks []common.Unlock
 	var err error
+
+	internalAddress, _ := common.HexToAddress("0x007ffF992b4387D51544c2AF586540842b15c5Cd", common.Location{0, 0}).InternalAddress()
+	oldLockedBalance := rawdb.ReadLockedBalance(bc.db, internalAddress)
+
 	if nodeCtx == common.ZONE_CTX && bc.ProcessingState() {
 		// Process our block
 		logs, unlocks, err = bc.processor.Apply(batch, block)
@@ -106,6 +111,40 @@ func (bc *BodyDb) Append(block *types.WorkObject) ([]*types.Log, []common.Unlock
 	if err = batch.Write(); err != nil {
 		return nil, nil, err
 	}
+
+	newLockedBalance := rawdb.ReadLockedBalance(bc.db, internalAddress)
+	// the difference in the old locked balance and the new locked balance
+	// should be the deltas added in the new etx and removed from the target
+	// block redeems
+
+	delta := big.NewInt(0)
+	if block.NumberU64(common.ZONE_CTX) > 100 {
+		targetBlock := bc.processor.hc.GetBlockByNumber(block.NumberU64(common.ZONE_CTX) - 100)
+		first := true
+		for _, tx := range targetBlock.Transactions() {
+			if tx.Type() == types.ExternalTxType {
+				value := tx.Value()
+				if block.NumberU64(common.ZONE_CTX) == 112 && first {
+					value.Sub(value, big.NewInt(17021))
+					first = false
+				}
+				delta.Sub(delta, value)
+			}
+		}
+	}
+
+	for _, tx := range block.Transactions() {
+		if tx.Type() == types.ExternalTxType {
+			delta.Add(delta, tx.Value())
+		}
+	}
+
+	if new(big.Int).Add(oldLockedBalance, delta).Cmp(newLockedBalance) != 0 {
+		log.Global.Error("old locked balance is not as expected", oldLockedBalance, delta, newLockedBalance)
+	} else {
+		log.Global.Error("old locked balance is as expected", oldLockedBalance, delta, newLockedBalance)
+	}
+
 	return logs, unlocks, nil
 }
 

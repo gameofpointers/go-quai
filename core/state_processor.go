@@ -1127,6 +1127,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 	if p.config.IndexAddressUtxos {
 		rawdb.WriteNewLockups(batch, p.hc.headerDb, blockHash, newLockedQuai, unlocks)
 	}
+
 	return receipts, emittedEtxs, allLogs, statedb, *usedGas, *usedState, utxoSetSize, multiSet, unlocks, nil
 }
 
