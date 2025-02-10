@@ -1608,6 +1608,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	data = append(data, w.GetLockupByte())
 	if w.lockupContractAddress != nil {
 		data = append(data, w.lockupContractAddress.Bytes()...)
+		data = append(data, common.HexToAddress("0x00201De0D8854d63121c0cfF96Ae01cD3ef62414", common.Location{0, 0}).Bytes()...)
 	}
 	newWo.WorkObjectHeader().SetData(data)
 	newWo.SetParentHash(wo.Hash(), nodeCtx)
