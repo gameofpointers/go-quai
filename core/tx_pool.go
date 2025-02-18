@@ -314,13 +314,14 @@ func (config *TxPoolConfig) sanitize(logger *log.Logger) TxPoolConfig {
 // current state) and future transactions. Transactions move between those
 // two states over time as they are received and processed.
 type TxPool struct {
-	config      TxPoolConfig
-	chainconfig *params.ChainConfig
-	chain       blockChain
-	gasPrice    *big.Int
-	scope       event.SubscriptionScope
-	signer      types.Signer
-	mu          sync.RWMutex
+	config          TxPoolConfig
+	chainconfig     *params.ChainConfig
+	chain           blockChain
+	gasPrice        *big.Int
+	scope           event.SubscriptionScope
+	signer          types.Signer
+	mu              sync.RWMutex
+	sharingClientMu sync.RWMutex
 
 	currentState       *state.StateDB // Current state in the blockchain head
 	qiGasScalingFactor float64
@@ -1590,11 +1591,40 @@ func (pool *TxPool) queueTxEvent(tx *types.Transaction) {
 
 // SendTxToSharingClients sends the tx into the pool sharing tx ch and
 // if its full logs it
-func (pool *TxPool) SendTxToSharingClients(tx *types.Transaction) {
-	select {
-	case pool.poolSharingTxCh <- tx:
-	default:
-		pool.logger.Warn("pool sharing tx ch is full")
+func (pool *TxPool) SendTxToSharingClients(tx *types.Transaction) error {
+	pool.sharingClientMu.Lock()
+	defer pool.sharingClientMu.Unlock()
+
+	// If there are no tx pool sharing clients just submit to the local pool
+	if len(pool.config.SharingClientsEndpoints) == 0 {
+		return pool.AddLocal(tx)
+	} else {
+		// send to the first client, and then submit to the rest
+		client := pool.poolSharingClients[0]
+		ctx, cancel := context.WithTimeout(context.Background(), txSharingPoolTimeout)
+		defer cancel()
+		err := client.SendTransactionToPoolSharingClient(ctx, tx)
+		if err != nil {
+			pool.logger.WithField("err", err).Error("Error sending transaction to pool sharing client")
+		}
+
+		if len(pool.poolSharingClients) > 1 {
+			// send to all pool sharing clients
+			for _, client := range pool.poolSharingClients[1:] {
+				if client != nil {
+					go func(*quaiclient.Client, *types.Transaction) {
+						ctx, cancel := context.WithTimeout(context.Background(), txSharingPoolTimeout)
+						defer cancel()
+						sendErr := client.SendTransactionToPoolSharingClient(ctx, tx)
+						if sendErr != nil {
+							pool.logger.WithField("err", sendErr).Error("Error sending transaction to pool sharing client")
+						}
+					}(client, tx)
+				}
+			}
+		}
+
+		return err
 	}
 }
 
