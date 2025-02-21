@@ -63,6 +63,7 @@ type Backend interface {
 	BlockByHash(ctx context.Context, hash common.Hash) (*types.WorkObject, error)
 	BlockOrCandidateByHash(hash common.Hash) *types.WorkObject
 	BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.WorkObject, error)
+	GetHeaderOrCandidateByHash(hash common.Hash) *types.WorkObject
 	StateAndHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*state.StateDB, *types.WorkObject, error)
 	StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.WorkObject, error)
 	AddressOutpoints(ctx context.Context, address common.Address) ([]*types.OutpointAndDenomination, error)
@@ -119,6 +120,10 @@ type Backend interface {
 	GetMinerEndpoints() []string
 	GetWorkShareP2PThreshold() int
 	SetWorkShareP2PThreshold(threshold int)
+	CheckIfEtxIsEligible(hash common.Hash, location common.Location) bool
+	IsGenesisHash(hash common.Hash) bool
+	StateAtBlock(context.Context, *types.WorkObject, uint64, *state.StateDB, bool) (*state.StateDB, error)
+	StateAtTransaction(context.Context, *types.WorkObject, int, uint64) (core.Message, vm.BlockContext, *state.StateDB, error)
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool
@@ -192,10 +197,6 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicDebugAPI(apiBackend),
 			Public:    true,
-		}, {
-			Namespace: "debug",
-			Version:   "1.0",
-			Service:   NewPrivateDebugAPI(apiBackend),
 		},
 		{
 			Namespace: "net",
