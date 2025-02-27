@@ -104,10 +104,13 @@ func (s *StructLog) ErrorString() string {
 // Note that reference types are actual VM data structures; make copies
 // if you need to retain them beyond the current call.
 type Tracer interface {
+	OnTxStart(vm *VMContext, tx *types.Transaction, from common.Address)
+	OnTxEnd(receipt *types.Receipt, err error)
+	OnLog(log *types.Log)
 	CaptureStart(env *EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int)
 	CaptureState(env *EVM, pc uint64, op OpCode, gas, cost uint64, scope *ScopeContext, rData []byte, depth int, err error, nodeLocation common.Location)
 	CaptureFault(env *EVM, pc uint64, op OpCode, gas, cost uint64, scope *ScopeContext, depth int, err error)
-	CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error)
+	CaptureEnd(depth int, output []byte, gasUsed uint64, t time.Duration, err error, reverted bool)
 }
 
 // StructLogger is an EVM state logger and implements Tracer.
@@ -141,6 +144,15 @@ func (l *StructLogger) Reset() {
 	l.output = make([]byte, 0)
 	l.logs = l.logs[:0]
 	l.err = nil
+}
+
+func (l *StructLogger) OnTxStart(vm *VMContext, tx *types.Transaction, from common.Address) {
+}
+
+func (l *StructLogger) OnTxEnd(receipt *types.Receipt, err error) {
+}
+
+func (l *StructLogger) OnLog(log *types.Log) {
 }
 
 // CaptureStart implements the Tracer interface to initialize the tracing operation.
@@ -219,7 +231,7 @@ func (l *StructLogger) CaptureFault(env *EVM, pc uint64, op OpCode, gas, cost ui
 }
 
 // CaptureEnd is called after the call finishes to finalize the tracing.
-func (l *StructLogger) CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error) {
+func (l *StructLogger) CaptureEnd(depth int, output []byte, gasUsed uint64, t time.Duration, err error, reverted bool) {
 	l.output = output
 	l.err = err
 	if l.cfg.Debug {
@@ -301,6 +313,15 @@ func NewMarkdownLogger(cfg *LogConfig, writer io.Writer) *mdLogger {
 	return l
 }
 
+func (l *mdLogger) OnTxStart(vm *VMContext, tx *types.Transaction, from common.Address) {
+}
+
+func (l *mdLogger) OnTxEnd(receipt *types.Receipt, err error) {
+}
+
+func (l *mdLogger) OnLog(log *types.Log) {
+}
+
 func (t *mdLogger) CaptureStart(env *EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
 	if !create {
 		fmt.Fprintf(t.out, "From: `%v`\nTo: `%v`\nData: `0x%x`\nGas: `%d`\nValue `%v` wei\n",
@@ -343,7 +364,7 @@ func (t *mdLogger) CaptureFault(env *EVM, pc uint64, op OpCode, gas, cost uint64
 	fmt.Fprintf(t.out, "\nError: at pc=%d, op=%v: %v\n", pc, op, err)
 }
 
-func (t *mdLogger) CaptureEnd(output []byte, gasUsed uint64, tm time.Duration, err error) {
-	fmt.Fprintf(t.out, "\nOutput: `0x%x`\nConsumed gas: `%d`\nError: `%v`\n",
-		output, gasUsed, err)
+func (t *mdLogger) CaptureEnd(depth int, output []byte, gasUsed uint64, tm time.Duration, err error, reverted bool) {
+	fmt.Fprintf(t.out, "\n Depth: `%d`\nOutput: `0x%x`\nConsumed gas: `%d`\nError: `%v`\nReverted: `%v`\n", depth,
+		output, gasUsed, err, reverted)
 }

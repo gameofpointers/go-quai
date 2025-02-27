@@ -137,6 +137,15 @@ func NewAccessListTracer(acl types.AccessList, from, to common.Address, precompi
 	}
 }
 
+func (l *AccessListTracer) OnTxStart(vm *VMContext, tx *types.Transaction, from common.Address) {
+}
+
+func (l *AccessListTracer) OnTxEnd(receipt *types.Receipt, err error) {
+}
+
+func (l *AccessListTracer) OnLog(log *types.Log) {
+}
+
 func (a *AccessListTracer) CaptureStart(env *EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
 }
 
@@ -164,7 +173,8 @@ func (a *AccessListTracer) CaptureState(env *EVM, pc uint64, op OpCode, gas, cos
 func (*AccessListTracer) CaptureFault(env *EVM, pc uint64, op OpCode, gas, cost uint64, scope *ScopeContext, depth int, err error) {
 }
 
-func (*AccessListTracer) CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error) {}
+func (*AccessListTracer) CaptureEnd(depth int, output []byte, gasUsed uint64, t time.Duration, err error, reverted bool) {
+}
 
 // AccessList returns the current accesslist maintained by the tracer.
 func (a *AccessListTracer) AccessList(nodeLocation common.Location) types.AccessList {

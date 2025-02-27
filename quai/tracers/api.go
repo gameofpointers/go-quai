@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -212,6 +213,9 @@ type TraceConfig struct {
 	Tracer  *string
 	Timeout *string
 	Reexec  *uint64
+	// Config specific to given tracer. Note struct logger
+	// config are historically embedded in main object.
+	TracerConfig json.RawMessage
 }
 
 // TraceCallConfig is the config for traceCall API. It holds one more
@@ -338,7 +342,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.WorkObject, co
 						TxIndex:   i,
 						TxHash:    tx.Hash(),
 					}
-					res, err := api.traceTx(localctx, msg, txctx, blockCtx, task.statedb, config)
+					res, err := api.traceTx(localctx, msg, tx, txctx, blockCtx, task.statedb, config)
 					if err != nil {
 						task.results[i] = &txTraceResult{Error: err.Error()}
 						api.backend.Logger().Warn("Tracing failed", "hash", tx.Hash(), "block", task.block.NumberU64(common.ZONE_CTX), "err", err)
@@ -569,7 +573,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.WorkObject, config 
 					TxIndex:   task.index,
 					TxHash:    txs[task.index].Hash(),
 				}
-				res, err := api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+				res, err := api.traceTx(ctx, msg, txs[task.index], txctx, blockCtx, task.statedb, config)
 				if err != nil {
 					results[task.index] = &txTraceResult{Error: err.Error()}
 					continue
@@ -737,7 +741,7 @@ func containsTx(block *types.WorkObject, hash common.Hash) bool {
 // TraceTransaction returns the structured logs created during the execution of EVM
 // and returns them as a JSON object.
 func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *TraceConfig) (interface{}, error) {
-	_, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
+	tx, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +766,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		TxIndex:   int(index),
 		TxHash:    hash,
 	}
-	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
+	return api.traceTx(ctx, msg, tx, txctx, vmctx, statedb, config)
 }
 
 // TraceCall lets you trace a given eth_call. It collects the structured logs
@@ -826,18 +830,19 @@ func (api *API) TraceCall(ctx context.Context, args quaiapi.TransactionArgs, blo
 			Reexec:    config.Reexec,
 		}
 	}
-	return api.traceTx(ctx, msg, new(Context), vmctx, statedb, traceConfig)
+	return api.traceTx(ctx, msg, nil, new(Context), vmctx, statedb, traceConfig)
 }
 
 // traceTx configures a new tracer according to the provided configuration, and
 // executes the given message in the provided environment. The return value will
 // be tracer dependent.
-func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
+func (api *API) traceTx(ctx context.Context, message core.Message, tx *types.Transaction, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
 	// Assemble the structured logger or the JavaScript tracer
 	var (
-		tracer    vm.Tracer
+		tracer    *Tracer
 		err       error
 		txContext = core.NewEVMTxContext(message)
+		usedGas   uint64
 	)
 	switch {
 	case config != nil && config.Tracer != nil:
@@ -849,7 +854,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			}
 		}
 		// Constuct the JavaScript tracer to execute with
-		if tracer, err = New(*config.Tracer, txctx, api.backend.Logger(), api.backend.NodeLocation()); err != nil {
+		if tracer, err = DefaultDirectory.New(*config.Tracer, txctx, config.TracerConfig, api.backend.ChainConfig()); err != nil {
 			return nil, err
 		}
 		// Handle timeouts and RPC cancellations
@@ -857,31 +862,38 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		go func() {
 			<-deadlineCtx.Done()
 			if deadlineCtx.Err() == context.DeadlineExceeded {
-				tracer.(*Tracer).Stop(errors.New("execution timeout"))
+				tracer.Stop(errors.New("execution timeout"))
 			}
 		}()
 		defer cancel()
 
-	case config == nil:
-		tracer = vm.NewStructLogger(nil)
+		// Run the transaction with tracing enabled.
+		vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true}, nil)
 
+		// Call Prepare to clear out the statedb access list
+		statedb.Prepare(txctx.TxHash, txctx.TxIndex)
+
+		_, err = core.ApplyTransactionWithEVM(message, new(types.GasPool).AddGas(message.Gas()), statedb, vmctx.BlockNumber, txctx.BlockHash, tx, &usedGas, vmenv)
+		if err != nil {
+			return nil, fmt.Errorf("tracing failed: %w", err)
+		}
+
+		return tracer.GetResult()
 	default:
-		tracer = vm.NewStructLogger(config.LogConfig)
-	}
-	// Run the transaction with tracing enabled.
-	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true}, nil)
+		vmTracer := vm.NewStructLogger(nil)
 
-	// Call Prepare to clear out the statedb access list
-	statedb.Prepare(txctx.TxHash, txctx.TxIndex)
+		// Run the transaction with tracing enabled.
+		vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: vmTracer, NoBaseFee: true}, nil)
 
-	result, err := core.ApplyMessage(vmenv, message, new(types.GasPool).AddGas(message.Gas()))
-	if err != nil {
-		return nil, fmt.Errorf("tracing failed: %w", err)
-	}
+		// Call Prepare to clear out the statedb access list
+		statedb.Prepare(txctx.TxHash, txctx.TxIndex)
 
-	// Depending on the tracer type, format and return the output.
-	switch tracer := tracer.(type) {
-	case *vm.StructLogger:
+		result, err := core.ApplyMessage(vmenv, message, new(types.GasPool).AddGas(message.Gas()))
+		if err != nil {
+			return nil, fmt.Errorf("tracing failed: %w", err)
+		}
+
+		// Depending on the tracer type, format and return the output.
 		// If the result contains a revert reason, return it.
 		returnVal := fmt.Sprintf("%x", result.Return())
 		if len(result.Revert()) > 0 {
@@ -891,14 +903,9 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			Gas:         result.UsedGas,
 			Failed:      result.Failed(),
 			ReturnValue: returnVal,
-			StructLogs:  quaiapi.FormatLogs(tracer.StructLogs()),
+			StructLogs:  quaiapi.FormatLogs(vmTracer.StructLogs()),
 		}, nil
 
-	case *Tracer:
-		return tracer.GetResult()
-
-	default:
-		panic(fmt.Sprintf("bad tracer type %T", tracer))
 	}
 }
 

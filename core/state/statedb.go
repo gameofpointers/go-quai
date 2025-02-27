@@ -31,6 +31,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/state/snapshot"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
@@ -106,6 +107,8 @@ type StateDB struct {
 	trie         Trie
 	etxTrie      Trie
 	hasher       crypto.KeccakState
+
+	Tracer vm.Tracer
 
 	newAccountsAdded map[common.AddressBytes]bool
 	size             *big.Int
@@ -252,6 +255,10 @@ func (s *StateDB) AddLog(log *types.Log) {
 	log.Index = s.logSize
 	s.logs[s.thash] = append(s.logs[s.thash], log)
 	s.logSize++
+
+	if s.Tracer != nil {
+		s.Tracer.OnLog(log)
+	}
 }
 
 func (s *StateDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types.Log {
@@ -350,6 +357,10 @@ func (s *StateDB) GetSize(addr common.InternalAddress) *big.Int {
 
 func (s *StateDB) GetQuaiTrieSize() *big.Int {
 	return s.size
+}
+
+func (s *StateDB) GetLocation() common.Location {
+	return s.nodeLocation
 }
 
 // TxIndex returns the current transaction index set by Prepare.

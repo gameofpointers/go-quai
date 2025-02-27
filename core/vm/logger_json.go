@@ -24,6 +24,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/math"
+	"github.com/dominant-strategies/go-quai/core/types"
 )
 
 type JSONLogger struct {
@@ -39,6 +40,15 @@ func NewJSONLogger(cfg *LogConfig, writer io.Writer) *JSONLogger {
 		l.cfg = &LogConfig{}
 	}
 	return l
+}
+
+func (l *JSONLogger) OnTxStart(vm *VMContext, tx *types.Transaction, from common.Address) {
+}
+
+func (l *JSONLogger) OnTxEnd(receipt *types.Receipt, err error) {
+}
+
+func (l *JSONLogger) OnLog(log *types.Log) {
 }
 
 func (l *JSONLogger) CaptureStart(env *EVM, from, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
@@ -74,16 +84,18 @@ func (l *JSONLogger) CaptureState(env *EVM, pc uint64, op OpCode, gas, cost uint
 }
 
 // CaptureEnd is triggered at end of execution.
-func (l *JSONLogger) CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error) {
+func (l *JSONLogger) CaptureEnd(depth int, output []byte, gasUsed uint64, t time.Duration, err error, reverted bool) {
 	type endLog struct {
-		Output  string              `json:"output"`
-		GasUsed math.HexOrDecimal64 `json:"gasUsed"`
-		Time    time.Duration       `json:"time"`
-		Err     string              `json:"error,omitempty"`
+		Depth    int                 `json:"depth"`
+		Output   string              `json:"output"`
+		GasUsed  math.HexOrDecimal64 `json:"gasUsed"`
+		Time     time.Duration       `json:"time"`
+		Err      string              `json:"error,omitempty"`
+		Reverted bool                `json:"reverted"`
 	}
 	var errMsg string
 	if err != nil {
 		errMsg = err.Error()
 	}
-	l.encoder.Encode(endLog{common.Bytes2Hex(output), math.HexOrDecimal64(gasUsed), t, errMsg})
+	l.encoder.Encode(endLog{depth, common.Bytes2Hex(output), math.HexOrDecimal64(gasUsed), t, errMsg, reverted})
 }

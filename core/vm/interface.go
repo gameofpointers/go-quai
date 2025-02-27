@@ -81,6 +81,8 @@ type StateDB interface {
 	UnderlyingDatabase() ethdb.KeyValueReader
 	Finalize(deleteEmptyObjects bool)
 
+	GetLocation() common.Location
+
 	// Accesors related to the controller
 	UpdateKQuai(*big.Int) error
 	GetKQuai() (*big.Int, error)

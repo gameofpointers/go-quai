@@ -21,6 +21,8 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/node"
 	"github.com/dominant-strategies/go-quai/params"
+
+	_ "github.com/dominant-strategies/go-quai/quai/tracers/native"
 )
 
 var gitCommit, gitDate string

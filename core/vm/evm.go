@@ -196,6 +196,10 @@ func (evm *EVM) Interpreter() *EVMInterpreter {
 	return evm.interpreter
 }
 
+func (evm *EVM) Depth() int {
+	return evm.depth
+}
+
 // Call executes the contract associated with the addr with the given input as
 // parameters. It also handles any necessary value transfer required and takes
 // the necessary steps to create accounts and reverses the state in case of an
@@ -224,6 +228,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		ret, leftOverGas, stateGas, err = evm.CreateETX(addr, caller.Address(), gas, value, input)
 		if err != nil {
 			evm.StateDB.RevertToSnapshot(snapshot)
+			// Failed to create etx, don't do anything, but ping the tracer
+			if evm.Config.Debug && evm.depth == 0 {
+				evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
+				evm.Config.Tracer.CaptureEnd(0, ret, 0, 0, nil, true)
+			}
 		}
 		return ret, leftOverGas, stateGas, err
 	}
@@ -232,7 +241,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			// Calling a non existing account, don't do anything, but ping the tracer
 			if evm.Config.Debug && evm.depth == 0 {
 				evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
-				evm.Config.Tracer.CaptureEnd(ret, 0, 0, nil)
+				evm.Config.Tracer.CaptureEnd(0, ret, 0, 0, nil, false)
 			}
 			return nil, gas, stateGas, nil
 		}
@@ -253,7 +262,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if evm.Config.Debug && evm.depth == 0 {
 		evm.Config.Tracer.CaptureStart(evm, caller.Address(), addr, false, input, gas, value)
 		defer func(startGas uint64, startTime time.Time) { // Lazy evaluation of the parameters
-			evm.Config.Tracer.CaptureEnd(ret, startGas-gas, time.Since(startTime), err)
+			evm.Config.Tracer.CaptureEnd(0, ret, startGas-gas, time.Since(startTime), err, false)
 		}(gas, time.Now())
 	}
 
@@ -551,7 +560,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	}
 
 	if evm.Config.Debug && evm.depth == 0 {
-		evm.Config.Tracer.CaptureEnd(ret, gas-contract.Gas, time.Since(start), err)
+		evm.Config.Tracer.CaptureEnd(0, ret, gas-contract.Gas, time.Since(start), err, false)
 	}
 	return ret, address, contract.Gas, stateUsed, err
 }
@@ -722,4 +731,26 @@ func (evm *EVM) UndoCoinbasesDeleted() {
 		evm.Batch.Put(key[:], value)
 	}
 	evm.ResetCoinbasesDeleted()
+}
+
+// VMContext provides the context for the EVM execution.
+type VMContext struct {
+	Coinbase    common.Address
+	BlockNumber *big.Int
+	Time        uint64
+	Random      *common.Hash
+	BaseFee     *big.Int
+	StateDB     StateDB
+}
+
+// GetVMContext provides context about the block being executed as well as state
+// to the tracers.
+func (evm *EVM) GetVMContext() *VMContext {
+	return &VMContext{
+		Coinbase:    evm.Context.PrimaryCoinbase,
+		BlockNumber: evm.Context.BlockNumber,
+		Time:        evm.Context.Time.Uint64(),
+		BaseFee:     evm.Context.BaseFee,
+		StateDB:     evm.StateDB,
+	}
 }
