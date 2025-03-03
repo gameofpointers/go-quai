@@ -211,9 +211,11 @@ var (
 	ConversionLockPeriod uint64 = 100
 	CoinbaseEpochBlocks  uint64 = 50000
 
-	StartingKQuaiDiscount               = big.NewInt(100)
+	// Controller related constants
+	StartingKQuaiDiscount               = big.NewInt(0)                                          // TODO: Need to have forking logic around this to take it to zero after the qi activation
 	StartingConversionFlowAmount        = new(big.Int).Mul(big.NewInt(10000), big.NewInt(Ether)) // Starting conversion flow amount in Quai
 	MinerDifficultyWindow        uint64 = 1000
+	KQuaiDiscountMultiplier      int64  = 100000
 )
 
 func CalculateLockupByteRewardsMultiple(lockupByte uint8, blockNumber uint64) (*big.Int, error) {
