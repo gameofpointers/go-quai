@@ -45,38 +45,41 @@ func QuaiToQi(block *types.WorkObject, exchangeRate *big.Int, difficulty *big.In
 // k_quai += alpha * (x_b_star / x_d - 1) * k_quai
 // spaces = [{"K Qi": state["K Qi"], "K Quai": k_quai}, spaces[1]]
 // return spaces
-func CalculateKQuai(block *types.WorkObject, parentExchangeRate *big.Int, minerDifficulty *big.Int, beta0 *big.Int) *big.Int {
+func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, xbStar *big.Int) *big.Int {
 	// Set kQuai to the exchange rate from the header
 	kQuai := new(big.Int).Set(parentExchangeRate) // in Its
 
 	// Calculate log of the difficulty
+	d1 := new(big.Int).Mul(common.Big2e64, minerDifficulty)
 	d2 := LogBig(minerDifficulty)
 
-	// Multiply beta0 and d2
-	num := new(big.Int).Mul(beta0, d2)
+	// k_quai += alpha * (x_b_star / x_d - 1) * k_quai
+	// k_quai = k_quai + alpha * (x_b_star / x_d - 1) * k_quai
+	// k_quai = (k_quai * d1 + k_quai * alpha * (x_b_star * log(d1) - d1))/d1
 
-	// Negate num
-	negnum := new(big.Int).Neg(num)
+	// To keep the maximum amount of precision,
+	// denum = d1 * 1/alpha
+	// adder = k_quai * denum
+	// num = (adder + k_quai * (xbStar * log(d1) - d1))
+	// There is a 2^64 element here on all the terms to keep the decimals from
+	// the log
 
 	// Multiply beta1 and the difficulty
-	denom := new(big.Int).Mul(common.Big2e64, minerDifficulty)
-
-	// Divide negnum by denom
-	frac := new(big.Int).Quo(negnum, denom)
-
-	// Subtract 2^64 from frac
-	sub := new(big.Int).Sub(frac, common.Big2e64)
-
-	// Multiply sub by kQuai
-	bykQuai := new(big.Int).Mul(sub, kQuai)
-
 	// Multiply params.OneOverAlpha by 2^64
-	divisor := new(big.Int).Mul(params.OneOverAlpha, common.Big2e64)
+	denum := new(big.Int).Mul(d1, params.OneOverAlpha)
+	adder := new(big.Int).Mul(kQuai, denum)
+
+	// Multiply beta0 and d2
+	num := new(big.Int).Mul(xbStar, d2)
+	// Subtract the d1
+	num = new(big.Int).Sub(num, d1)
+	// Multiply by kQuai
+	num = new(big.Int).Mul(num, kQuai)
+	// Add the previous kQuai with the denum multiplied(adder)
+	num = new(big.Int).Add(num, adder)
 
 	// Divide bykQuai by divisor to get the final result
-	delta := new(big.Int).Quo(bykQuai, divisor)
-
-	final := new(big.Int).Add(kQuai, delta)
+	final := new(big.Int).Quo(num, denum)
 
 	return final
 }

@@ -540,6 +540,8 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	start := time.Now()
 	if nodeCtx == common.ZONE_CTX && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
 		w.minerPreference = 0 // only mine Quai until the controller kicks in
+	} else {
+		w.minerPreference = w.config.MinerPreference
 	}
 	w.pickCoinbases()
 	// Set the primary coinbase if the worker is running or it's required
@@ -751,35 +753,6 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	work.utxosDelete = nil
 	work.coinbaseRotatedEpochs = nil
 	return newWo, nil
-}
-
-func (w *worker) GetKQuaiAndUpdateBit(parent *types.WorkObject) (*big.Int, uint8, error) {
-	// Retrieve the parent state to execute on top and start a prefetcher for
-	// the miner to speed block sealing up a bit.
-	evmRoot := parent.EVMRoot()
-	etxRoot := parent.EtxSetRoot()
-	quaiStateSize := parent.QuaiStateSize()
-	if w.hc.IsGenesisHash(parent.Hash()) {
-		evmRoot = types.EmptyRootHash
-		etxRoot = types.EmptyRootHash
-		quaiStateSize = big.NewInt(0)
-	}
-	state, err := w.hc.bc.processor.StateAt(evmRoot, etxRoot, quaiStateSize)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	kQuai, err := state.GetKQuai()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	updateBit, err := state.GetUpdateBit()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return kQuai, updateBit, nil
 }
 
 // printPendingHeaderInfo logs the pending header information
@@ -1713,9 +1686,6 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			newWo.Header().SetExchangeRate(params.ExchangeRate)
 		} else {
 
-			// use the parent exchange rate
-			parentExchangeRate := parent.ExchangeRate()
-
 			// There are 6 steps to the exchange rate calculation
 			// 1. Convert the amounts using the parent exchange rate or the exchange
 			// rate set in the statedb
@@ -1726,34 +1696,24 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			// 6. Apply the quadratic Conversion Flow discount
 
 			///////// Step 1 //////////
-			var conversionFlowAmount = parent.ConversionFlowAmount()
-
 			// Read inbound etxs, this needs to be calculated for the pending manifests
 			inboundEtxs := rawdb.ReadInboundEtxs(w.workerDb, parent.Hash())
+			if inboundEtxs == nil {
+				return nil, errors.New("cannot find the inbound etxs for parent")
+			}
 
 			// Need a variable to calculate the total hash value that is being converted
-			conversionAmountInQuai := big.NewInt(0)
-			// Calculate the total conversion amount in hash
-			for _, etx := range inboundEtxs {
-				// If the etx is conversion
-				if types.IsConversionTx(etx) {
-					value := etx.Value()
-					// If to is in Qi, convert the value into Qi
-					if etx.To().IsInQiLedgerScope() {
-						conversionAmountInQuai = new(big.Int).Add(conversionAmountInQuai, value)
-					}
-					// If To is in Quai, convert the value into Quai
-					if etx.To().IsInQuaiLedgerScope() {
-						value = misc.QiToQuai(parent, parentExchangeRate, parent.MinerDifficulty(), value)
-						conversionAmountInQuai = new(big.Int).Add(conversionAmountInQuai, value)
-					}
-				}
-			}
+			conversionAmountInQuai := w.hc.ComputeConversionAmountInQuai(parent, inboundEtxs)
+
+			// Adjust the conversion flow amount based on the parent block conversion amounts
+			currentBlockConversionFlowAmount := w.hc.ComputeConversionFlowAmount(parent, new(big.Int).Set(conversionAmountInQuai))
+			newWo.Header().SetConversionFlowAmount(currentBlockConversionFlowAmount)
 
 			///////// Step 2 /////////
 			// Apply K Quai discount before applying the quadratic discount, conversionAmount = (1-kQuaiDiscount)*conversionAmountInHash
 			kQuaiDiscount := parent.KQuaiDiscount()
-			conversionAmountAfterKQuaiDiscount := new(big.Int).Mul(conversionAmountInQuai, new(big.Int).Sub(big.NewInt(100), kQuaiDiscount))
+			conversionAmountAfterKQuaiDiscount := new(big.Int).Mul(conversionAmountInQuai, new(big.Int).Sub(big.NewInt(params.KQuaiDiscountMultiplier), kQuaiDiscount))
+			conversionAmountAfterKQuaiDiscount = new(big.Int).Div(conversionAmountAfterKQuaiDiscount, big.NewInt(params.KQuaiDiscountMultiplier))
 
 			originalEtxValues := make([]*big.Int, len(inboundEtxs))
 
@@ -1767,7 +1727,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 					value := etx.Value()
 					// If to is in Qi, convert the value into Qi
 					if etx.To().IsInQiLedgerScope() {
-						value = misc.QuaiToQi(parent, parentExchangeRate, parent.MinerDifficulty(), value)
+						value = misc.QuaiToQi(parent, parent.ExchangeRate(), parent.MinerDifficulty(), value)
 
 						// Apply the slip to each conversion
 						value = new(big.Int).Mul(value, conversionAmountAfterKQuaiDiscount)
@@ -1775,7 +1735,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 					}
 					// If To is in Quai, convert the value into Quai
 					if etx.To().IsInQuaiLedgerScope() {
-						value = misc.QiToQuai(parent, parentExchangeRate, parent.MinerDifficulty(), value)
+						value = misc.QiToQuai(parent, parent.ExchangeRate(), parent.MinerDifficulty(), value)
 
 						// Apply the slip to each conversion
 						value = new(big.Int).Mul(value, conversionAmountAfterKQuaiDiscount)
@@ -1786,14 +1746,19 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			}
 
 			//////// Step 3 /////////
-			minerDifficulty := newWo.MinerDifficulty()
+			minerDifficulty := parent.MinerDifficulty()
 
 			// save the actual and realized conversion amount
 			actualConversionAmountInQuai := new(big.Int).Set(conversionAmountInQuai)
 			realizedConversionAmountInQuai := new(big.Int).Set(conversionAmountAfterKQuaiDiscount)
 
+			parentOfParent := w.hc.GetBlockByHash(parent.ParentHash(common.PRIME_CTX))
+			if parentOfParent == nil {
+				return nil, errors.New("parent of parent not found")
+			}
+
 			// convert map to a slice
-			updatedTokenChoiceSet, err := CalculateTokenChoicesSet(w.hc, newWo, parent, parentExchangeRate, inboundEtxs, actualConversionAmountInQuai, realizedConversionAmountInQuai, minerDifficulty)
+			updatedTokenChoiceSet, err := CalculateTokenChoicesSet(w.hc, parent, parentOfParent, parent.ExchangeRate(), inboundEtxs, actualConversionAmountInQuai, realizedConversionAmountInQuai, minerDifficulty)
 			if err != nil {
 				return nil, err
 			}
@@ -1807,7 +1772,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			if parent.NumberU64(common.ZONE_CTX) <= params.BlocksPerYear && updateBit == 0 {
 				exchangeRate = storedExchangeRate
 			} else {
-				exchangeRate, err = CalculateBetaFromMiningChoiceAndConversions(w.hc, parent, exchangeRate, updatedTokenChoiceSet)
+				exchangeRate, err = CalculateBetaFromMiningChoiceAndConversions(w.hc, parent, parent.ExchangeRate(), updatedTokenChoiceSet)
 				if err != nil {
 					return nil, err
 				}
@@ -1815,73 +1780,9 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			// set the calculated exchange rate
 			newWo.Header().SetExchangeRate(exchangeRate)
 
-			//////// Step 4 ////////
-			newConversionAmountInQuai := big.NewInt(0)
-			for i, etx := range inboundEtxs {
-				// If the etx is conversion
-				if types.IsConversionTx(etx) {
-					// Use the original etx values
-					value := originalEtxValues[i]
-					// If to is in Qi, convert the value into Qi
-					if etx.To().IsInQiLedgerScope() {
-						newConversionAmountInQuai = new(big.Int).Add(newConversionAmountInQuai, value)
-					}
-					// If To is in Quai, convert the value into Quai
-					if etx.To().IsInQuaiLedgerScope() {
-						value = misc.QiToQuai(newWo, exchangeRate, newWo.MinerDifficulty(), value)
-						newConversionAmountInQuai = new(big.Int).Add(newConversionAmountInQuai, value)
-					}
-					etx.SetValue(value)
-				}
-			}
-
 			//////// Step 5 ///////
-			newkQuaiDiscount := w.hc.ComputeKQuaiDiscount(newWo)
+			newkQuaiDiscount := w.hc.ComputeKQuaiDiscount(parent, exchangeRate)
 			newWo.Header().SetKQuaiDiscount(newkQuaiDiscount)
-
-			newConversionAmountAfterKQuaiDiscount := new(big.Int).Mul(newConversionAmountInQuai, new(big.Int).Sub(big.NewInt(100), newkQuaiDiscount))
-			for _, etx := range inboundEtxs {
-				// If the etx is conversion
-				if types.IsConversionTx(etx) {
-					value := etx.Value()
-					// If to is in Qi, convert the value into Qi
-					if etx.To().IsInQiLedgerScope() {
-						// Apply the slip to each conversion
-						value = new(big.Int).Mul(value, newConversionAmountAfterKQuaiDiscount)
-						value = new(big.Int).Div(value, newConversionAmountInQuai)
-					}
-					// If To is in Quai, convert the value into Quai
-					if etx.To().IsInQuaiLedgerScope() {
-						// Apply the slip to each conversion
-						value = new(big.Int).Mul(value, newConversionAmountAfterKQuaiDiscount)
-						value = new(big.Int).Div(value, newConversionAmountInQuai)
-					}
-					etx.SetValue(value)
-				}
-			}
-
-			/////// Step 6 ////////
-			discountedConversionAmount := w.hc.ApplyQuadraticDiscount(newConversionAmountAfterKQuaiDiscount, conversionFlowAmount)
-			discountedConversionAmountInInt, _ := discountedConversionAmount.Int64()
-			for _, etx := range inboundEtxs {
-				// If the etx is conversion
-				if types.IsConversionTx(etx) {
-					value := etx.Value()
-					// If to is in Qi, convert the value into Qi
-					if etx.To().IsInQiLedgerScope() {
-						// Apply the slip to each conversion
-						value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
-						value = new(big.Int).Div(value, newConversionAmountAfterKQuaiDiscount)
-					}
-					// If To is in Quai, convert the value into Quai
-					if etx.To().IsInQuaiLedgerScope() {
-						// Apply the slip to each conversion
-						value = new(big.Int).Mul(value, big.NewInt(discountedConversionAmountInInt))
-						value = new(big.Int).Div(value, newConversionAmountAfterKQuaiDiscount)
-					}
-					etx.SetValue(value)
-				}
-			}
 		}
 	}
 
