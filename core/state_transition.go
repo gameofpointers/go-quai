@@ -35,7 +35,7 @@ var suicide = []byte("Suicide")
 
 // conversion related variables
 var (
-	kQuaiSettingAddress = common.HexToAddress("0x00640d82EF6552085e494DF2a2EAec18D8215913", common.Location{0, 0})
+	kQuaiSettingAddress = common.HexToAddress("0x00783ffD49a7B903D94b5EE7FbADEC12e85632D2", common.Location{0, 0})
 	updateKQuai         = []byte("update")
 	updateKQuaiLen      = len(updateKQuai)
 	freezeKQuai         = []byte("freeze")
