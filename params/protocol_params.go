@@ -164,11 +164,11 @@ var (
 	LighthouseGasCeil          uint64 = 50000000
 	LocalGasCeil               uint64 = 50000000
 	DurationLimit                     = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	GardenDurationLimit               = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
+	GardenDurationLimit               = big.NewInt(7) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	OrchardDurationLimit              = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LighthouseDurationLimit           = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(1) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	TimeToStartTx              uint64 = 15 * BlocksPerDay
+	TimeToStartTx              uint64 = 0
 	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 5 second block time
 	BlocksPerWeek              uint64 = 7 * BlocksPerDay
 	BlocksPerMonth             uint64 = 30 * BlocksPerDay
@@ -177,7 +177,7 @@ var (
 	DifficultyAdjustmentFactor int64  = 40                                                          // This is the factor that divides the log of the change in the difficulty
 	MinQuaiConversionAmount           = new(big.Int).Mul(big.NewInt(10000000000), big.NewInt(GWei)) // 0.000000001 Quai
 	MaxWorkShareCount                 = 16
-	WorkSharesThresholdDiff           = 3 // Number of bits lower than the target that the default consensus engine uses
+	WorkSharesThresholdDiff           = 0 // Number of bits lower than the target that the default consensus engine uses
 	WorkShareP2PThresholdDiff         = 7 // Default value in bits lower than the target
 	WorkSharesInclusionDepth          = 3 // Number of blocks upto which the work shares can be referenced and this is protocol enforced
 	MaxLockupByte                     = 3 // Max lockup byte allowed in the transactions for coinbase
@@ -198,24 +198,24 @@ var (
 	}
 	ExchangeRate = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	// These numbers should be "equivalent" to the initial conversion rate
-	QuaiToQiConversionBase                      = big.NewInt(10000000)    // UNUSED Is the starting "historical conversion" in Qits for 10,000 Quai we need 10,000*1e3
-	QiToQuaiConversionBase                      = big.NewInt(10000000)    // UNUSED Is the starting "historical conversion" in Qits for 10,000 Qi we need 10,000*1e3
-	MaxTimeDiffBetweenBlocks             int64  = 100                     // Max time difference between the blocks to 100 secs
-	OneOverAlpha                                = big.NewInt(1000)        // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = (7 * BlocksPerWeek) / 4 // This is in order of prime blocks
-	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek       // The height at which the coinbase lockup precompile is enabled
+	QuaiToQiConversionBase                      = big.NewInt(10000000) // UNUSED Is the starting "historical conversion" in Qits for 10,000 Quai we need 10,000*1e3
+	QiToQuaiConversionBase                      = big.NewInt(10000000) // UNUSED Is the starting "historical conversion" in Qits for 10,000 Qi we need 10,000*1e3
+	MaxTimeDiffBetweenBlocks             int64  = 100                  // Max time difference between the blocks to 100 secs
+	OneOverAlpha                                = big.NewInt(1000)     // The alpha value for the quai to qi conversion
+	ControllerKickInBlock                uint64 = 20                   // This is in order of prime blocks
+	CoinbaseLockupPrecompileKickInHeight uint64 = 100                  // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
 	BaseFeeMultiplier                           = big.NewInt(50)
 
-	ConversionLockPeriod uint64 = 2 * BlocksPerWeek
-	CoinbaseEpochBlocks  uint64 = 50000
+	ConversionLockPeriod uint64 = 100
+	CoinbaseEpochBlocks  uint64 = 100
 
 	// Controller related constants
 	StartingKQuaiDiscount               = big.NewInt(100)
 	StartingConversionFlowAmount        = new(big.Int).Mul(big.NewInt(10000), big.NewInt(Ether)) // Starting conversion flow amount in Quai
 	MinConversionFlowAmount             = new(big.Int).Mul(big.NewInt(100), big.NewInt(Ether))   // Min conversion flow amount in Quai
-	MinerDifficultyWindow        uint64 = 4000
+	MinerDifficultyWindow        uint64 = 400
 	KQuaiDiscountMultiplier      int64  = 100000
 )
 
