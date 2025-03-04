@@ -344,7 +344,7 @@ func DefaultGardenGenesisBlock(consensusEngine string, nonce uint64, extra []byt
 		Nonce:      nonce,
 		ExtraData:  extra,
 		GasLimit:   12000000,
-		Difficulty: big.NewInt(7000),
+		Difficulty: big.NewInt(1000000000),
 	}
 	if consensusEngine == "blake3" {
 		genesis.Config = params.Blake3PowGardenChainConfig
