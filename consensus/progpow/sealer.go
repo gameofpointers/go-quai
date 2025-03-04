@@ -125,7 +125,7 @@ func (progpow *Progpow) Mine(workObject *types.WorkObject, abort <-chan struct{}
 }
 
 func (progpow *Progpow) MineToThreshold(workObject *types.WorkObject, workShareThreshold int, abort <-chan struct{}, found chan *types.WorkObject) {
-	if workShareThreshold <= 0 {
+	if workShareThreshold < 0 {
 		log.Global.WithField("WorkshareThreshold", workShareThreshold).Error("WorkshareThreshold must be positive")
 		return
 	}
