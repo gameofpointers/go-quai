@@ -61,22 +61,14 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 
 	// Firstly calculated the new beta from the best diff calculated from the previous step
 	// Since, -B0/B1 = diff/log(diff), B1 is set to 1
-	newBeta0 := new(big.Float).Quo(new(big.Float).SetInt(bestDiff), new(big.Float).SetInt(common.LogBig(bestDiff)))
-	newBeta0 = new(big.Float).Mul(newBeta0, big.NewFloat(-1))
+	newBeta0OverBeta1 := new(big.Int).Div(new(big.Int).Mul(bestDiff, common.Big2e64), common.LogBig(bestDiff))
 
-	// convert the beta values into the big numbers so that in the exchange rate
-	// computation
-	bigBeta0 := new(big.Float).Mul(newBeta0, new(big.Float).SetInt(common.Big2e64))
-	bigBeta0Int, _ := bigBeta0.Int(nil)
-
-	parent := hc.GetBlockByHash(block.ParentHash(common.PRIME_CTX))
-	if parent == nil {
-		return nil, errors.New("parent cannot be found")
+	if bestDiff.Cmp(block.MinerDifficulty()) > 0 {
+		newBeta0OverBeta1 = new(big.Int).Mul(newBeta0OverBeta1, big.NewInt(-1))
 	}
 
-	minerDifficulty := hc.ComputeMinerDifficulty(parent)
 	// If parent is genesis, there is nothing to train
-	exchangeRate := misc.CalculateKQuai(block, parentExchangeRate, minerDifficulty, bigBeta0Int)
+	exchangeRate := misc.CalculateKQuai(parentExchangeRate, block.MinerDifficulty(), newBeta0OverBeta1)
 
 	return exchangeRate, nil
 }
@@ -91,7 +83,7 @@ func CalculateTokenChoicesSet(hc *HeaderChain, block, parent *types.WorkObject, 
 
 	var parentTokenChoicesSet *types.TokenChoiceSet
 	// Look up prior tokenChoiceSet and update
-	if block.NumberU64(common.PRIME_CTX) == params.ControllerKickInBlock {
+	if block.NumberU64(common.PRIME_CTX) <= params.ControllerKickInBlock+1 {
 		emptyTokenChoicesSet := types.NewTokenChoiceSet()
 		parentTokenChoicesSet = &emptyTokenChoicesSet
 	} else {
