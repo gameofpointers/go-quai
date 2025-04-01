@@ -6,9 +6,9 @@ import (
 
 const (
 	// ProtocolVersion is the current version of the Quai protocol
-	ProtocolVersion protocol.ID = "/quai/1.0.0"
+	ProtocolVersion protocol.ID = "/quai/2.0.0"
 
-	ClientVersion protocol.ID = "/quai/1.0.0"
+	ClientVersion protocol.ID = "/quai/2.0.0"
 
 	// Block height before which the prior major release will be tolerated
 	//
