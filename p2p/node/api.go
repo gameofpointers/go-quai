@@ -170,6 +170,9 @@ func (p *P2PNode) requestFromPeers(topic *pubsubManager.Topic, requestData inter
 			// c_streamPeerThreshold number of streams otherwise look up peers
 			// from the database and create streams with them
 			peers := p.peerManager.GetStreamPeers()
+			for _, bn := range p.peerManager.GetBootPeers() {
+				peers = append(peers, bn.ID)
+			}
 			if len(peers) < c_streamPeerThreshold {
 				peersMap := p.peerManager.GetPeers(topic)
 				peers = make([]peer.ID, 0)

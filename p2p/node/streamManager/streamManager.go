@@ -56,6 +56,8 @@ type StreamManager interface {
 	// GetStreamPeers returns the peers that the node has open streams with
 	GetStreamPeers() []peer.ID
 
+	GetBootPeers() []peer.AddrInfo
+
 	// CloseStream goes through all the steps to properly close and remove a stream's resources
 	CloseStream(peer.ID) error
 
@@ -220,6 +222,10 @@ func (sm *basicStreamManager) GetStream(peerID p2p.PeerID) (network.Stream, erro
 
 func (sm *basicStreamManager) GetStreamPeers() []peer.ID {
 	return sm.streamCache.Keys()
+}
+
+func (sm *basicStreamManager) GetBootPeers() []peer.AddrInfo {
+	return []peer.AddrInfo{}
 }
 
 func (sm *basicStreamManager) SetP2PBackend(host quaiprotocol.QuaiP2PNode) {

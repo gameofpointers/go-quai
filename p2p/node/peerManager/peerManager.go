@@ -492,6 +492,10 @@ func (pm *BasicPeerManager) GetStreamPeers() []peer.ID {
 	return pm.streamManager.GetStreamPeers()
 }
 
+func (pm *BasicPeerManager) GetBootPeers() []peer.AddrInfo {
+	return pm.bootpeers
+}
+
 func (pm *BasicPeerManager) queryDHT(topic *pubsubManager.Topic, peerList map[p2p.PeerID]struct{}, peerCount int) map[p2p.PeerID]struct{} {
 	// create a Cid from the slice location
 	shardCid := pubsubManager.TopicToCid(topic)
