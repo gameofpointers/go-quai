@@ -826,6 +826,9 @@ func UnwrapQi(evm *EVM, ownerContract common.Address, gas *uint64, input []byte)
 	}
 
 	externalTx := types.ExternalTx{Value: value, To: &beneficiaryQi, Sender: ownerContract, EtxType: uint64(types.CoinbaseLockupType), OriginatingTxHash: evm.Hash, ETXIndex: uint16(index), Gas: etxGasLimit}
+	if evm.Context.PrimeTerminusNumber >= params.OrchardConversionRefundKickBlock {
+		externalTx = types.ExternalTx{Value: value, To: &beneficiaryQi, Sender: ownerContract, EtxType: uint64(types.UnwrapQiType), OriginatingTxHash: evm.Hash, ETXIndex: uint16(index), Gas: etxGasLimit}
+	}
 	log.Global.Infof("Unwrapped Qi: %v -> %v, value: %v", ownerContract, beneficiaryQi, value)
 	evm.ETXCacheLock.Lock()
 	evm.ETXCache = append(evm.ETXCache, types.NewTx(&externalTx))
