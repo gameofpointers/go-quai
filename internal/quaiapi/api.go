@@ -1514,6 +1514,10 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 			return common.Hash{}, err
 		}
 
+		if tx.To() != nil && tx.To().IsInQiLedgerScope() {
+			return common.Hash{}, errors.New("conversion tx not allowed")
+		}
+
 		// Send the tx to tx pool sharing clients
 		if err := b.SendTxToSharingClients(tx); err != nil {
 			return common.Hash{}, err
