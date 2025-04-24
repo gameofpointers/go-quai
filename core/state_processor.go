@@ -596,7 +596,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 									// No more gas, the rest of the denominations are lost but the tx is still valid
 									break
 								}
-								utxo := types.NewUtxoEntry(types.NewTxOut(uint8(denomination), tx.To().Bytes(), lockup))
+								utxo := types.NewUtxoEntry(types.NewTxOut(uint8(denomination), etx.To().Bytes(), lockup))
 								// the ETX hash is guaranteed to be unique
 								if err := rawdb.CreateUTXO(batch, etx.Hash(), outputIndex, utxo); err != nil {
 									return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
@@ -614,6 +614,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 										Denomination: utxo.Denomination,
 										Lock:         utxo.Lock,
 									})
+									p.logger.Infof("Adding Coinbase UTXO to address map %s for coinbase %032x with denomination %d index %d\n", address.String(), tx.Hash(), denomination, outputIndex)
 								}
 								p.logger.Debugf("Creating UTXO for coinbase %032x with denomination %d index %d\n", tx.Hash(), denomination, outputIndex)
 								total.Add(total, types.Denominations[uint8(denomination)])
@@ -805,7 +806,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 							utxosCreatedDeleted.UtxosCreatedHashes = append(utxosCreatedDeleted.UtxosCreatedHashes, types.UTXOHash(etx.Hash(), outputIndex, utxo))
 							utxosCreatedDeleted.UtxosCreatedKeys = append(utxosCreatedDeleted.UtxosCreatedKeys, rawdb.UtxoKeyWithDenomination(etx.Hash(), outputIndex, utxo.Denomination))
 							if p.config.IndexAddressUtxos {
-								address := etx.To().Bytes20()
+								address := sender.Bytes20()
 								// add the utxo to the address outpoints index
 								utxosCreatedDeleted.AddressOutpointsToAddMap[address] = append(utxosCreatedDeleted.AddressOutpointsToAddMap[address], &types.OutpointAndDenomination{
 									TxHash:       etx.Hash(),
@@ -1273,7 +1274,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		if err := rawdb.WriteAddressUTXOs(batch, p.hc.headerDb, utxosCreatedDeleted.AddressOutpointsToAddMap); err != nil {
 			p.logger.Errorf("failed to write address utxos for block %x: %v", blockHash, err)
 		}
-		if err := rawdb.DeleteAddressUTXOs(batch, p.hc.headerDb, utxosCreatedDeleted.AddressOutpointsToRemoveMap); err != nil {
+		if err := rawdb.DeleteAddressUTXOsWithBatch(batch, p.hc.headerDb, utxosCreatedDeleted.AddressOutpointsToRemoveMap); err != nil {
 			p.logger.Errorf("failed to delete address utxos for block %x: %v", blockHash, err)
 		}
 	}

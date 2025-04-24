@@ -1109,12 +1109,50 @@ func DeleteInboundEtxs(db ethdb.KeyValueWriter, hash common.Hash) {
 	}
 }
 
-func DeleteAddressUTXOs(db ethdb.KeyValueWriter, readDb ethdb.Reader, outpointsToRemoveMap map[[20]byte][]*types.OutPoint) error {
-	for address, outpoints := range outpointsToRemoveMap {
-		data, _ := readDb.Get(addressUtxosWithoutHeightKey(address))
-		if len(data) == 0 {
-			return fmt.Errorf("No UTXO data found for address %x", address)
+func WriteAddressUTXOs(db ethdb.KeyValueWriter, readDb ethdb.Reader, newOutpointsMap map[[20]byte][]*types.OutpointAndDenomination) error {
+	for address, outpoints := range newOutpointsMap {
+		addressOutpointsProto := &types.ProtoAddressOutPoints{
+			OutPoints: make([]*types.ProtoOutPointAndDenomination, 0),
 		}
+
+		data, _ := readDb.Get(addressUtxosWithoutHeightKey(address))
+		if len(data) != 0 {
+			if err := proto.Unmarshal(data, addressOutpointsProto); err != nil {
+				return fmt.Errorf("Failed to proto Unmarshal address outpoints: %v", err)
+			}
+		}
+
+		for _, outpoint := range outpoints {
+			outpointProto, err := outpoint.ProtoEncode()
+			if err != nil {
+				return err
+			}
+			db.Logger().Infof("Writing outpoint %v txhash %x index %d denomination %d address %s", outpoint, outpoint.TxHash, outpoint.Index, outpoint.Denomination, common.AddressBytes(address).String())
+			addressOutpointsProto.OutPoints = append(addressOutpointsProto.OutPoints, outpointProto)
+		}
+		// Now, marshal utxosProto to protobuf bytes
+		data, err := proto.Marshal(addressOutpointsProto)
+		if err != nil {
+			db.Logger().WithField("err", err).Fatal("Failed to rlp encode utxos")
+		}
+		if err := db.Put(addressUtxosWithoutHeightKey(address), data); err != nil {
+			db.Logger().WithField("err", err).Fatal("Failed to store utxos")
+		}
+	}
+	return nil
+}
+
+// Make sure this always runs *after* WriteAddressUTXOs
+func DeleteAddressUTXOsWithBatch(batch ethdb.Batch, readDb ethdb.Reader, outpointsToRemoveMap map[[20]byte][]*types.OutPoint) error {
+	for address, outpoints := range outpointsToRemoveMap {
+		_, data := batch.GetPending(addressUtxosWithoutHeightKey(address))
+		if len(data) == 0 {
+			data, _ = readDb.Get(addressUtxosWithoutHeightKey(address))
+			if len(data) == 0 {
+				return fmt.Errorf("No UTXO data found for address %x", address)
+			}
+		}
+
 		addressOutpointsProto := &types.ProtoAddressOutPoints{
 			OutPoints: make([]*types.ProtoOutPointAndDenomination, 0),
 		}
@@ -1134,6 +1172,7 @@ func DeleteAddressUTXOs(db ethdb.KeyValueWriter, readDb ethdb.Reader, outpointsT
 						// Decrement i to account for the removed element
 						i--
 					}
+					batch.Logger().Infof("Deleting outpoint %v txhash %x index %d address %s", outpoint, outpoint.TxHash, outpoint.Index, address)
 				}
 			}
 		}
@@ -1145,47 +1184,14 @@ func DeleteAddressUTXOs(db ethdb.KeyValueWriter, readDb ethdb.Reader, outpointsT
 		}
 		if len(data) == 0 {
 			// If the data is empty, delete the key from the database
-			if err := db.Delete(addressUtxosWithoutHeightKey(address)); err != nil {
+			if err := batch.Delete(addressUtxosWithoutHeightKey(address)); err != nil {
 				return fmt.Errorf("Failed to delete address outpoints: %v", err)
 			}
 		} else {
 			// Otherwise, update the key with the new data
-			if err := db.Put(addressUtxosWithoutHeightKey(address), data); err != nil {
+			if err := batch.Put(addressUtxosWithoutHeightKey(address), data); err != nil {
 				return fmt.Errorf("Failed to store address outpoints: %v", err)
 			}
-		}
-	}
-	return nil
-}
-
-func WriteAddressUTXOs(db ethdb.KeyValueWriter, readDb ethdb.Reader, newOutpointsMap map[[20]byte][]*types.OutpointAndDenomination) error {
-	for address, outpoints := range newOutpointsMap {
-		addressOutpointsProto := &types.ProtoAddressOutPoints{
-			OutPoints: make([]*types.ProtoOutPointAndDenomination, 0),
-		}
-
-		data, _ := readDb.Get(addressUtxosWithoutHeightKey(address))
-		if len(data) != 0 {
-			if err := proto.Unmarshal(data, addressOutpointsProto); err != nil {
-				return fmt.Errorf("Failed to proto Unmarshal address outpoints: %v", err)
-			}
-		}
-
-		for _, outpoint := range outpoints {
-			outpointProto, err := outpoint.ProtoEncode()
-			if err != nil {
-				return err
-			}
-
-			addressOutpointsProto.OutPoints = append(addressOutpointsProto.OutPoints, outpointProto)
-		}
-		// Now, marshal utxosProto to protobuf bytes
-		data, err := proto.Marshal(addressOutpointsProto)
-		if err != nil {
-			db.Logger().WithField("err", err).Fatal("Failed to rlp encode utxos")
-		}
-		if err := db.Put(addressUtxosWithoutHeightKey(address), data); err != nil {
-			db.Logger().WithField("err", err).Fatal("Failed to store utxos")
 		}
 	}
 	return nil
