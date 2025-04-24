@@ -577,7 +577,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 						Index:  index,
 					})
 				}
-				if err := rawdb.DeleteAddressUTXOs(batch, hc.headerDb, addressOutpointsToRemoveMap); err != nil {
+				if err := rawdb.DeleteAddressUTXOsWithBatch(batch, hc.headerDb, addressOutpointsToRemoveMap); err != nil {
 					hc.logger.Errorf("failed to remove address utxos: %v", err)
 				}
 			}
