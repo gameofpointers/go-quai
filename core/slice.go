@@ -1040,13 +1040,37 @@ func (sl *Slice) GetKQuaiAndUpdateBit(hash common.Hash) (*big.Int, uint8, error)
 	// otherwise, call the sub interface
 	if sl.NodeCtx() != common.ZONE_CTX {
 		// This only works with first expansion or when the first zone is updating the exchange rate
-		return sl.subInterface[0].GetKQuaiAndUpdateBit(hash)
+		kQuai, updateBit, err := sl.subInterface[0].GetKQuaiAndUpdateBit(hash)
+		if err != nil && err.Error() == ErrSubNotSyncedToDom.Error() {
+			block := sl.hc.GetBlockByHash(hash)
+			if block != nil {
+				// In the case of this block being a region and state is not
+				// processed, send an update to the hierarchical coordinator
+				_, order, calcOrderErr := sl.engine.CalcOrder(sl.hc, block)
+				if calcOrderErr == nil {
+					if order == sl.NodeCtx() {
+						sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogEntropy(sl.hc, block)})
+					}
+				}
+			}
+		}
+		return kQuai, updateBit, err
 	} else {
 		block := sl.hc.GetBlockByHash(hash)
 		if block == nil {
 			return nil, 0, ErrSubNotSyncedToDom
 		}
-		return sl.hc.bc.processor.GetKQuaiAndUpdateBit(block)
+		kQuai, updateBit, err := sl.hc.bc.processor.GetKQuaiAndUpdateBit(block)
+		if err != nil && err.Error() == ErrSubNotSyncedToDom.Error() {
+			// send an update to the hierarchical coordinator
+			_, order, calcOrderErr := sl.engine.CalcOrder(sl.hc, block)
+			if calcOrderErr == nil {
+				if order == sl.NodeCtx() {
+					sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogEntropy(sl.hc, block)})
+				}
+			}
+		}
+		return kQuai, updateBit, err
 	}
 }
 
