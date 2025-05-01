@@ -38,6 +38,8 @@ import (
 	"github.com/dominant-strategies/go-quai/rpc"
 	"github.com/dominant-strategies/go-quai/trie"
 	"google.golang.org/protobuf/proto"
+
+	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 var (
@@ -45,6 +47,8 @@ var (
 	txEgressCounter      = txPropagationMetrics.WithLabelValues("egress")
 	maxOutpointsRange    = uint32(1000)
 )
+
+const c_qiBalanceCacheSize = 100000
 
 // PublicQuaiAPI provides an API to access Quai related information.
 // It offers only methods that operate on public data that is freely available to anyone.
@@ -73,11 +77,14 @@ func (s *PublicQuaiAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 // It offers only methods that operate on public data that is freely available to anyone.
 type PublicBlockChainQuaiAPI struct {
 	b Backend
+
+	qiBalanceCache *expireLru.LRU[common.AddressBytes, *big.Int]
 }
 
 // NewPublicBlockChainQuaiAPI creates a new Quai blockchain API.
 func NewPublicBlockChainQuaiAPI(b Backend) *PublicBlockChainQuaiAPI {
-	return &PublicBlockChainQuaiAPI{b}
+	qiBalanceCache := expireLru.NewLRU[common.AddressBytes, *big.Int](c_qiBalanceCacheSize, nil, time.Minute*10)
+	return &PublicBlockChainQuaiAPI{b, qiBalanceCache}
 }
 
 // ChainId is the replay-protection chain id for the current Quai chain config.
@@ -124,6 +131,11 @@ func (s *PublicBlockChainQuaiAPI) GetBalance(ctx context.Context, address common
 			return (*hexutil.Big)(big.NewInt(0)), errors.New("qi balance query is only supported for the current block")
 		}
 
+		balance, exists := s.qiBalanceCache.Get(address.Address().Bytes20())
+		if exists {
+			return (*hexutil.Big)(balance), nil
+		}
+
 		utxos, err := s.b.UTXOsByAddress(ctx, addr)
 		if utxos == nil || err != nil {
 			return (*hexutil.Big)(big.NewInt(0)), err
@@ -133,7 +145,7 @@ func (s *PublicBlockChainQuaiAPI) GetBalance(ctx context.Context, address common
 			return (*hexutil.Big)(big.NewInt(0)), nil
 		}
 
-		balance := big.NewInt(0)
+		balance = big.NewInt(0)
 		for _, utxo := range utxos {
 			if utxo.Lock != nil && currHeader.Number(nodeCtx).Cmp(utxo.Lock) < 0 {
 				continue
@@ -141,6 +153,9 @@ func (s *PublicBlockChainQuaiAPI) GetBalance(ctx context.Context, address common
 			value := types.Denominations[utxo.Denomination]
 			balance.Add(balance, value)
 		}
+
+		s.qiBalanceCache.Add(address.Address().Bytes20(), balance)
+
 		return (*hexutil.Big)(balance), nil
 	} else {
 		internal, err := addr.InternalAndQuaiAddress()
