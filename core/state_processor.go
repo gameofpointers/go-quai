@@ -1282,6 +1282,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 }
 
 func (p *StateProcessor) GetKQuaiAndUpdateBit(parent *types.WorkObject) (*big.Int, uint8, error) {
+	return big.NewInt(0), 1, nil
 	evmRoot := parent.EVMRoot()
 	etxRoot := parent.EtxSetRoot()
 	quaiStateSize := parent.QuaiStateSize()
