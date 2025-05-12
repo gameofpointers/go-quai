@@ -1840,6 +1840,8 @@ func (sl *Slice) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 		block.SetStateProcessTime(stateProcessTime)
 		block.SetPendingHeaderCreationTime(pendingHeaderCreationTime)
 
+		sl.logger.WithFields(log.Fields{"Append Time": appendTime, "State Process Time": stateProcessTime, "PendingHeader Time": pendingHeaderCreationTime}).Info("Time Taken in GeneratePendingHeader")
+
 		sl.hc.chainHeadFeed.Send(ChainHeadEvent{block})
 	}
 	return pendingHeader, nil
