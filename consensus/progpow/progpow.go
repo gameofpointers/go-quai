@@ -202,10 +202,10 @@ type Progpow struct {
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
 func New(config Config, notify []string, noverify bool, logger *log.Logger) *Progpow {
-	if config.CachesInMem <= 0 {
-		logger.WithField("requested", config.CachesInMem).Warn("Invalid ethash caches in memory, defaulting to 1")
-		config.CachesInMem = 1
-	}
+	// if config.CachesInMem <= 0 {
+	logger.WithField("requested", config.CachesInMem).Warn("Invalid ethash caches in memory, defaulting to 1")
+	config.CachesInMem = 2
+	// }
 	if config.CacheDir != "" && config.CachesOnDisk > 0 {
 		logger.WithFields(log.Fields{
 			"dir":   config.CacheDir,
