@@ -26,12 +26,13 @@ import (
 )
 
 const (
-	headerCacheLimit      = 25
-	numberCacheLimit      = 2048
-	c_subRollupCacheSize  = 50
-	primeHorizonThreshold = 20
-	c_powCacheLimit       = 1000
-	c_calcOrderCacheLimit = 10000
+	headerCacheLimit       = 25
+	numberCacheLimit       = 2048
+	c_subRollupCacheSize   = 50
+	primeHorizonThreshold  = 20
+	c_powCacheLimit        = 1000
+	c_calcOrderCacheLimit  = 10000
+	c_zoneHorizonThreshold = 60
 )
 
 var (
@@ -484,6 +485,10 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 	commonHeader, err := rawdb.FindCommonAncestor(hc.headerDb, prevHeader, head, nodeCtx)
 	if err != nil {
 		return err
+	}
+	// If common header is more than c_zoneHorizonThreshold blocks behind, dont reorg to it
+	if prevHeader.NumberU64(common.ZONE_CTX) > params.MaxCodeSizeForkHeight && prevHeader.NumberU64(common.ZONE_CTX) > commonHeader.NumberU64(common.ZONE_CTX)+c_zoneHorizonThreshold {
+		return errors.New("common header too old")
 	}
 	newHeader := types.CopyWorkObject(head)
 
