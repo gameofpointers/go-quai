@@ -11,6 +11,10 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 )
 
+const c_targetQiPercentage = 1000
+
+var miningChoicesAlpha uint64 = 4000
+
 func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.WorkObject, parentExchangeRate *big.Int, newTokenChoiceSet types.TokenChoiceSet) (*big.Int, error) {
 
 	// Until there are tokenChoicesSetSize of miner token choices, the exchange rate is unchanged
@@ -33,6 +37,10 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 	newBeta0OverBeta1 := new(big.Int).Div(new(big.Int).Mul(bestDiff, common.Big2e64), common.LogBig(bestDiff))
 
 	exchangeRate := misc.CalculateKQuai(parentExchangeRate, block.MinerDifficulty(), newBeta0OverBeta1)
+
+	// Add a small decay to the exchange rate, its like a deflationary growth parameter
+	exchangeRate = new(big.Int).Mul(exchangeRate, big.NewInt(9999))
+	exchangeRate = new(big.Int).Div(exchangeRate, big.NewInt(10000))
 
 	return exchangeRate, nil
 }
@@ -76,6 +84,27 @@ func CalculateTokenChoicesSet(hc *HeaderChain, block, parent *types.WorkObject, 
 				tokenChoices.Quai += NormalizeConversionValueToBlock(parent, exchangeRate, tx.Value(), false)
 			}
 		}
+	}
+
+	var miningQiChoices, miningQuaiChoices uint64
+
+	for _, tokenChoices := range *parentTokenChoicesSet {
+		miningQiChoices += tokenChoices.Qi
+		miningQuaiChoices += tokenChoices.Quai
+	}
+
+	if block.NumberU64(common.PRIME_CTX) > params.ControllerChangeKickInBlock && block.NumberU64(common.PRIME_CTX) > params.ControllerKickInBlock+params.TokenChoiceSetSize {
+		// calculate the percentage of choices for Qi
+		qiPercentage := miningQiChoices * 10000 / (miningQiChoices + miningQuaiChoices)
+
+		hc.logger.Info("Qi Percentage in bips", "block", block.Hash(), "qiPercentage", qiPercentage)
+
+		// If the qiPercentage is less than the targetQiPercentage, then we need to
+		// adjust the tokenChoices diff to encourage more Qi choices
+		diffDecrease := new(big.Int).SetInt64(int64(c_targetQiPercentage) - int64(qiPercentage))
+		diffDecrease = new(big.Int).Mul(diffDecrease, tokenChoices.Diff)
+		diffDecrease = new(big.Int).Div(diffDecrease, new(big.Int).SetUint64(miningChoicesAlpha))
+		tokenChoices.Diff = new(big.Int).Sub(tokenChoices.Diff, diffDecrease)
 	}
 
 	// Depending on the number of the Quai/Qi choices the diff value can be moved
