@@ -298,7 +298,7 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 				target := new(big.Int).Div(common.Big2e256, header.Difficulty())
 
 				// Get the PoW hash from the engine
-				powHash := common.Hash{}
+				powHash := header.Hash()
 				if progpow, ok := api.backend.Engine().(*progpow.Progpow); ok {
 					if hash, err := progpow.ComputePowHash(header); err == nil {
 						powHash = hash
