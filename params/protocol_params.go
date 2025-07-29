@@ -198,7 +198,7 @@ var (
 	ExchangeRate                                = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	MaxTimeDiffBetweenBlocks             int64  = 100                            // Max time difference between the blocks to 100 secs
 	OneOverAlpha                                = big.NewInt(1000)               // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = 262000                         // This is in order of prime blocks
+	ControllerKickInBlock                uint64 = 10                             // This is in order of prime blocks
 	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek              // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
@@ -234,10 +234,11 @@ var (
 )
 
 const (
-	TokenChoiceSetSize uint64 = 4000 // This should be same as the MinerDifficultyWindow
+	TokenChoiceSetSize uint64 = 100 // This should be same as the MinerDifficultyWindow
 )
 
 func CalculateLockupByteRewardsMultiple(lockupByte uint8, blockNumber uint64) (*big.Int, error) {
+
 	if lockupByte <= 0 || lockupByte > uint8(MaxLockupByte) {
 		return nil, errors.New("invalid lockup byte used")
 	}

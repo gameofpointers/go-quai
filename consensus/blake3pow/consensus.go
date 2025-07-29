@@ -501,6 +501,7 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func (blake3pow *Blake3pow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *types.WorkObjectHeader, expansionNum uint8) *big.Int {
+	return parent.Difficulty()
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 
 	if nodeCtx != common.ZONE_CTX {
