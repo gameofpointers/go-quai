@@ -831,8 +831,8 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 			return 0, fmt.Errorf("gas required exceeds allowance (%d)", cap)
 		}
 	}
-	// Add 10% to the final gas estimate
-	hi = hi + hi/10
+	// Add 33% to the final gas estimate
+	hi = hi + hi/3
 	return hexutil.Uint64(hi), nil
 }
 
