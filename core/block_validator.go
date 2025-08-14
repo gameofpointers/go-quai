@@ -32,10 +32,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-const (
-	c_maxAllowableEntropyDist = 200 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
-)
-
 // BlockValidator is responsible for validating block headers, uncles and
 // processed state.
 //
@@ -217,7 +213,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 	}
 
 	currentS := currentHeader.ParentEntropy(v.hc.NodeCtx())
-	MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, big.NewInt(c_maxAllowableEntropyDist))
+	MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, new(big.Int).SetUint64(params.MaxAllowableEntropyDist))
 
 	broadCastEntropy := wo.ParentEntropy(common.ZONE_CTX)
 

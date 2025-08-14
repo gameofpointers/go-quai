@@ -242,6 +242,8 @@ var (
 	}
 
 	NewOpcodesForkBlock = big.NewInt(1310000) // The block at which the new opcodes are activated
+
+	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
 )
 
 const (
