@@ -57,7 +57,7 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 	// Since, -B0/B1 = diff/log(diff), B1 is set to 1
 	newBeta0OverBeta1 := new(big.Int).Div(new(big.Int).Mul(bestDiff, common.Big2e64), common.LogBig(bestDiff))
 
-	exchangeRate := misc.CalculateKQuai(parentExchangeRate, block.MinerDifficulty(), newBeta0OverBeta1)
+	exchangeRate := misc.CalculateKQuai(parentExchangeRate, block.MinerDifficulty(), block.NumberU64(common.PRIME_CTX), newBeta0OverBeta1)
 
 	return exchangeRate, nil
 }

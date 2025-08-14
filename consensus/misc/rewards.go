@@ -106,7 +106,7 @@ func ApplyCubicDiscount(valueInt, meanInt *big.Int) *big.Float {
 // k_quai += alpha * (x_b_star / x_d - 1) * k_quai
 // spaces = [{"K Qi": state["K Qi"], "K Quai": k_quai}, spaces[1]]
 // return spaces
-func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, xbStar *big.Int) *big.Int {
+func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, blockNumber uint64, xbStar *big.Int) *big.Int {
 	// Set kQuai to the exchange rate from the header
 	kQuai := new(big.Int).Set(parentExchangeRate) // in Its
 
@@ -130,10 +130,19 @@ func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, xbSta
 	denum := new(big.Int).Mul(d1, params.OneOverAlpha)
 	adder := new(big.Int).Mul(kQuai, denum)
 
+	var kQuaiIncrease bool
 	// Multiply beta0 and d2
 	num := new(big.Int).Mul(xbStar, d2)
 	// Subtract the d1
 	num = new(big.Int).Sub(num, d1)
+	// If the num is greater than zero, then kQuai will be increased
+	kQuaiIncrease = num.Cmp(common.Big0) > 0
+
+	// If kQuaiIncrease is true, slow down the increase in kQuai by reducing the adjustment
+	if blockNumber > params.KQuaiChangeBlock && kQuaiIncrease {
+		num = new(big.Int).Div(num, common.Big3)
+	}
+
 	// Multiply by kQuai
 	num = new(big.Int).Mul(num, kQuai)
 	// Add the previous kQuai with the denum multiplied(adder)
