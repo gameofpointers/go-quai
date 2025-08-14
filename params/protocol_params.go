@@ -244,6 +244,8 @@ var (
 	MaxQiTxDataLength = 22 // Qi Tx Data can only be max of 22 bytes for the WrapQi it is 20 byte and 22 (2 byte slip + 20 byte address) byte for Conversion
 
 	MaxGrindIncreaseForkBlock = big.NewInt(1865000)
+
+	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
 )
 
 const (

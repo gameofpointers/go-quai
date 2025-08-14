@@ -14,6 +14,7 @@ import (
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/protocol"
+	"github.com/dominant-strategies/go-quai/params"
 	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -110,6 +111,25 @@ func (h *handler) missingBlockLoop() {
 			// any peer for the hash
 			if h.core.IsBlockHashABadHash(blockRequest.Hash) {
 				continue
+			}
+
+			// get the current header and compare the entropy of the block that
+			// is getting fetched with the current header entropy
+			currentHeader := h.core.CurrentHeader()
+
+			if !h.core.IsGenesisHash(currentHeader.Hash()) && currentHeader != nil && currentHeader.NumberU64(common.ZONE_CTX) > params.MaxCodeSizeForkHeight {
+				currentHeaderPowHash, err := h.core.Engine().VerifySeal(currentHeader.WorkObjectHeader())
+				if err != nil {
+					continue
+				}
+				currentHeaderIntrinsic := h.core.Engine().IntrinsicLogEntropy(currentHeaderPowHash)
+				currentS := h.core.CurrentHeader().ParentEntropy(h.core.NodeCtx())
+				MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, new(big.Int).SetUint64(params.MaxAllowableEntropyDist))
+
+				// If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS dont broadcast
+				if currentS.Cmp(new(big.Int).Add(blockRequest.Entropy, MaxAllowableEntropyDist)) > 0 {
+					continue
+				}
 			}
 
 			_, exists := h.recentBlockReqCache.Get(blockRequest.Hash)
