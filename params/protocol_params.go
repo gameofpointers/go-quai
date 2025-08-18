@@ -96,7 +96,7 @@ const (
 
 	MaxCodeSize           = 24576   // Maximum bytecode to permit for a contract (24KB)
 	NewMaxCodeSize        = 32768   // Maximum bytecode to permit for a contract after fork (32KB)
-	MaxCodeSizeForkHeight = 3500000 // Block height at which the new 32KB code size limit activates
+	MaxCodeSizeForkHeight = 2683260 // Block height at which the new 32KB code size limit activates
 
 	// Precompiled contract gas prices
 
@@ -229,16 +229,16 @@ var (
 	MaxQiTxDataLength        = 22 // Qi Tx Data can only be max of 22 bytes for the WrapQi it is 20 byte and 22 (2 byte slip + 20 byte address) byte for Conversion
 
 	ConversionSlipChangeBlock uint64 = 202800
-	KQuaiChangeBlock          uint64 = 756000 // Prime block number at which k quai change happens
-	KQuaiChangeHoldInterval   uint64 = 20000  // Around 6-7 days worth of the prime blocks
+	KQuaiChangeBlock          uint64 = 564270 // Prime block number at which k quai change happens
+	KQuaiChangeHoldInterval   uint64 = 100    // Around 6-7 days worth of the prime blocks
 
 	// KQuaiChangeTable is the table that defines the KQuai change at different blocks
 	// The first value is the block number and the second value is the KQuai value left after the reduction
 	KQuaiChangeTable = [][2]uint64{
 		{KQuaiChangeBlock, 50},
-		{KQuaiChangeBlock + 2*PrimeBlocksPerMonth, 75},
-		{KQuaiChangeBlock + 4*PrimeBlocksPerMonth, 75},
-		{KQuaiChangeBlock + 6*PrimeBlocksPerMonth, 75},
+		{KQuaiChangeBlock + 200, 75},
+		{KQuaiChangeBlock + 400, 75},
+		{KQuaiChangeBlock + 600, 75},
 	}
 
 	NewOpcodesForkBlock = big.NewInt(1310000) // The block at which the new opcodes are activated
