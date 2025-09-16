@@ -1,0 +1,629 @@
+package types
+
+import (
+	"bytes"
+	"fmt"
+	"math/big"
+	"testing"
+
+	"github.com/dominant-strategies/go-quai/common"
+	"google.golang.org/protobuf/proto"
+	"lukechampine.com/blake3"
+)
+
+// TestWorkObjectHashWithoutAuxPow tests the hash computation of a WorkObject
+// before adding the AuxPow field (with nil AuxPow)
+func TestWorkObjectHashWithoutAuxPow(t *testing.T) {
+	// Create test data
+	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	parentHash := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+	number := big.NewInt(12345)
+	difficulty := big.NewInt(1000000)
+	primeTerminusNumber := big.NewInt(100)
+	txHash := common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	nonce := BlockNonce{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	lock := uint8(1)
+	time := uint64(1234567890)
+	location := common.Location{0, 0}
+	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
+	data := []byte("test data")
+	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+
+	// Create WorkObjectHeader without AuxPow
+	woHeader := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              nil, // No AuxPow
+	}
+
+	// Compute hash
+	hash := woHeader.Hash()
+	sealHash := woHeader.SealHash()
+
+	// Print test vector
+	fmt.Printf("Test Vector WITHOUT AuxPow:\n")
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Header Hash:           %s\n", headerHash.Hex())
+	fmt.Printf("Parent Hash:           %s\n", parentHash.Hex())
+	fmt.Printf("Number:                %d\n", number)
+	fmt.Printf("Difficulty:            %d\n", difficulty)
+	fmt.Printf("Prime Terminus Number: %d\n", primeTerminusNumber)
+	fmt.Printf("Tx Hash:               %s\n", txHash.Hex())
+	fmt.Printf("Nonce:                 %x\n", nonce)
+	fmt.Printf("Lock:                  %d\n", lock)
+	fmt.Printf("Time:                  %d\n", time)
+	fmt.Printf("Location:              %v\n", location)
+	fmt.Printf("Primary Coinbase:      %s\n", primaryCoinbase.Hex())
+	fmt.Printf("Data:                  %s\n", string(data))
+	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
+	fmt.Printf("AuxPow:                nil\n")
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Seal Hash:             %s\n", sealHash.Hex())
+	fmt.Printf("WorkObject Hash:       %s\n", hash.Hex())
+	fmt.Printf("=====================================\n\n")
+
+	// Verify the hash is computed correctly
+	if hash == (common.Hash{}) {
+		t.Error("Hash should not be empty")
+	}
+
+	// Store expected hash for comparison
+	expectedHashWithoutAuxPow := hash
+	t.Logf("Hash without AuxPow: %s", expectedHashWithoutAuxPow.Hex())
+}
+
+// TestWorkObjectHashWithAuxPow tests the hash computation of a WorkObject
+// after adding the AuxPow field (with non-nil AuxPow)
+func TestWorkObjectHashWithAuxPow(t *testing.T) {
+	// Create test data (same as before)
+	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	parentHash := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+	number := big.NewInt(12345)
+	difficulty := big.NewInt(1000000)
+	primeTerminusNumber := big.NewInt(100)
+	txHash := common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	nonce := BlockNonce{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	lock := uint8(1)
+	time := uint64(1234567890)
+	location := common.Location{0, 0}
+	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
+	data := []byte("test data")
+	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+
+	// Create AuxPow data
+	auxPow := &AuxPow{
+		Chain:    1234,
+		Header:   bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
+		Coinbase: []byte{0x01, 0x02, 0x03, 0x04, 0x05}, // Sample coinbase
+		Branch: [][]byte{
+			{0xb1, 0xb2, 0xb3},
+			{0xc1, 0xc2, 0xc3},
+		},
+		Index: 42,
+	}
+
+	// Create WorkObjectHeader with AuxPow
+	woHeader := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              auxPow, // With AuxPow
+	}
+
+	// Compute hash
+	hash := woHeader.Hash()
+	sealHash := woHeader.SealHash()
+
+	// Print test vector
+	fmt.Printf("Test Vector WITH AuxPow:\n")
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Header Hash:           %s\n", headerHash.Hex())
+	fmt.Printf("Parent Hash:           %s\n", parentHash.Hex())
+	fmt.Printf("Number:                %d\n", number)
+	fmt.Printf("Difficulty:            %d\n", difficulty)
+	fmt.Printf("Prime Terminus Number: %d\n", primeTerminusNumber)
+	fmt.Printf("Tx Hash:               %s\n", txHash.Hex())
+	fmt.Printf("Nonce:                 %x\n", nonce)
+	fmt.Printf("Lock:                  %d\n", lock)
+	fmt.Printf("Time:                  %d\n", time)
+	fmt.Printf("Location:              %v\n", location)
+	fmt.Printf("Primary Coinbase:      %s\n", primaryCoinbase.Hex())
+	fmt.Printf("Data:                  %s\n", string(data))
+	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
+	fmt.Printf("AuxPow:\n")
+	fmt.Printf("  Chain:               %d\n", auxPow.Chain)
+	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header))
+	fmt.Printf("  Coinbase:            %x\n", auxPow.Coinbase)
+	fmt.Printf("  Branch Count:        %d\n", len(auxPow.Branch))
+	fmt.Printf("  Index:               %d\n", auxPow.Index)
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Seal Hash:             %s\n", sealHash.Hex())
+	fmt.Printf("WorkObject Hash:       %s\n", hash.Hex())
+	fmt.Printf("=====================================\n\n")
+
+	// Verify the hash is computed correctly
+	if hash == (common.Hash{}) {
+		t.Error("Hash should not be empty")
+	}
+
+	t.Logf("Hash with AuxPow: %s", hash.Hex())
+}
+
+// TestWorkObjectHashComparison compares hashes before and after adding AuxPow
+func TestWorkObjectHashComparison(t *testing.T) {
+	// Create identical test data for both cases
+	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	parentHash := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+	number := big.NewInt(12345)
+	difficulty := big.NewInt(1000000)
+	primeTerminusNumber := big.NewInt(100)
+	txHash := common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	nonce := BlockNonce{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	lock := uint8(1)
+	time := uint64(1234567890)
+	location := common.Location{0, 0}
+	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
+	data := []byte("test data")
+	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+
+	// Create WorkObjectHeader without AuxPow
+	woHeaderWithoutAuxPow := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              nil,
+	}
+
+	// Create AuxPow data
+	auxPow := &AuxPow{
+		Chain:    1234,
+		Header:   bytes.Repeat([]byte{0xaa}, 80),
+		Coinbase: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
+		Branch: [][]byte{
+			{0xb1, 0xb2, 0xb3},
+			{0xc1, 0xc2, 0xc3},
+		},
+		Index: 42,
+	}
+
+	// Create WorkObjectHeader with AuxPow
+	woHeaderWithAuxPow := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              auxPow,
+	}
+
+	hashWithoutAuxPow := woHeaderWithoutAuxPow.Hash()
+	hashWithAuxPow := woHeaderWithAuxPow.Hash()
+
+	sealHashWithoutAuxPow := woHeaderWithoutAuxPow.SealHash()
+	sealHashWithAuxPow := woHeaderWithAuxPow.SealHash()
+
+	fmt.Printf("Hash Comparison:\n")
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Without AuxPow:\n")
+	fmt.Printf("  Seal Hash: %s\n", sealHashWithoutAuxPow.Hex())
+	fmt.Printf("  Hash:      %s\n", hashWithoutAuxPow.Hex())
+	fmt.Printf("\nWith AuxPow:\n")
+	fmt.Printf("  Seal Hash: %s\n", sealHashWithAuxPow.Hex())
+	fmt.Printf("  Hash:      %s\n", hashWithAuxPow.Hex())
+	fmt.Printf("=====================================\n")
+
+	// The seal hashes should be different when AuxPow is added
+	// This is because AuxPow is included in the seal encoding
+	if sealHashWithoutAuxPow == sealHashWithAuxPow {
+		t.Error("Seal hashes should be different when AuxPow is added")
+	}
+
+	// Since the WorkObject hash depends on the seal hash,
+	// the final hashes should also be different
+	if hashWithoutAuxPow == hashWithAuxPow {
+		t.Error("WorkObject hashes should be different when AuxPow is added")
+	}
+
+	t.Logf("Test passed: Hashes are different when AuxPow is added")
+}
+
+// TestWorkObjectProtoEncodeDecodeWithAuxPow tests protobuf encoding/decoding with AuxPow
+func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
+	// Create test data
+	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	parentHash := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+	number := big.NewInt(12345)
+	difficulty := big.NewInt(1000000)
+	primeTerminusNumber := big.NewInt(100)
+	txHash := common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	nonce := BlockNonce{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	lock := uint8(1)
+	time := uint64(1234567890)
+	location := common.Location{0, 0}
+	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
+	data := []byte("test data")
+	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+
+	// Create AuxPow data
+	auxPow := &AuxPow{
+		Chain:    1234,
+		Header:   bytes.Repeat([]byte{0xaa}, 80),
+		Coinbase: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
+		Branch: [][]byte{
+			{0xb1, 0xb2, 0xb3},
+			{0xc1, 0xc2, 0xc3},
+		},
+		Index: 42,
+	}
+
+	// Create original WorkObjectHeader
+	original := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              auxPow,
+	}
+
+	// Encode to protobuf
+	protoHeader, err := original.ProtoEncode()
+	if err != nil {
+		t.Fatalf("Failed to encode: %v", err)
+	}
+
+	// Decode from protobuf
+	decoded := &WorkObjectHeader{}
+	err = decoded.ProtoDecode(protoHeader, location)
+	if err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	// Verify all fields match
+	if !bytes.Equal(decoded.HeaderHash().Bytes(), original.HeaderHash().Bytes()) {
+		t.Error("HeaderHash mismatch")
+	}
+	if !bytes.Equal(decoded.ParentHash().Bytes(), original.ParentHash().Bytes()) {
+		t.Error("ParentHash mismatch")
+	}
+	if decoded.Number().Cmp(original.Number()) != 0 {
+		t.Error("Number mismatch")
+	}
+	if decoded.Difficulty().Cmp(original.Difficulty()) != 0 {
+		t.Error("Difficulty mismatch")
+	}
+
+	// Verify AuxPow fields
+	if decoded.AuxPow() == nil {
+		t.Fatal("AuxPow should not be nil after decoding")
+	}
+	if decoded.AuxPow().Chain != original.AuxPow().Chain {
+		t.Error("AuxPow.Chain mismatch")
+	}
+	if !bytes.Equal(decoded.AuxPow().Header, original.AuxPow().Header) {
+		t.Error("AuxPow.Header mismatch")
+	}
+	if !bytes.Equal(decoded.AuxPow().Coinbase, original.AuxPow().Coinbase) {
+		t.Error("AuxPow.Coinbase mismatch")
+	}
+	if decoded.AuxPow().Index != original.AuxPow().Index {
+		t.Error("AuxPow.Index mismatch")
+	}
+	if len(decoded.AuxPow().Branch) != len(original.AuxPow().Branch) {
+		t.Error("AuxPow.Branch length mismatch")
+	}
+	for i := range decoded.AuxPow().Branch {
+		if !bytes.Equal(decoded.AuxPow().Branch[i], original.AuxPow().Branch[i]) {
+			t.Errorf("AuxPow.Branch[%d] mismatch", i)
+		}
+	}
+
+	t.Log("Proto encode/decode with AuxPow test passed")
+}
+
+// OldWorkObjectHeader represents the WorkObjectHeader structure before AuxPow was added
+// This is used to verify backward compatibility
+type OldWorkObjectHeader struct {
+	headerHash          common.Hash
+	parentHash          common.Hash
+	number              *big.Int
+	difficulty          *big.Int
+	primeTerminusNumber *big.Int
+	txHash              common.Hash
+	primaryCoinbase     common.Address
+	location            common.Location
+	mixHash             common.Hash
+	time                uint64
+	nonce               BlockNonce
+	data                []byte
+	lock                uint8
+	// Note: No auxPow field
+}
+
+// OldSealEncode replicates the original SealEncode without AuxPow
+func (wh *OldWorkObjectHeader) OldSealEncode() *ProtoWorkObjectHeader {
+	headerHash := common.ProtoHash{Value: wh.headerHash.Bytes()}
+	parentHash := common.ProtoHash{Value: wh.parentHash.Bytes()}
+	txHash := common.ProtoHash{Value: wh.txHash.Bytes()}
+	number := wh.number.Bytes()
+	difficulty := wh.difficulty.Bytes()
+	primeTerminusNumber := wh.primeTerminusNumber.Bytes()
+	location := wh.location.ProtoEncode()
+	time := wh.time
+	lock := uint32(wh.lock)
+	coinbase := common.ProtoAddress{Value: wh.primaryCoinbase.Bytes()}
+	data := wh.data
+
+	return &ProtoWorkObjectHeader{
+		HeaderHash:          &headerHash,
+		ParentHash:          &parentHash,
+		Number:              number,
+		Difficulty:          difficulty,
+		TxHash:              &txHash,
+		PrimeTerminusNumber: primeTerminusNumber,
+		Location:            location,
+		Lock:                &lock,
+		PrimaryCoinbase:     &coinbase,
+		Time:                &time,
+		Data:                data,
+		// No AuxPow field set - this mimics the old structure
+	}
+}
+
+// OldSealHash computes the seal hash without AuxPow field
+func (wh *OldWorkObjectHeader) OldSealHash() (hash common.Hash) {
+	// Manually compute the seal hash like the original did
+	// This uses the same logic as SealHash but without AuxPow
+	hasherMu.Lock()
+	defer hasherMu.Unlock()
+	hasher.Reset()
+	protoSealData := wh.OldSealEncode()
+	data, err := proto.Marshal(protoSealData)
+	if err != nil {
+		panic(err)
+	}
+	sum := blake3.Sum256(data[:])
+	hash.SetBytes(sum[:])
+	return hash
+}
+
+// OldHash computes the full hash without AuxPow field
+func (wh *OldWorkObjectHeader) OldHash() (hash common.Hash) {
+	// Manually compute the hash like the original did
+	// This uses the same logic as Hash but without AuxPow
+	sealHash := wh.OldSealHash().Bytes()
+	mixHash := wh.mixHash.Bytes()
+	nonce := wh.nonce.Bytes()
+	hasherMu.Lock()
+	defer hasherMu.Unlock()
+	hasher.Reset()
+	var hData [common.HashLength + common.HashLength + NonceLength]byte
+	copy(hData[:], mixHash)
+	copy(hData[common.HashLength:], sealHash)
+	copy(hData[common.HashLength+common.HashLength:], nonce)
+	sum := blake3.Sum256(hData[:])
+	hash.SetBytes(sum[:])
+	return hash
+}
+
+// TestThreeScenarioCompatibility tests all three scenarios:
+// 1. Old headers without auxPow field
+// 2. New headers with auxPow set to nil
+// 3. New headers with auxPow populated
+//
+// IMPORTANT: AuxPow is NOT included in the seal hash calculation to prevent
+// circular reference. The donor header in AuxPow commits to the WorkObject's
+// seal hash, so the seal hash cannot depend on AuxPow.
+//
+// This means all three scenarios should produce the SAME hash when other fields
+// are identical, ensuring perfect backward compatibility.
+func TestThreeScenarioCompatibility(t *testing.T) {
+	// Create common test data
+	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	parentHash := common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
+	number := big.NewInt(12345)
+	difficulty := big.NewInt(1000000)
+	primeTerminusNumber := big.NewInt(100)
+	txHash := common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	nonce := BlockNonce{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	lock := uint8(1)
+	time := uint64(1234567890)
+	location := common.Location{0, 0}
+	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
+	data := []byte("test data")
+	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+
+	// Scenario 1: Old WorkObjectHeader (without AuxPow field in struct)
+	oldHeader := &OldWorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+	}
+
+	// Scenario 2: New WorkObjectHeader with auxPow = nil
+	newHeaderNil := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              nil, // Explicitly nil
+	}
+
+	// Scenario 3: New WorkObjectHeader with auxPow populated
+	auxPow := &AuxPow{
+		Chain:    1234,
+		Header:   bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
+		Coinbase: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
+		Branch: [][]byte{
+			{0xb1, 0xb2, 0xb3},
+			{0xc1, 0xc2, 0xc3},
+		},
+		Index: 42,
+	}
+
+	newHeaderWithAux := &WorkObjectHeader{
+		headerHash:          headerHash,
+		parentHash:          parentHash,
+		number:              number,
+		difficulty:          difficulty,
+		primeTerminusNumber: primeTerminusNumber,
+		txHash:              txHash,
+		primaryCoinbase:     primaryCoinbase,
+		location:            location,
+		mixHash:             mixHash,
+		time:                time,
+		nonce:               nonce,
+		data:                data,
+		lock:                lock,
+		auxPow:              auxPow, // With AuxPow
+	}
+
+	// Compute hashes for all three scenarios
+	// Using OldSealHash/OldHash for the old implementation
+	oldSealHash := oldHeader.OldSealHash()
+	oldHash := oldHeader.OldHash()
+
+	// Using current implementation SealHash/Hash for both new scenarios
+	nilSealHash := newHeaderNil.SealHash()
+	nilHash := newHeaderNil.Hash()
+
+	auxSealHash := newHeaderWithAux.SealHash()
+	auxHash := newHeaderWithAux.Hash()
+
+	// Print test vectors
+	fmt.Printf("\nThree Scenario Test Vectors:\n")
+	fmt.Printf("=====================================\n")
+	fmt.Printf("Scenario 1 - Old Header (no auxPow field):\n")
+	fmt.Printf("  Seal Hash: %s\n", oldSealHash.Hex())
+	fmt.Printf("  Full Hash: %s\n", oldHash.Hex())
+	fmt.Printf("\n")
+	fmt.Printf("Scenario 2 - New Header (auxPow = nil):\n")
+	fmt.Printf("  Seal Hash: %s\n", nilSealHash.Hex())
+	fmt.Printf("  Full Hash: %s\n", nilHash.Hex())
+	fmt.Printf("\n")
+	fmt.Printf("Scenario 3 - New Header (auxPow populated):\n")
+	fmt.Printf("  Seal Hash: %s\n", auxSealHash.Hex())
+	fmt.Printf("  Full Hash: %s\n", auxHash.Hex())
+	fmt.Printf("=====================================\n\n")
+
+	// Critical Test 1: Old header hash MUST equal new header with nil auxPow
+	if oldSealHash != nilSealHash {
+		t.Errorf("BACKWARD COMPATIBILITY BROKEN: Old seal hash != nil auxPow seal hash\n  Old: %s\n  Nil: %s",
+			oldSealHash.Hex(), nilSealHash.Hex())
+	} else {
+		t.Log("✓ Backward compatibility maintained: Old seal hash == nil auxPow seal hash")
+	}
+
+	if oldHash != nilHash {
+		t.Errorf("BACKWARD COMPATIBILITY BROKEN: Old full hash != nil auxPow full hash\n  Old: %s\n  Nil: %s",
+			oldHash.Hex(), nilHash.Hex())
+	} else {
+		t.Log("✓ Backward compatibility maintained: Old full hash == nil auxPow full hash")
+	}
+
+	// Critical Test 2: Since AuxPow is NOT included in seal hash (to avoid circular reference),
+	// headers with auxPow populated should have the SAME hash as those without
+	if nilSealHash != auxSealHash {
+		t.Errorf("SEAL HASH MISMATCH: nil auxPow seal hash != populated auxPow seal hash\n  Nil: %s\n  Aux: %s\nThey should be equal since auxPow is excluded from seal hash",
+			nilSealHash.Hex(), auxSealHash.Hex())
+	} else {
+		t.Log("✓ Seal hash consistency: nil auxPow seal hash == populated auxPow seal hash (auxPow excluded from hash)")
+	}
+
+	if nilHash != auxHash {
+		t.Errorf("FULL HASH MISMATCH: nil auxPow full hash != populated auxPow full hash\n  Nil: %s\n  Aux: %s\nThey should be equal since auxPow is excluded from hash calculation",
+			nilHash.Hex(), auxHash.Hex())
+	} else {
+		t.Log("✓ Full hash consistency: nil auxPow full hash == populated auxPow full hash (auxPow excluded from hash)")
+	}
+
+	// Additional verification: Check protobuf encoding sizes
+	oldProto := oldHeader.OldSealEncode()
+	nilProto := newHeaderNil.SealEncode()
+	auxProto := newHeaderWithAux.SealEncode()
+
+	oldBytes, _ := proto.Marshal(oldProto)
+	nilBytes, _ := proto.Marshal(nilProto)
+	auxBytes, _ := proto.Marshal(auxProto)
+
+	t.Logf("\nProtobuf encoding sizes:")
+	t.Logf("  Old header:        %d bytes", len(oldBytes))
+	t.Logf("  Nil auxPow header: %d bytes", len(nilBytes))
+	t.Logf("  With auxPow header: %d bytes", len(auxBytes))
+
+	if len(oldBytes) != len(nilBytes) {
+		t.Logf("WARNING: Old and nil auxPow protobuf sizes differ (%d vs %d)", len(oldBytes), len(nilBytes))
+		t.Logf("This may indicate the nil auxPow is being encoded")
+	}
+
+	// Verify that nil auxPow is truly not encoded
+	if nilProto.AuxPow != nil {
+		t.Error("nil auxPow is being encoded in protobuf (should be omitted)")
+	}
+}

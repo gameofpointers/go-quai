@@ -51,6 +51,7 @@ type WorkObjectHeader struct {
 	nonce               BlockNonce
 	data                []byte
 	lock                uint8
+	auxPow              *AuxPow // New field for auxiliary proof-of-work
 	PowHash             atomic.Value
 	PowDigest           atomic.Value
 }
@@ -577,6 +578,10 @@ func (wh *WorkObjectHeader) Data() []byte {
 	return wh.data
 }
 
+func (wh *WorkObjectHeader) AuxPow() *AuxPow {
+	return wh.auxPow
+}
+
 ////////////////////////////////////////////////////////////
 /////////////////// Work Object Header Setters ///////////////
 ////////////////////////////////////////////////////////////
@@ -631,6 +636,10 @@ func (wh *WorkObjectHeader) SetTime(val uint64) {
 
 func (wh *WorkObjectHeader) SetData(val []byte) {
 	wh.data = val
+}
+
+func (wh *WorkObjectHeader) SetAuxPow(auxPow *AuxPow) {
+	wh.auxPow = auxPow
 }
 
 type WorkObjectBody struct {
@@ -1042,6 +1051,21 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 	cpy.SetLock(wh.Lock())
 	cpy.SetPrimaryCoinbase(wh.PrimaryCoinbase())
 	cpy.SetData(wh.Data())
+
+	// Deep copy AuxPow if present
+	if wh.auxPow != nil {
+		cpy.auxPow = &AuxPow{
+			Chain:    wh.auxPow.Chain,
+			Header:   append([]byte(nil), wh.auxPow.Header...),
+			Coinbase: append([]byte(nil), wh.auxPow.Coinbase...),
+			Index:    wh.auxPow.Index,
+		}
+		cpy.auxPow.Branch = make([][]byte, len(wh.auxPow.Branch))
+		for i, b := range wh.auxPow.Branch {
+			cpy.auxPow.Branch[i] = append([]byte(nil), b...)
+		}
+	}
+
 	return &cpy
 }
 
@@ -1095,7 +1119,9 @@ func (wh *WorkObjectHeader) SealHash() (hash common.Hash) {
 }
 
 func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
-	// Omit MixHash and PowHash
+	// Omit MixHash, PowHash, and AuxPow from seal hash calculation
+	// AuxPow is excluded to prevent circular reference since the donor header
+	// in AuxPow will commit to this seal hash
 	headerHash := common.ProtoHash{Value: wh.HeaderHash().Bytes()}
 	parentHash := common.ProtoHash{Value: wh.ParentHash().Bytes()}
 	txHash := common.ProtoHash{Value: wh.TxHash().Bytes()}
@@ -1120,6 +1146,7 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 		PrimaryCoinbase:     &coinbase,
 		Time:                &time,
 		Data:                data,
+		// AuxPow explicitly NOT included to avoid circular reference
 	}
 }
 
@@ -1137,6 +1164,12 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 	coinbase := common.ProtoAddress{Value: wh.PrimaryCoinbase().Bytes()}
 	data := wh.Data()
 
+	// Include AuxPow if present
+	var auxPow *ProtoAuxPow
+	if wh.auxPow != nil {
+		auxPow = wh.auxPow.ProtoEncode()
+	}
+
 	return &ProtoWorkObjectHeader{
 		HeaderHash:          &hash,
 		ParentHash:          &parentHash,
@@ -1151,6 +1184,7 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 		Time:                &wh.time,
 		PrimaryCoinbase:     &coinbase,
 		Data:                data,
+		AuxPow:              auxPow,
 	}, nil
 }
 
@@ -1172,6 +1206,14 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 	wh.SetTime(data.GetTime())
 	wh.SetPrimaryCoinbase(common.BytesToAddress(data.GetPrimaryCoinbase().GetValue(), location))
 	wh.SetData(data.GetData())
+
+	// Decode AuxPow if present
+	if data.AuxPow != nil {
+		wh.auxPow = &AuxPow{}
+		if err := wh.auxPow.ProtoDecode(data.AuxPow); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
