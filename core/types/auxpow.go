@@ -12,206 +12,203 @@ type SignerEnvelope struct {
 	signature []byte
 }
 
-// Getter functions for SignerEnvelope struct
-func (se *SignerEnvelope) SignerId() string {
-	return se.signerID
+// Getters for SignerEnvelope
+func (se *SignerEnvelope) SignerID() string  { return se.signerID }
+func (se *SignerEnvelope) Signature() []byte { return se.signature }
+
+// Setters for SignerEnvelope
+func (se *SignerEnvelope) SetSignerID(id string)   { se.signerID = id }
+func (se *SignerEnvelope) SetSignature(sig []byte) { se.signature = sig }
+
+// NewSignerEnvelope creates a new SignerEnvelope with the given ID and signature
+func NewSignerEnvelope(id string, signature []byte) SignerEnvelope {
+	return SignerEnvelope{
+		signerID:  id,
+		signature: signature,
+	}
 }
 
-func (se *SignerEnvelope) Signature() []byte {
-	return se.signature
+// ProtoEncode converts SignerEnvelope to its protobuf representation
+func (se *SignerEnvelope) ProtoEncode() *ProtoSignerEnvelope {
+	if se == nil {
+		return nil
+	}
+	signerID := se.signerID
+	return &ProtoSignerEnvelope{
+		SignerId:  &signerID,
+		Signature: se.signature,
+	}
 }
 
-// Setter functions for SignerEnvelope struct
-func (se *SignerEnvelope) SetSignerId(signerId string) {
-	se.signerID = signerId
-}
-
-func (se *SignerEnvelope) SetSignature(sig []byte) {
-	se.signature = sig
+// ProtoDecode populates SignerEnvelope from its protobuf representation
+func (se *SignerEnvelope) ProtoDecode(data *ProtoSignerEnvelope) error {
+	if data == nil {
+		return nil
+	}
+	se.signerID = data.GetSignerId()
+	se.signature = data.GetSignature()
+	return nil
 }
 
 // AuxTemplate defines the template structure for auxiliary proof-of-work
 type AuxTemplate struct {
-	// Enforced correspondence
-	chainID         ChainID  // must match ap.Chain
+	// === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
+	chainID         ChainID  // must match ap.Chain (RVN)
 	prevHash        [32]byte // must equal donor_header.hashPrevBlock
 	payoutScript    []byte   // must equal coinbase.outputs[0].scriptPubKey
-	scriptSigMaxLen uint16   // ≤100; template may be tighter
+	scriptSigMaxLen uint16   // ≤ 100
 
-	// Advisory (policy/UX; NOT consensus unless elevated)
-	extranonce2Size uint8
-	nBits           uint32
-	nTimeMask       NTimeMask
+	// === Header/DAA knobs for job construction (signed) ===
+	version   uint32    // header.nVersion to use
+	nBits     uint32    // header.nBits
+	nTimeMask NTimeMask // allowed time range/step (e.g., {start, end, step})
+	height    uint32    // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
-	// Quorum signatures over CanonicalEncode(AuxTemplate) WITHOUT Sigs
-	sigs []SignerEnvelope // (SignerID, Signature)
+	// === Coinbase economics (signed) ===
+	coinbaseValue uint64 // subsidy + fees for output[0] (in RVN sats)
+
+	// === Tx set commitment for Merkle root (signed) ===
+	// Choose ONE of the two modes below:
+
+	// Mode A: COINBASE-ONLY (simplest; smallest template)
+	coinbaseOnly bool // if true => MerkleBranch is empty; tx count = 1
+
+	// Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
+	txCount      uint32   // total txs INCLUDING coinbase (index 0)
+	merkleBranch [][]byte // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
+
+	// === Miner extranonce ergonomics (signed/advisory) ===
+	extranonce2Size uint8 // typical 4..8
+
+	// === Quorum signatures over CanonicalEncode(template WITHOUT Sigs) ===
+	sigs []SignerEnvelope
 }
 
-func (at *AuxTemplate) ChainId() ChainID {
-	return at.chainID
-}
+// Getters for AuxTemplate fields
+func (at *AuxTemplate) ChainID() ChainID         { return at.chainID }
+func (at *AuxTemplate) PrevHash() [32]byte       { return at.prevHash }
+func (at *AuxTemplate) PayoutScript() []byte     { return at.payoutScript }
+func (at *AuxTemplate) ScriptSigMaxLen() uint16  { return at.scriptSigMaxLen }
+func (at *AuxTemplate) Version() uint32          { return at.version }
+func (at *AuxTemplate) NBits() uint32            { return at.nBits }
+func (at *AuxTemplate) NTimeMask() NTimeMask     { return at.nTimeMask }
+func (at *AuxTemplate) Height() uint32           { return at.height }
+func (at *AuxTemplate) CoinbaseValue() uint64    { return at.coinbaseValue }
+func (at *AuxTemplate) CoinbaseOnly() bool       { return at.coinbaseOnly }
+func (at *AuxTemplate) TxCount() uint32          { return at.txCount }
+func (at *AuxTemplate) MerkleBranch() [][]byte   { return at.merkleBranch }
+func (at *AuxTemplate) Extranonce2Size() uint8   { return at.extranonce2Size }
+func (at *AuxTemplate) Sigs() []SignerEnvelope   { return at.sigs }
 
-func (at *AuxTemplate) PrevHash() [32]byte {
-	return at.prevHash
-}
+// Setters for AuxTemplate fields
+func (at *AuxTemplate) SetChainID(id ChainID)               { at.chainID = id }
+func (at *AuxTemplate) SetPrevHash(hash [32]byte)           { at.prevHash = hash }
+func (at *AuxTemplate) SetPayoutScript(script []byte)       { at.payoutScript = script }
+func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)       { at.scriptSigMaxLen = len }
+func (at *AuxTemplate) SetVersion(v uint32)                 { at.version = v }
+func (at *AuxTemplate) SetNBits(bits uint32)                { at.nBits = bits }
+func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)         { at.nTimeMask = mask }
+func (at *AuxTemplate) SetHeight(h uint32)                  { at.height = h }
+func (at *AuxTemplate) SetCoinbaseValue(val uint64)         { at.coinbaseValue = val }
+func (at *AuxTemplate) SetCoinbaseOnly(only bool)           { at.coinbaseOnly = only }
+func (at *AuxTemplate) SetTxCount(count uint32)             { at.txCount = count }
+func (at *AuxTemplate) SetMerkleBranch(branch [][]byte)     { at.merkleBranch = branch }
+func (at *AuxTemplate) SetExtranonce2Size(size uint8)       { at.extranonce2Size = size }
+func (at *AuxTemplate) SetSigs(sigs []SignerEnvelope)       { at.sigs = sigs }
 
-func (at *AuxTemplate) PayoutScript() []byte {
-	return at.payoutScript
-}
-
-func (at *AuxTemplate) ScriptSigMaxLen() uint16 {
-	return at.scriptSigMaxLen
-}
-
-func (at *AuxTemplate) Extranonce2Size() uint8 {
-	return at.extranonce2Size
-}
-
-func (at *AuxTemplate) NBits() uint32 {
-	return at.nBits
-}
-
-func (at *AuxTemplate) NTimeMask() NTimeMask {
-	return at.nTimeMask
-}
-
-func (at *AuxTemplate) Sigs() []SignerEnvelope {
-	return at.sigs
-}
-
-// Setter functions for AuxTemplate struct
-func (at *AuxTemplate) SetChainId(chainId ChainID) {
-	at.chainID = chainId
-}
-
-func (at *AuxTemplate) SetPrevHash(prevHash [32]byte) {
-	at.prevHash = prevHash
-}
-
-func (at *AuxTemplate) SetPayoutScript(payoutScript []byte) {
-	at.payoutScript = payoutScript
-}
-
-func (at *AuxTemplate) SetScriptSigMaxLen(maxLen uint16) {
-	at.scriptSigMaxLen = maxLen
-}
-
-func (at *AuxTemplate) SetExtranonce2Size(size uint8) {
-	at.extranonce2Size = size
-}
-
-func (at *AuxTemplate) SetNBits(nBits uint32) {
-	at.nBits = nBits
-}
-
-func (at *AuxTemplate) SetNTimeMask(mask NTimeMask) {
-	at.nTimeMask = mask
-}
-
-func (at *AuxTemplate) SetSigs(sigs []SignerEnvelope) {
-	at.sigs = sigs
-}
-
-func CopyAuxTemplate(at *AuxTemplate) *AuxTemplate {
+// ProtoEncode converts AuxTemplate to its protobuf representation
+func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 	if at == nil {
 		return nil
 	}
 
-	sigs := make([]SignerEnvelope, len(at.sigs))
-	copy(sigs, at.sigs)
+	chainID := uint32(at.chainID)
+	scriptSigMaxLen := uint32(at.scriptSigMaxLen)
+	version := at.version
+	nbits := at.nBits
+	ntimeMask := uint32(at.nTimeMask)
+	height := at.height
+	coinbaseValue := at.coinbaseValue
+	coinbaseOnly := at.coinbaseOnly
+	txCount := at.txCount
+	extranonce2Size := uint32(at.extranonce2Size)
 
-	return &AuxTemplate{
-		chainID:         at.chainID,
-		prevHash:        at.prevHash,
-		payoutScript:    append([]byte(nil), at.payoutScript...),
-		scriptSigMaxLen: at.scriptSigMaxLen,
-		extranonce2Size: at.extranonce2Size,
-		nBits:           at.nBits,
-		nTimeMask:       at.nTimeMask,
-		sigs:            sigs,
+	// Convert merkle branch
+	merkleBranch := make([][]byte, len(at.merkleBranch))
+	copy(merkleBranch, at.merkleBranch)
+
+	// Convert signer envelopes
+	sigs := make([]*ProtoSignerEnvelope, len(at.sigs))
+	for i, sig := range at.sigs {
+		sigs[i] = sig.ProtoEncode()
 	}
+
+	return &ProtoAuxTemplate{
+		ChainId:         &chainID,
+		PrevHash:        at.prevHash[:],
+		PayoutScript:    at.payoutScript,
+		ScriptSigMaxLen: &scriptSigMaxLen,
+		Version:         &version,
+		Nbits:           &nbits,
+		NtimeMask:       &ntimeMask,
+		Height:          &height,
+		CoinbaseValue:   &coinbaseValue,
+		CoinbaseOnly:    &coinbaseOnly,
+		TxCount:         &txCount,
+		MerkleBranch:    merkleBranch,
+		Extranonce2Size: &extranonce2Size,
+		Sigs:            sigs,
+	}
+}
+
+// ProtoDecode populates AuxTemplate from its protobuf representation
+func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
+	if data == nil {
+		return nil
+	}
+
+	at.chainID = ChainID(data.GetChainId())
+
+	// Copy PrevHash (32 bytes)
+	if len(data.GetPrevHash()) == 32 {
+		copy(at.prevHash[:], data.GetPrevHash())
+	}
+
+	at.payoutScript = data.GetPayoutScript()
+	at.scriptSigMaxLen = uint16(data.GetScriptSigMaxLen())
+	at.version = data.GetVersion()
+	at.nBits = data.GetNbits()
+	at.nTimeMask = NTimeMask(data.GetNtimeMask())
+	at.height = data.GetHeight()
+	at.coinbaseValue = data.GetCoinbaseValue()
+	at.coinbaseOnly = data.GetCoinbaseOnly()
+	at.txCount = data.GetTxCount()
+
+	// Copy merkle branch
+	at.merkleBranch = make([][]byte, len(data.GetMerkleBranch()))
+	for i, hash := range data.GetMerkleBranch() {
+		at.merkleBranch[i] = make([]byte, len(hash))
+		copy(at.merkleBranch[i], hash)
+	}
+
+	at.extranonce2Size = uint8(data.GetExtranonce2Size())
+
+	// Decode signer envelopes
+	at.sigs = make([]SignerEnvelope, len(data.GetSigs()))
+	for i, sig := range data.GetSigs() {
+		if err := at.sigs[i].ProtoDecode(sig); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	chain    ChainID
-	header   []byte // 80B donor header
-	coinbase []byte // raw donor coinbase
-	branch   [][]byte
-	index    uint32
-	// (Height, etc., optional)
-}
-
-func NewAuxPow(chain ChainID, header, coinbase []byte, branch [][]byte, index uint32) *AuxPow {
-	return &AuxPow{
-		chain:    chain,
-		header:   header,
-		coinbase: coinbase,
-		branch:   branch,
-		index:    index,
-	}
-}
-
-// Getter functions for AuxPow struct
-func (ap *AuxPow) Chain() ChainID {
-	return ap.chain
-}
-
-func (ap *AuxPow) Header() []byte {
-	return ap.header
-}
-
-func (ap *AuxPow) Coinbase() []byte {
-	return ap.coinbase
-}
-
-func (ap *AuxPow) Branch() [][]byte {
-	return ap.branch
-}
-
-func (ap *AuxPow) Index() uint32 {
-	return ap.index
-}
-
-// Setter functions for AuxPow struct
-func (ap *AuxPow) SetChain(chainId ChainID) {
-	ap.chain = chainId
-}
-
-func (ap *AuxPow) SetHeader(header []byte) {
-	ap.header = header
-}
-
-func (ap *AuxPow) SetCoinbase(coinbase []byte) {
-	ap.coinbase = coinbase
-}
-
-func (ap *AuxPow) SetBranch(branch [][]byte) {
-	ap.branch = branch
-}
-
-func (ap *AuxPow) SetIndex(index uint32) {
-	ap.index = index
-}
-
-func CopyAuxPow(ap *AuxPow) *AuxPow {
-	if ap == nil {
-		return nil
-	}
-
-	branch := make([][]byte, len(ap.branch))
-	for i, b := range ap.branch {
-		branch[i] = make([]byte, len(b))
-		copy(branch[i], b)
-	}
-
-	return &AuxPow{
-		chain:    ap.chain,
-		header:   append([]byte(nil), ap.header...),
-		coinbase: append([]byte(nil), ap.coinbase...),
-		branch:   branch,
-		index:    ap.index,
-	}
+	ChainID   ChainID // Chain identifier
+	Header    []byte  // 80B donor header
+	Signature []byte  // Signature proving the work
 }
 
 // ProtoEncode converts AuxPow to its protobuf representation
@@ -220,21 +217,12 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 		return nil
 	}
 
-	branch := make([][]byte, len(ap.branch))
-	for i, b := range ap.branch {
-		branch[i] = make([]byte, len(b))
-		copy(branch[i], b)
-	}
-
-	chain := uint32(ap.chain)
-	index := ap.index
+	chainID := uint32(ap.ChainID)
 
 	return &ProtoAuxPow{
-		Chain:    &chain,
-		Header:   ap.header,
-		Coinbase: ap.coinbase,
-		Branch:   branch,
-		Index:    &index,
+		ChainId:   &chainID,
+		Header:    ap.Header,
+		Signature: ap.Signature,
 	}
 }
 
@@ -244,16 +232,9 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		return nil
 	}
 
-	ap.chain = ChainID(data.GetChain())
-	ap.header = data.GetHeader()
-	ap.coinbase = data.GetCoinbase()
-	ap.index = data.GetIndex()
-
-	ap.branch = make([][]byte, len(data.GetBranch()))
-	for i, b := range data.GetBranch() {
-		ap.branch[i] = make([]byte, len(b))
-		copy(ap.branch[i], b)
-	}
+	ap.ChainID = ChainID(data.GetChainId())
+	ap.Header = data.GetHeader()
+	ap.Signature = data.GetSignature()
 
 	return nil
 }

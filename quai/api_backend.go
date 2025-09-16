@@ -763,3 +763,7 @@ func (b *QuaiAPIBackend) BroadcastHeader(header *types.WorkObject, location comm
 func (b *QuaiAPIBackend) BroadcastWorkShare(workShare *types.WorkObjectShareView, location common.Location) error {
 	return b.quai.p2p.Broadcast(location, workShare)
 }
+
+func (b *QuaiAPIBackend) BroadcastAuxTemplate(auxTemplate *types.AuxTemplate, location common.Location) error {
+	return b.quai.p2p.Broadcast(location, auxTemplate)
+}

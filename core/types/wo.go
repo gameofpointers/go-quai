@@ -1054,7 +1054,11 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
-		cpy.auxPow = CopyAuxPow(wh.auxPow)
+		cpy.auxPow = &AuxPow{
+			ChainID:   wh.auxPow.ChainID,
+			Header:    append([]byte(nil), wh.auxPow.Header...),
+			Signature: append([]byte(nil), wh.auxPow.Signature...),
+		}
 	}
 
 	return &cpy

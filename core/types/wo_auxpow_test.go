@@ -102,15 +102,11 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := NewAuxPow(ChainID(1234), // Example chain ID
-		bytes.Repeat([]byte{0xaa}, 80),       // 80-byte donor header
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05}, // Sample coinbase
-		[][]byte{
-			{0xb1, 0xb2, 0xb3},
-			{0xc1, 0xc2, 0xc3},
-		},
-		42, // Example index
-	)
+	auxPow := &AuxPow{
+		ChainID:   1234,
+		Header:    bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
+		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, // Sample signature
+	}
 
 	// Create WorkObjectHeader with AuxPow
 	woHeader := &WorkObjectHeader{
@@ -151,11 +147,9 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	fmt.Printf("Data:                  %s\n", string(data))
 	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
 	fmt.Printf("AuxPow:\n")
-	fmt.Printf("  Chain:               %d\n", auxPow.Chain())
-	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header()))
-	fmt.Printf("  Coinbase:            %x\n", auxPow.Coinbase())
-	fmt.Printf("  Branch Count:        %d\n", len(auxPow.Branch()))
-	fmt.Printf("  Index:               %d\n", auxPow.Index())
+	fmt.Printf("  ChainID:             %d\n", auxPow.ChainID)
+	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header))
+	fmt.Printf("  Signature:           %x\n", auxPow.Signature)
 	fmt.Printf("=====================================\n")
 	fmt.Printf("Seal Hash:             %s\n", sealHash.Hex())
 	fmt.Printf("WorkObject Hash:       %s\n", hash.Hex())
@@ -205,15 +199,11 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	}
 
 	// Create AuxPow data
-	auxPow := NewAuxPow(ChainID(1234), // Example chain ID
-		bytes.Repeat([]byte{0xaa}, 80),       // 80-byte donor header
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05}, // Sample coinbase
-		[][]byte{
-			{0xb1, 0xb2, 0xb3},
-			{0xc1, 0xc2, 0xc3},
-		},
-		42, // Example index
-	)
+	auxPow := &AuxPow{
+		ChainID:   1234,
+		Header:    bytes.Repeat([]byte{0xaa}, 80),
+		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+	}
 
 	// Create WorkObjectHeader with AuxPow
 	woHeaderWithAuxPow := &WorkObjectHeader{
@@ -249,19 +239,20 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	fmt.Printf("  Hash:      %s\n", hashWithAuxPow.Hex())
 	fmt.Printf("=====================================\n")
 
-	// The seal hashes should be different when AuxPow is added
-	// This is because AuxPow is included in the seal encoding
-	if sealHashWithoutAuxPow == sealHashWithAuxPow {
-		t.Error("Seal hashes should be different when AuxPow is added")
+	// IMPORTANT: AuxPow is NOT included in the seal hash to prevent circular reference.
+	// The donor header in AuxPow commits to the WorkObject's seal hash, so the seal hash
+	// cannot depend on AuxPow. Therefore, hashes should be the SAME regardless of AuxPow.
+	if sealHashWithoutAuxPow != sealHashWithAuxPow {
+		t.Error("Seal hashes should be the SAME (AuxPow is excluded from seal hash)")
 	}
 
-	// Since the WorkObject hash depends on the seal hash,
-	// the final hashes should also be different
-	if hashWithoutAuxPow == hashWithAuxPow {
-		t.Error("WorkObject hashes should be different when AuxPow is added")
+	// Since the WorkObject hash depends on the seal hash, and the seal hash doesn't change,
+	// the final hashes should also be the same
+	if hashWithoutAuxPow != hashWithAuxPow {
+		t.Error("WorkObject hashes should be the SAME (AuxPow is excluded from hash calculation)")
 	}
 
-	t.Logf("Test passed: Hashes are different when AuxPow is added")
+	t.Logf("Test passed: Hashes are correctly the same (AuxPow excluded from hash)")
 }
 
 // TestWorkObjectProtoEncodeDecodeWithAuxPow tests protobuf encoding/decoding with AuxPow
@@ -282,16 +273,11 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := NewAuxPow(ChainID(1234), // Example chain ID
-		bytes.Repeat([]byte{0xaa}, 80),       // 80-byte donor header
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05}, // Sample coinbase
-		[][]byte{
-			{0xb1, 0xb2, 0xb3},
-			{0xb1, 0xb2, 0xb3},
-			{0xc1, 0xc2, 0xc3},
-		},
-		42,
-	)
+	auxPow := &AuxPow{
+		ChainID:   1234,
+		Header:    bytes.Repeat([]byte{0xaa}, 80),
+		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+	}
 
 	// Create original WorkObjectHeader
 	original := &WorkObjectHeader{
@@ -342,25 +328,14 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	if decoded.AuxPow() == nil {
 		t.Fatal("AuxPow should not be nil after decoding")
 	}
-	if decoded.AuxPow().Chain() != original.AuxPow().Chain() {
-		t.Error("AuxPow.Chain mismatch")
+	if decoded.AuxPow().ChainID != original.AuxPow().ChainID {
+		t.Error("AuxPow.ChainID mismatch")
 	}
-	if !bytes.Equal(decoded.AuxPow().Header(), original.AuxPow().Header()) {
+	if !bytes.Equal(decoded.AuxPow().Header, original.AuxPow().Header) {
 		t.Error("AuxPow.Header mismatch")
 	}
-	if !bytes.Equal(decoded.AuxPow().Coinbase(), original.AuxPow().Coinbase()) {
-		t.Error("AuxPow.Coinbase mismatch")
-	}
-	if decoded.AuxPow().Index() != original.AuxPow().Index() {
-		t.Error("AuxPow.Index mismatch")
-	}
-	if len(decoded.AuxPow().Branch()) != len(original.AuxPow().Branch()) {
-		t.Error("AuxPow.Branch length mismatch")
-	}
-	for i := range decoded.AuxPow().Branch() {
-		if !bytes.Equal(decoded.AuxPow().Branch()[i], original.AuxPow().Branch()[i]) {
-			t.Errorf("AuxPow.Branch[%d] mismatch", i)
-		}
+	if !bytes.Equal(decoded.AuxPow().Signature, original.AuxPow().Signature) {
+		t.Error("AuxPow.Signature mismatch")
 	}
 
 	t.Log("Proto encode/decode with AuxPow test passed")
@@ -514,15 +489,11 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
-	auxPow := NewAuxPow(ChainID(1234), // Example chain ID
-		bytes.Repeat([]byte{0xaa}, 80),       // 80-byte donor header
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05}, // Sample coinbase
-		[][]byte{
-			{0xb1, 0xb2, 0xb3},
-			{0xc1, 0xc2, 0xc3},
-		},
-		42, // Example index
-	)
+	auxPow := &AuxPow{
+		ChainID:   1234,
+		Header:    bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
+		Signature: bytes.Repeat([]byte{0xbb}, 64), // 64-byte signature
+	}
 
 	newHeaderWithAux := &WorkObjectHeader{
 		headerHash:          headerHash,
