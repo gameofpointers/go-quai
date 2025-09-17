@@ -123,10 +123,9 @@ func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	}
 
 	// Serialize the input and calculate SHA256D (double SHA256)
-	var buf bytes.Buffer
-	input.EncodeBinary(&buf)
+	data := input.EncodeBinaryRavencoinKAWPOW()
 
-	first := sha256.Sum256(buf.Bytes())
+	first := sha256.Sum256(data)
 	second := sha256.Sum256(first[:])
 
 	return common.BytesToHash(second[:])
@@ -156,146 +155,136 @@ func (h *RavencoinBlockHeader) GetDifficulty() *big.Int {
 	return new(big.Int).Div(maxTarget, target)
 }
 
-// EncodeBinary encodes the header in Ravencoin's binary format
-func (h *RavencoinBlockHeader) EncodeBinary(w io.Writer) error {
+// EncodeBinary encodes the header to Ravencoin's binary format
+func (h *RavencoinBlockHeader) EncodeBinaryRavencoinHeader() []byte {
+	var buf bytes.Buffer
+
 	// Write version (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, h.Version); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, h.Version)
 
 	// Write hashPrevBlock (32 bytes)
-	if _, err := w.Write(h.HashPrevBlock.Bytes()); err != nil {
-		return err
-	}
+	buf.Write(h.HashPrevBlock.Bytes())
 
 	// Write hashMerkleRoot (32 bytes)
-	if _, err := w.Write(h.HashMerkleRoot.Bytes()); err != nil {
-		return err
-	}
+	buf.Write(h.HashMerkleRoot.Bytes())
 
 	// Write time (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, h.Time); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, h.Time)
 
 	// Write bits (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, h.Bits); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, h.Bits)
 
 	// For KAWPOW blocks, write height, nonce64, and mixHash
 	// For pre-KAWPOW blocks, write nonce
 	if h.IsKAWPOWActive("mainnet") { // Default to mainnet for now
 		// Write height (4 bytes, little endian)
-		if err := binary.Write(w, binary.LittleEndian, h.Height); err != nil {
-			return err
-		}
+		binary.Write(&buf, binary.LittleEndian, h.Height)
 
 		// Write nonce64 (8 bytes, little endian)
-		if err := binary.Write(w, binary.LittleEndian, h.Nonce64); err != nil {
-			return err
-		}
+		binary.Write(&buf, binary.LittleEndian, h.Nonce64)
 
 		// Write mixHash (32 bytes)
-		if _, err := w.Write(h.MixHash.Bytes()); err != nil {
-			return err
-		}
+		buf.Write(h.MixHash.Bytes())
 	} else {
 		// Write nonce (4 bytes, little endian)
-		if err := binary.Write(w, binary.LittleEndian, h.Nonce); err != nil {
-			return err
-		}
+		binary.Write(&buf, binary.LittleEndian, h.Nonce)
 	}
 
-	return nil
+	return buf.Bytes()
 }
 
-// DecodeBinary decodes the header from Ravencoin's binary format
-func (h *RavencoinBlockHeader) DecodeBinary(r io.Reader, network string) error {
+// DecodeRavencoinHeader decodes bytes into a RavencoinBlockHeader
+func DecodeRavencoinHeader(data []byte) (*RavencoinBlockHeader, error) {
+	if len(data) < 80 {
+		return nil, fmt.Errorf("header data too short: %d bytes (minimum 80)", len(data))
+	}
+
+	h := &RavencoinBlockHeader{}
+	buf := bytes.NewReader(data)
+
 	// Read version
-	if err := binary.Read(r, binary.LittleEndian, &h.Version); err != nil {
-		return err
+	if err := binary.Read(buf, binary.LittleEndian, &h.Version); err != nil {
+		return nil, err
 	}
 
 	// Read hashPrevBlock
-	if _, err := io.ReadFull(r, h.HashPrevBlock[:]); err != nil {
-		return err
+	if _, err := io.ReadFull(buf, h.HashPrevBlock[:]); err != nil {
+		return nil, err
 	}
 
 	// Read hashMerkleRoot
-	if _, err := io.ReadFull(r, h.HashMerkleRoot[:]); err != nil {
-		return err
+	if _, err := io.ReadFull(buf, h.HashMerkleRoot[:]); err != nil {
+		return nil, err
 	}
 
 	// Read time
-	if err := binary.Read(r, binary.LittleEndian, &h.Time); err != nil {
-		return err
+	if err := binary.Read(buf, binary.LittleEndian, &h.Time); err != nil {
+		return nil, err
 	}
 
 	// Read bits
-	if err := binary.Read(r, binary.LittleEndian, &h.Bits); err != nil {
-		return err
+	if err := binary.Read(buf, binary.LittleEndian, &h.Bits); err != nil {
+		return nil, err
 	}
 
-	// Determine if this is a KAWPOW block based on time
-	if h.IsKAWPOWActive(network) {
+	// Check if this is a KAWPOW block based on time
+	// First check with the time we just read to determine header size
+	tempHeader := &RavencoinBlockHeader{Time: h.Time}
+	isKawpow := tempHeader.IsKAWPOWActive("mainnet")
+
+	if isKawpow {
+		// Ensure we have enough data for KAWPOW header
+		if len(data) < 120 {
+			return nil, fmt.Errorf("KAWPOW header data too short: %d bytes (expected 120)", len(data))
+		}
+
 		// Read height
-		if err := binary.Read(r, binary.LittleEndian, &h.Height); err != nil {
-			return err
+		if err := binary.Read(buf, binary.LittleEndian, &h.Height); err != nil {
+			return nil, err
 		}
 
 		// Read nonce64
-		if err := binary.Read(r, binary.LittleEndian, &h.Nonce64); err != nil {
-			return err
+		if err := binary.Read(buf, binary.LittleEndian, &h.Nonce64); err != nil {
+			return nil, err
 		}
 
 		// Read mixHash
-		if _, err := io.ReadFull(r, h.MixHash[:]); err != nil {
-			return err
+		if _, err := io.ReadFull(buf, h.MixHash[:]); err != nil {
+			return nil, err
 		}
 	} else {
 		// Read nonce
-		if err := binary.Read(r, binary.LittleEndian, &h.Nonce); err != nil {
-			return err
+		if err := binary.Read(buf, binary.LittleEndian, &h.Nonce); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return h, nil
 }
 
 // EncodeBinary encodes the KAWPOW input structure (without nonce64 and mixHash)
-func (input *RavencoinKAWPOWInput) EncodeBinary(w io.Writer) error {
+func (input *RavencoinKAWPOWInput) EncodeBinaryRavencoinKAWPOW() []byte {
+	var buf bytes.Buffer
+
 	// Write version (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, input.Version); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, input.Version)
 
 	// Write hashPrevBlock (32 bytes)
-	if _, err := w.Write(input.HashPrevBlock.Bytes()); err != nil {
-		return err
-	}
+	buf.Write(input.HashPrevBlock.Bytes())
 
 	// Write hashMerkleRoot (32 bytes)
-	if _, err := w.Write(input.HashMerkleRoot.Bytes()); err != nil {
-		return err
-	}
+	buf.Write(input.HashMerkleRoot.Bytes())
 
 	// Write time (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, input.Time); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, input.Time)
 
 	// Write bits (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, input.Bits); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, input.Bits)
 
 	// Write height (4 bytes, little endian)
-	if err := binary.Write(w, binary.LittleEndian, input.Height); err != nil {
-		return err
-	}
+	binary.Write(&buf, binary.LittleEndian, input.Height)
 
-	return nil
+	return buf.Bytes()
 }
 
 // String returns a string representation of the header
@@ -319,11 +308,10 @@ func (h *RavencoinBlockHeader) Size() int {
 	baseSize := 4 + 32 + 32 + 4 + 4
 
 	if h.IsKAWPOWActive("mainnet") {
-		// KAWPOW: height(4) + nonce64(8) + mixHash(32)
-		return baseSize + 4 + 8 + 32
+		// KAWPOW: height(4) + nonce64(8) + mixHash(32) = 44 bytes
+		return baseSize + 44 // 76 + 44 = 120 bytes
 	} else {
 		// Pre-KAWPOW: nonce(4)
-		return baseSize + 4
+		return baseSize + 4 // 76 + 4 = 80 bytes
 	}
 }
-

@@ -621,7 +621,13 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 		return mixHash, digest
 	}
 
-	blockNumber := header.PrimeTerminusNumber().Uint64()
+	// For quai blocks to rely on pow done on the raven coin donor header
+	ravencoinHeader, err := types.DecodeRavencoinHeader(header.AuxPow().Header())
+	if err != nil {
+		kawpow.logger.WithField("err", err).Error("Error decoding Ravencoin header")
+		return common.Hash{}, common.Hash{}
+	}
+	blockNumber := uint64(ravencoinHeader.Height)
 	digest, result := powLight(blockNumber, header.SealHash(), header.NonceU64())
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
