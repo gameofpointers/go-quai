@@ -1054,16 +1054,7 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
-		cpy.auxPow = &AuxPow{
-			Chain:    wh.auxPow.Chain,
-			Header:   append([]byte(nil), wh.auxPow.Header...),
-			Coinbase: append([]byte(nil), wh.auxPow.Coinbase...),
-			Index:    wh.auxPow.Index,
-		}
-		cpy.auxPow.Branch = make([][]byte, len(wh.auxPow.Branch))
-		for i, b := range wh.auxPow.Branch {
-			cpy.auxPow.Branch[i] = append([]byte(nil), b...)
-		}
+		cpy.auxPow = CopyAuxPow(wh.auxPow)
 	}
 
 	return &cpy
