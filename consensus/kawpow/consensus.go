@@ -46,7 +46,6 @@ func (kawpow *Kawpow) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 	if kawpow.config.PowMode == ModeFullFake {
 		return nil
 	}
-	// Short circuit if the header is known, or its parent not
 	if chain.GetHeaderByHash(header.Hash()) != nil {
 		return nil
 	}
@@ -874,4 +873,8 @@ func (kawpow *Kawpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 	}
 	// Header seems complete, assemble into a block and return
 	return types.NewWorkObject(header.WorkObjectHeader(), woBody, nil), nil
+}
+
+func (kawpow *Kawpow) NodeLocation() common.Location {
+	return kawpow.config.NodeLocation
 }

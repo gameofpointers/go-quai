@@ -5,7 +5,6 @@
 package kawpow
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -31,11 +30,6 @@ import (
 
 const (
 	c_dagItemsInCache = 10000
-
-	// Kawpow-specific constants
-	C_epochLength      = 7500    // Blocks per epoch (same as algorithm.go)
-	maxCachedEpoch     = 100     // Maximum cached epochs
-	kawpowCacheWords   = kawpowCacheBytes / 4
 )
 
 var (
@@ -69,7 +63,7 @@ var ravencoinKawpow [15]uint32 = [15]uint32{
 }
 
 const (
-	kawpowPeriodLength        = 3
+	kawpowPeriodLength       = 3
 	kawpowCacheBytes         = 16 * 1024
 	kawpowLaneCount          = 16
 	kawpowRegisterCount      = 32
@@ -523,8 +517,4 @@ func (kawpow *Kawpow) SetThreads(threads int) {
 		default:
 		}
 	}
-}
-
-func (kawpow *Kawpow) NodeLocation() common.Location {
-	return kawpow.config.NodeLocation
 }

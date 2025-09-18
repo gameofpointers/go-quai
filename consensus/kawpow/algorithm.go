@@ -6,29 +6,22 @@ package kawpow
 import (
 	"encoding/binary"
 	"hash"
-	"math/big"
 	"reflect"
-	"runtime"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"golang.org/x/crypto/sha3"
 
-	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/bitutil"
-	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/params"
 )
 
 const (
-	datasetInitBytes   = 1 << 32 // Bytes in dataset at genesis
-	datasetGrowthBytes = 1 << 26 // Dataset growth per epoch
+	datasetInitBytes   = 1 << 30 // Bytes in dataset at genesis
+	datasetGrowthBytes = 1 << 23 // Dataset growth per epoch
 	cacheInitBytes     = 1 << 24 // Bytes in cache at genesis
-	cacheGrowthBytes   = 1 << 21 // Cache growth per epoch
+	cacheGrowthBytes   = 1 << 17 // Cache growth per epoch
 	mixBytes           = 128     // Width of mix
 	hashBytes          = 64      // Hash length in bytes
 	hashWords          = 16      // Number of 32 bit ints in a hash
@@ -37,9 +30,9 @@ const (
 	loopAccesses       = 64      // Number of accesses in hashimoto loop
 
 	// Kawpow specific constants
-	kawpowCacheWords   = kawpowCacheBytes / 4
-	C_epochLength      = 7500    // Blocks per epoch
-	maxCachedEpoch     = 100     // Maximum cached epochs
+	kawpowCacheWords = kawpowCacheBytes / 4
+	C_epochLength    = 7500 // Blocks per epoch
+	maxCachedEpoch   = 100  // Maximum cached epochs
 )
 
 // cacheSize returns the size of the kawpow verification cache that belongs to a certain
@@ -108,7 +101,7 @@ func seedHash(block uint64) []byte {
 	if block < C_epochLength {
 		return seed
 	}
-	keccak256 := makeHasher(sha3.NewLegacyKeccak256())
+	keccak256 := getHasher256()
 	defer returnHasher(keccak256)
 
 	for i := 0; i < int(block/C_epochLength); i++ {
@@ -124,7 +117,7 @@ var hasherPool = sync.Pool{
 	New: func() interface{} { return sha3.NewLegacyKeccak256() },
 }
 
-func makeHasher(h hash.Hash) hash.Hash {
+func getHasher256() hash.Hash {
 	return hasherPool.Get().(hash.Hash)
 }
 
@@ -155,8 +148,7 @@ func generateCache(dest []uint32, epoch uint64, seed []byte, logger *log.Logger)
 	rows := int(size) / hashBytes
 
 	// Create a hasher to reuse between invocations
-	keccak512 := makeHasher(sha3.NewLegacyKeccak512())
-	defer returnHasher(keccak512)
+	keccak512 := sha3.NewLegacyKeccak512()
 
 	// Sequentially produce the initial dataset
 	keccak512.Reset()
@@ -327,6 +319,78 @@ func kawpowHash(cfg *kawpowConfig, height, seed, datasetSize uint64, lookup func
 		mix[i] ^= byte(l1[i%len(l1)])
 	}
 
+	return mix
+}
+
+// hasher is a repetitive hasher allowing the same hash data structures to be
+// reused between hash runs instead of requiring new ones to be created.
+type hasher func(dest []byte, data []byte)
+
+// makeHasher creates a repetitive hasher, allowing the same hash data structures to
+// be reused between hash runs instead of requiring new ones to be created. The returned
+// function is not thread safe!
+func makeHasher(h hash.Hash) hasher {
+	// sha3.state supports Read to get the sum, use it to avoid the overhead of Sum.
+	// Read alters the state but we reset the hash before every operation.
+	type readerHash interface {
+		hash.Hash
+		Read([]byte) (int, error)
+	}
+	rh := h.(readerHash)
+
+	outputLen := rh.Size()
+	return func(dest []byte, data []byte) {
+		rh.Reset()
+		rh.Write(data)
+		rh.Read(dest[:outputLen])
+	}
+}
+
+// fnv is an algorithm inspired by the FNV hash, which in some cases is used as
+// a non-associative substitute for XOR. Note that we multiply the prime with
+// the full 32-bit input, in contrast with the FNV-1 spec which multiplies the
+// prime with one byte (octet) in turn.
+func fnv(a, b uint32) uint32 {
+	return a*0x01000193 ^ b
+}
+
+// fnvHash mixes in data into mix using the ethash fnv method.
+func fnvHash(mix []uint32, data []uint32) {
+	for i := 0; i < len(mix); i++ {
+		mix[i] = mix[i]*0x01000193 ^ data[i]
+	}
+}
+
+// generateDatasetItem combines data from 256 pseudorandomly selected cache nodes,
+// and hashes that to compute a single dataset node.
+func generateDatasetItem(cache []uint32, index uint32, keccak512 hasher) []byte {
+	// Calculate the number of theoretical rows (we use one buffer nonetheless)
+	rows := uint32(len(cache) / hashWords)
+
+	// Initialize the mix
+	mix := make([]byte, hashBytes)
+
+	binary.LittleEndian.PutUint32(mix, cache[(index%rows)*hashWords]^index)
+	for i := 1; i < hashWords; i++ {
+		binary.LittleEndian.PutUint32(mix[i*4:], cache[(index%rows)*hashWords+uint32(i)])
+	}
+	keccak512(mix, mix)
+
+	// Convert the mix to uint32s to avoid constant bit shifting
+	intMix := make([]uint32, hashWords)
+	for i := 0; i < len(intMix); i++ {
+		intMix[i] = binary.LittleEndian.Uint32(mix[i*4:])
+	}
+	// fnv it with a lot of random cache nodes based on index
+	for i := uint32(0); i < datasetParents; i++ {
+		parent := fnv(index^i, intMix[i%16]) % rows
+		fnvHash(intMix, cache[parent*hashWords:])
+	}
+	// Flatten the uint32 mix into a binary one and return
+	for i, val := range intMix {
+		binary.LittleEndian.PutUint32(mix[i*4:], val)
+	}
+	keccak512(mix, mix)
 	return mix
 }
 
