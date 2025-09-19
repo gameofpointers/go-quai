@@ -102,7 +102,20 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := NewAuxPow(1234, bytes.Repeat([]byte{0xaa}, 80), []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+	testTx := RavencoinTransaction{
+		Version:  1,
+		Inputs:   []RavencoinTransactionIn{},
+		Outputs:  []RavencoinTransactionOut{},
+		LockTime: 0,
+	}
+	auxPow := NewAuxPow(
+		1234,
+		bytes.Repeat([]byte{0xaa}, 120),
+		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+		[][]byte{},
+		5000000000,
+		testTx,
+	)
 
 	// Create WorkObjectHeader with AuxPow
 	woHeader := &WorkObjectHeader{
@@ -195,10 +208,19 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	}
 
 	// Create AuxPow data
+	testTx := RavencoinTransaction{
+		Version:  1,
+		Inputs:   []RavencoinTransactionIn{},
+		Outputs:  []RavencoinTransactionOut{},
+		LockTime: 0,
+	}
 	auxPow := NewAuxPow(
 		1234,
-		bytes.Repeat([]byte{0xaa}, 80),
+		bytes.Repeat([]byte{0xaa}, 120),
 		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+		[][]byte{},
+		5000000000,
+		testTx,
 	)
 
 	// Create WorkObjectHeader with AuxPow
@@ -269,7 +291,20 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := NewAuxPow(1234, bytes.Repeat([]byte{0xaa}, 80), []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+	testTx := RavencoinTransaction{
+		Version:  1,
+		Inputs:   []RavencoinTransactionIn{},
+		Outputs:  []RavencoinTransactionOut{},
+		LockTime: 0,
+	}
+	auxPow := NewAuxPow(
+		1234,
+		bytes.Repeat([]byte{0xaa}, 120),
+		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+		[][]byte{},
+		5000000000,
+		testTx,
+	)
 
 	// Create original WorkObjectHeader
 	original := &WorkObjectHeader{
@@ -481,10 +516,19 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
+	testTx := RavencoinTransaction{
+		Version:  1,
+		Inputs:   []RavencoinTransactionIn{},
+		Outputs:  []RavencoinTransactionOut{},
+		LockTime: 0,
+	}
 	auxPow := NewAuxPow(
 		1234,
-		bytes.Repeat([]byte{0xaa}, 80),
+		bytes.Repeat([]byte{0xaa}, 120),
 		bytes.Repeat([]byte{0xbb}, 64),
+		[][]byte{},
+		5000000000,
+		testTx,
 	)
 
 	newHeaderWithAux := &WorkObjectHeader{

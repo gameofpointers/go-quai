@@ -13,7 +13,41 @@ import (
 
 // Test data generators
 func testAuxPow() *AuxPow {
-	return NewAuxPow(1337, bytes.Repeat([]byte{0xaa}, 80), bytes.Repeat([]byte{0xbb}, 64))
+	// Create a simple test coinbase transaction
+	testTx := RavencoinTransaction{
+		Version: 1,
+		Inputs: []RavencoinTransactionIn{
+			{
+				PreviousOutput: RavencoinOutPoint{
+					Hash:  common.Hash{},
+					Index: 0xFFFFFFFF,
+				},
+				ScriptSig: []byte{0x01, 0x02, 0x03},
+				Sequence:  0xFFFFFFFF,
+			},
+		},
+		Outputs: []RavencoinTransactionOut{
+			{
+				Value:        5000000000,
+				ScriptPubKey: []byte{0x76, 0xa9, 0x14},
+			},
+		},
+		LockTime: 0,
+	}
+
+	merkleBranch := [][]byte{
+		bytes.Repeat([]byte{0xcc}, 32),
+		bytes.Repeat([]byte{0xdd}, 32),
+	}
+
+	return NewAuxPow(
+		1337,                           // chainID
+		bytes.Repeat([]byte{0xaa}, 120), // header (KAWPOW is 120 bytes)
+		bytes.Repeat([]byte{0xbb}, 64),  // signature
+		merkleBranch,                     // merkle branch
+		5000000000,                       // coinbase value
+		testTx,                           // transaction
+	)
 }
 
 func testAuxTemplate() *AuxTemplate {
@@ -68,9 +102,14 @@ func TestAuxPowProtoEncodeDecode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify fields match
-	require.Equal(t, original.ChainID, decoded.ChainID)
-	require.Equal(t, original.Header, decoded.Header)
-	require.Equal(t, original.Signature, decoded.Signature)
+	require.Equal(t, original.ChainID(), decoded.ChainID())
+	require.Equal(t, original.Header(), decoded.Header())
+	require.Equal(t, original.Signature(), decoded.Signature())
+	require.Equal(t, original.CoinbaseValue(), decoded.CoinbaseValue())
+	require.Equal(t, len(original.MerkleBranch()), len(decoded.MerkleBranch()))
+	for i := range original.MerkleBranch() {
+		require.Equal(t, original.MerkleBranch()[i], decoded.MerkleBranch()[i])
+	}
 }
 
 // TestAuxPowProtoEncodeNil tests encoding nil AuxPow
@@ -86,9 +125,9 @@ func TestAuxPowProtoDecodeNil(t *testing.T) {
 	err := auxPow.ProtoDecode(nil)
 	require.NoError(t, err)
 	// AuxPow should remain in zero state
-	require.Equal(t, ChainID(0), auxPow.ChainID)
-	require.Nil(t, auxPow.Header)
-	require.Nil(t, auxPow.Signature)
+	require.Equal(t, ChainID(0), auxPow.ChainID())
+	require.Nil(t, auxPow.Header())
+	require.Nil(t, auxPow.Signature())
 }
 
 // TestAuxTemplateProtoEncodeDecode tests protobuf encoding and decoding of AuxTemplate
@@ -257,9 +296,9 @@ func TestAuxPowInWorkObjectHeader(t *testing.T) {
 	// Verify getter
 	retrieved := header.AuxPow()
 	require.NotNil(t, retrieved)
-	require.Equal(t, auxPow.ChainID, retrieved.ChainID)
-	require.Equal(t, auxPow.Header, retrieved.Header)
-	require.Equal(t, auxPow.Signature, retrieved.Signature)
+	require.Equal(t, auxPow.ChainID(), retrieved.ChainID())
+	require.Equal(t, auxPow.Header(), retrieved.Header())
+	require.Equal(t, auxPow.Signature(), retrieved.Signature())
 
 	// Test setting nil
 	header.SetAuxPow(nil)

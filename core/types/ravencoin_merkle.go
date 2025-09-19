@@ -244,3 +244,144 @@ func (tx *RavencoinTransaction) String() string {
 	return fmt.Sprintf("RavencoinTransaction{Version: %d, Inputs: %d, Outputs: %d, Hash: %s}",
 		tx.Version, len(tx.Inputs), len(tx.Outputs), tx.Hash().Hex())
 }
+
+// ProtoEncode converts RavencoinTransaction to its protobuf representation
+func (tx *RavencoinTransaction) ProtoEncode() *ProtoRavencoinTransaction {
+	if tx == nil {
+		return nil
+	}
+
+	version := tx.Version
+	lockTime := tx.LockTime
+
+	// Convert inputs
+	inputs := make([]*ProtoRavencoinTransactionIn, len(tx.Inputs))
+	for i, input := range tx.Inputs {
+		inputs[i] = input.ProtoEncode()
+	}
+
+	// Convert outputs
+	outputs := make([]*ProtoRavencoinTransactionOut, len(tx.Outputs))
+	for i, output := range tx.Outputs {
+		outputs[i] = output.ProtoEncode()
+	}
+
+	return &ProtoRavencoinTransaction{
+		Version:  &version,
+		Inputs:   inputs,
+		Outputs:  outputs,
+		LockTime: &lockTime,
+	}
+}
+
+// ProtoDecode populates RavencoinTransaction from its protobuf representation
+func (tx *RavencoinTransaction) ProtoDecode(data *ProtoRavencoinTransaction) error {
+	if data == nil {
+		return nil
+	}
+
+	tx.Version = data.GetVersion()
+	tx.LockTime = data.GetLockTime()
+
+	// Decode inputs
+	tx.Inputs = make([]RavencoinTransactionIn, len(data.GetInputs()))
+	for i, input := range data.GetInputs() {
+		if err := tx.Inputs[i].ProtoDecode(input); err != nil {
+			return err
+		}
+	}
+
+	// Decode outputs
+	tx.Outputs = make([]RavencoinTransactionOut, len(data.GetOutputs()))
+	for i, output := range data.GetOutputs() {
+		if err := tx.Outputs[i].ProtoDecode(output); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ProtoEncode for RavencoinTransactionIn
+func (in *RavencoinTransactionIn) ProtoEncode() *ProtoRavencoinTransactionIn {
+	if in == nil {
+		return nil
+	}
+
+	sequence := in.Sequence
+
+	return &ProtoRavencoinTransactionIn{
+		PreviousOutput: in.PreviousOutput.ProtoEncode(),
+		ScriptSig:      in.ScriptSig,
+		Sequence:       &sequence,
+	}
+}
+
+// ProtoDecode for RavencoinTransactionIn
+func (in *RavencoinTransactionIn) ProtoDecode(data *ProtoRavencoinTransactionIn) error {
+	if data == nil {
+		return nil
+	}
+
+	if err := in.PreviousOutput.ProtoDecode(data.GetPreviousOutput()); err != nil {
+		return err
+	}
+	in.ScriptSig = data.GetScriptSig()
+	in.Sequence = data.GetSequence()
+
+	return nil
+}
+
+// ProtoEncode for RavencoinTransactionOut
+func (out *RavencoinTransactionOut) ProtoEncode() *ProtoRavencoinTransactionOut {
+	if out == nil {
+		return nil
+	}
+
+	value := out.Value
+
+	return &ProtoRavencoinTransactionOut{
+		Value:        &value,
+		ScriptPubKey: out.ScriptPubKey,
+	}
+}
+
+// ProtoDecode for RavencoinTransactionOut
+func (out *RavencoinTransactionOut) ProtoDecode(data *ProtoRavencoinTransactionOut) error {
+	if data == nil {
+		return nil
+	}
+
+	out.Value = data.GetValue()
+	out.ScriptPubKey = data.GetScriptPubKey()
+
+	return nil
+}
+
+// ProtoEncode for RavencoinOutPoint
+func (op *RavencoinOutPoint) ProtoEncode() *ProtoRavencoinOutPoint {
+	if op == nil {
+		return nil
+	}
+
+	index := op.Index
+
+	return &ProtoRavencoinOutPoint{
+		Hash:  op.Hash.Bytes(),
+		Index: &index,
+	}
+}
+
+// ProtoDecode for RavencoinOutPoint
+func (op *RavencoinOutPoint) ProtoDecode(data *ProtoRavencoinOutPoint) error {
+	if data == nil {
+		return nil
+	}
+
+	if len(data.GetHash()) == 32 {
+		copy(op.Hash[:], data.GetHash())
+	}
+	op.Index = data.GetIndex()
+
+	return nil
+}

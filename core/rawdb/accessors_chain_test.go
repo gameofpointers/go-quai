@@ -16,6 +16,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testAuxPow creates a test AuxPow with default values
+func testAuxPow() *types.AuxPow {
+	testTx := types.RavencoinTransaction{
+		Version:  1,
+		Inputs:   []types.RavencoinTransactionIn{},
+		Outputs:  []types.RavencoinTransactionOut{},
+		LockTime: 0,
+	}
+	return types.NewAuxPow(
+		100,
+		[]byte{0x01, 0x02},
+		[]byte{0x03, 0x04},
+		[][]byte{},
+		5000000000,
+		testTx,
+	)
+}
+
 func TestCanonicalHashStorage(t *testing.T) {
 	db := NewMemoryDatabase(log.Global)
 
@@ -59,7 +77,7 @@ func TestHeaderStorage(t *testing.T) {
 	woBody := types.EmptyWorkObjectBody()
 	woBody.SetHeader(header)
 
-	woHeader := types.NewWorkObjectHeader(header.Hash(), common.Hash{1}, big.NewInt(1), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{1}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	woHeader := types.NewWorkObjectHeader(header.Hash(), common.Hash{1}, big.NewInt(1), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{1}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow())
 
 	wo := types.NewWorkObject(woHeader, woBody, nil)
 
@@ -190,7 +208,7 @@ func TestPbCacheStorage(t *testing.T) {
 	woBody := types.EmptyWorkObjectBody()
 	woBody.SetHeader(types.EmptyHeader())
 
-	woHeader := types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{1}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	woHeader := types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{1}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow())
 	wo := types.NewWorkObject(woHeader, woBody, nil)
 	WritePbCacheBody(db, common.Hash{1}, wo)
 
@@ -320,7 +338,7 @@ func TestBlockHashesIterator(t *testing.T) {
 			blockHeader := types.EmptyHeader()
 			blockBody := types.EmptyWorkObjectBody()
 			blockBody.SetHeader(blockHeader)
-			blockWoHeader := types.NewWorkObjectHeader(blockHeader.Hash(), types.EmptyHash, big.NewInt(int64(i+1)), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, byte(j)}, common.BytesToAddress([]byte{1}, common.Location{0, byte(j)}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+			blockWoHeader := types.NewWorkObjectHeader(blockHeader.Hash(), types.EmptyHash, big.NewInt(int64(i+1)), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, byte(j)}, common.BytesToAddress([]byte{1}, common.Location{0, byte(j)}), []byte{0, 1, 2, 3}, testAuxPow())
 			block := types.NewWorkObject(blockWoHeader, blockBody, nil)
 			WriteWorkObject(db, block.Hash(), block, types.BlockObject, common.ZONE_CTX)
 			hashes[i][block.Hash()] = true
@@ -345,7 +363,7 @@ func TestCommonAncestor(t *testing.T) {
 	regionHeader.SetNumber(big.NewInt(1), common.REGION_CTX)
 	regionBody := types.EmptyWorkObjectBody()
 	regionBody.SetHeader(regionHeader)
-	regionWoHeader := types.NewWorkObjectHeader(regionHeader.Hash(), types.EmptyRootHash, big.NewInt(1), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.Location{0}, common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	regionWoHeader := types.NewWorkObjectHeader(regionHeader.Hash(), types.EmptyRootHash, big.NewInt(1), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.Location{0}, common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow())
 	regionBlock := types.NewWorkObject(regionWoHeader, regionBody, nil)
 	WriteWorkObject(db, regionBlock.Hash(), regionBlock, types.BlockObject, common.REGION_CTX)
 
@@ -353,7 +371,7 @@ func TestCommonAncestor(t *testing.T) {
 	zone0Header := types.EmptyHeader()
 	zone0Body := types.EmptyWorkObjectBody()
 	zone0Body.SetHeader(zone0Header)
-	zone0WoHeader := types.NewWorkObjectHeader(zone0Header.Hash(), regionBlock.Hash(), big.NewInt(2), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, 0}, common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	zone0WoHeader := types.NewWorkObjectHeader(zone0Header.Hash(), regionBlock.Hash(), big.NewInt(2), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, 0}, common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow())
 	zone0Block := types.NewWorkObject(zone0WoHeader, zone0Body, nil)
 	WriteWorkObject(db, zone0Block.Hash(), zone0Block, types.BlockObject, common.ZONE_CTX)
 
@@ -361,14 +379,14 @@ func TestCommonAncestor(t *testing.T) {
 	zone1Header1 := types.EmptyHeader()
 	zone1Body1 := types.EmptyWorkObjectBody()
 	zone1Body1.SetHeader(zone1Header1)
-	zone1WoHeader1 := types.NewWorkObjectHeader(zone1Header1.Hash(), regionBlock.Hash(), big.NewInt(2), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, 1}, common.BytesToAddress([]byte{0}, common.Location{0, 1}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	zone1WoHeader1 := types.NewWorkObjectHeader(zone1Header1.Hash(), regionBlock.Hash(), big.NewInt(2), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 2, common.Location{0, 1}, common.BytesToAddress([]byte{0}, common.Location{0, 1}), []byte{0, 1, 2, 3}, testAuxPow())
 	zone1Block1 := types.NewWorkObject(zone1WoHeader1, zone1Body1, nil)
 	WriteWorkObject(db, zone1Block1.Hash(), zone1Block1, types.BlockObject, common.ZONE_CTX)
 
 	zone1Header2 := types.EmptyHeader()
 	zone1Body2 := types.EmptyWorkObjectBody()
 	zone1Body2.SetHeader(zone1Header2)
-	zone1WoHeader2 := types.NewWorkObjectHeader(zone1Header2.Hash(), zone1Block1.Hash(), big.NewInt(3), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 3, common.Location{0, 1}, common.BytesToAddress([]byte{0}, common.Location{0, 1}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	zone1WoHeader2 := types.NewWorkObjectHeader(zone1Header2.Hash(), zone1Block1.Hash(), big.NewInt(3), big.NewInt(3000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 3, common.Location{0, 1}, common.BytesToAddress([]byte{0}, common.Location{0, 1}), []byte{0, 1, 2, 3}, testAuxPow())
 	zone1Block2 := types.NewWorkObject(zone1WoHeader2, zone1Body2, nil)
 	WriteWorkObject(db, zone1Block2.Hash(), zone1Block2, types.BlockObject, common.ZONE_CTX)
 
@@ -619,7 +637,7 @@ func createTestWorkObject() *types.WorkObject {
 	woBody := types.EmptyWorkObjectBody()
 	woBody.SetHeader(types.EmptyHeader())
 
-	woHeader := types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04}))
+	woHeader := types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(11), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow())
 	return types.NewWorkObject(woHeader, woBody, nil)
 }
 
@@ -772,7 +790,7 @@ func createBlockWithTransactions(txs types.Transactions) *types.WorkObject {
 	woBody := types.EmptyWorkObjectBody()
 	woBody.SetHeader(types.EmptyHeader())
 	woBody.SetTransactions(txs)
-	return types.NewWorkObject(types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(0), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, types.NewAuxPow(100, []byte{0x01, 0x02}, []byte{0x03, 0x04})), woBody, nil)
+	return types.NewWorkObject(types.NewWorkObjectHeader(types.EmptyRootHash, types.EmptyRootHash, big.NewInt(0), big.NewInt(30000), big.NewInt(42), types.EmptyRootHash, types.BlockNonce{23}, 1, 1, common.LocationFromAddressBytes([]byte{0x01, 0x01}), common.BytesToAddress([]byte{0}, common.Location{0, 0}), []byte{0, 1, 2, 3}, testAuxPow()), woBody, nil)
 }
 
 func writeBlockForReceipts(db ethdb.Database, hash common.Hash, txs types.Transactions) {

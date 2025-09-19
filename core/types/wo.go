@@ -1059,10 +1059,19 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
+		// Deep copy merkle branch
+		merkleBranch := make([][]byte, len(wh.auxPow.MerkleBranch()))
+		for i, hash := range wh.auxPow.MerkleBranch() {
+			merkleBranch[i] = append([]byte(nil), hash...)
+		}
+
 		cpy.auxPow = NewAuxPow(
 			wh.auxPow.ChainID(),
 			append([]byte(nil), wh.auxPow.Header()...),
 			append([]byte(nil), wh.auxPow.Signature()...),
+			merkleBranch,
+			wh.auxPow.CoinbaseValue(),
+			wh.auxPow.Transaction(),
 		)
 	}
 
