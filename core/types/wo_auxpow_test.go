@@ -102,11 +102,7 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := &AuxPow{
-		ChainID:   1234,
-		Header:    bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
-		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, // Sample signature
-	}
+	auxPow := NewAuxPow(1234, bytes.Repeat([]byte{0xaa}, 80), []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
 
 	// Create WorkObjectHeader with AuxPow
 	woHeader := &WorkObjectHeader{
@@ -147,9 +143,9 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	fmt.Printf("Data:                  %s\n", string(data))
 	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
 	fmt.Printf("AuxPow:\n")
-	fmt.Printf("  ChainID:             %d\n", auxPow.ChainID)
-	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header))
-	fmt.Printf("  Signature:           %x\n", auxPow.Signature)
+	fmt.Printf("  ChainID:             %d\n", auxPow.ChainID())
+	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header()))
+	fmt.Printf("  Signature:           %x\n", auxPow.Signature())
 	fmt.Printf("=====================================\n")
 	fmt.Printf("Seal Hash:             %s\n", sealHash.Hex())
 	fmt.Printf("WorkObject Hash:       %s\n", hash.Hex())
@@ -199,11 +195,11 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	}
 
 	// Create AuxPow data
-	auxPow := &AuxPow{
-		ChainID:   1234,
-		Header:    bytes.Repeat([]byte{0xaa}, 80),
-		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-	}
+	auxPow := NewAuxPow(
+		1234,
+		bytes.Repeat([]byte{0xaa}, 80),
+		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+	)
 
 	// Create WorkObjectHeader with AuxPow
 	woHeaderWithAuxPow := &WorkObjectHeader{
@@ -273,11 +269,7 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	auxPow := &AuxPow{
-		ChainID:   1234,
-		Header:    bytes.Repeat([]byte{0xaa}, 80),
-		Signature: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-	}
+	auxPow := NewAuxPow(1234, bytes.Repeat([]byte{0xaa}, 80), []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
 
 	// Create original WorkObjectHeader
 	original := &WorkObjectHeader{
@@ -328,13 +320,13 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	if decoded.AuxPow() == nil {
 		t.Fatal("AuxPow should not be nil after decoding")
 	}
-	if decoded.AuxPow().ChainID != original.AuxPow().ChainID {
+	if decoded.AuxPow().ChainID() != original.AuxPow().ChainID() {
 		t.Error("AuxPow.ChainID mismatch")
 	}
-	if !bytes.Equal(decoded.AuxPow().Header, original.AuxPow().Header) {
+	if !bytes.Equal(decoded.AuxPow().Header(), original.AuxPow().Header()) {
 		t.Error("AuxPow.Header mismatch")
 	}
-	if !bytes.Equal(decoded.AuxPow().Signature, original.AuxPow().Signature) {
+	if !bytes.Equal(decoded.AuxPow().Signature(), original.AuxPow().Signature()) {
 		t.Error("AuxPow.Signature mismatch")
 	}
 
@@ -489,11 +481,11 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
-	auxPow := &AuxPow{
-		ChainID:   1234,
-		Header:    bytes.Repeat([]byte{0xaa}, 80), // 80-byte donor header
-		Signature: bytes.Repeat([]byte{0xbb}, 64), // 64-byte signature
-	}
+	auxPow := NewAuxPow(
+		1234,
+		bytes.Repeat([]byte{0xaa}, 80),
+		bytes.Repeat([]byte{0xbb}, 64),
+	)
 
 	newHeaderWithAux := &WorkObjectHeader{
 		headerHash:          headerHash,

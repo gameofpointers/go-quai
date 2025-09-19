@@ -305,21 +305,28 @@ func keccakF800(state *[25]uint32) {
 	}
 }
 
-// kawpowHash computes the kawpow hash
+// kawpowHash computes the kawpow hash using the ProgPoW algorithm with KAWPOW parameters
 func kawpowHash(cfg *kawpowConfig, height, seed, datasetSize uint64, lookup func(uint32) []uint32, l1 []uint32) []byte {
-	// This is a simplified kawpow hash implementation
-	// A full implementation would follow the exact kawpow specification
+	// Convert seed to hash input for kawpow
+	hash := make([]byte, 32)
+	binary.LittleEndian.PutUint64(hash[0:8], seed)
+	binary.LittleEndian.PutUint64(hash[8:16], height)
 
-	mix := make([]byte, 32)
-	binary.LittleEndian.PutUint64(mix[0:8], seed)
-	binary.LittleEndian.PutUint64(mix[8:16], height)
-
-	// Simplified mixing with cache
-	for i := 0; i < len(mix); i++ {
-		mix[i] ^= byte(l1[i%len(l1)])
+	// For kawpow, we need to provide a lookup function that returns []byte
+	// Convert the provided lookup function
+	byteLookup := func(index uint32) []byte {
+		data := lookup(index)
+		result := make([]byte, len(data)*4)
+		for i, val := range data {
+			binary.LittleEndian.PutUint32(result[i*4:], val)
+		}
+		return result
 	}
 
-	return mix
+	// Call the main kawpow function from algorithm_core.go
+	_, digest := kawpow(hash, seed, datasetSize, height, l1, byteLookup)
+
+	return digest
 }
 
 // hasher is a repetitive hasher allowing the same hash data structures to be

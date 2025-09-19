@@ -367,10 +367,14 @@ func kawpow(hash []byte, nonce uint64, size uint64, blockNumber uint64, cDag []u
 		mix         [kawpowLanes][kawpowRegs]uint32
 		laneResults [kawpowLanes]uint32
 	)
+
+	// KAWPOW: Use kawpowInitialize instead of keccakF800Short to get seed with RAVENCOINKAWAOW
 	result := make([]uint32, 8)
-	seed := keccakF800Short(hash, nonce, result)
+	seed, seedHead := kawpowInitialize(hash, nonce)
+	seedValue := seedHead // Use the seedHead for ProgPoW operations
+
 	for lane := uint32(0); lane < kawpowLanes; lane++ {
-		mix[lane] = fillMix(seed, lane)
+		mix[lane] = fillMix(seedValue, lane)
 	}
 	// KAWPOW: Use period length 3 instead of 10
 	period := (blockNumber / kawpowPeriodLength)
@@ -391,11 +395,16 @@ func kawpow(hash []byte, nonce uint64, size uint64, blockNumber uint64, cDag []u
 	for lane := uint32(0); lane < kawpowLanes; lane++ {
 		fnv1a(&result[lane%8], laneResults[lane])
 	}
-	finalHash := keccakF800Long(hash, seed, result[:])
+
+	// Create mix hash from result
 	mixHash := make([]byte, 8*4)
 	for i := 0; i < 8; i++ {
 		binary.LittleEndian.PutUint32(mixHash[i*4:], result[i])
 	}
+
+	// KAWPOW: Use kawpowFinalize instead of keccakF800Long to get final digest with RAVENCOINKAWAOW
+	finalHash := kawpowFinalize(seed, mixHash)
+
 	return mixHash[:], finalHash[:]
 }
 

@@ -13,11 +13,7 @@ import (
 
 // Test data generators
 func testAuxPow() *AuxPow {
-	return &AuxPow{
-		ChainID:   1337,
-		Header:    bytes.Repeat([]byte{0xaa}, 80),
-		Signature: bytes.Repeat([]byte{0xbb}, 64),
-	}
+	return NewAuxPow(1337, bytes.Repeat([]byte{0xaa}, 80), bytes.Repeat([]byte{0xbb}, 64))
 }
 
 func testAuxTemplate() *AuxTemplate {
@@ -329,7 +325,7 @@ func TestAuxTemplateValidation(t *testing.T) {
 	coinbaseOnlyTemplate := &AuxTemplate{}
 	coinbaseOnlyTemplate.SetChainID(1234)
 	coinbaseOnlyTemplate.SetCoinbaseOnly(true)
-	coinbaseOnlyTemplate.SetTxCount(1) // Should be 1 for coinbase-only
+	coinbaseOnlyTemplate.SetTxCount(1)        // Should be 1 for coinbase-only
 	coinbaseOnlyTemplate.SetMerkleBranch(nil) // Should be empty for coinbase-only
 
 	if coinbaseOnlyTemplate.CoinbaseOnly() {

@@ -41,6 +41,17 @@ type RavencoinKAWPOWInput struct {
 	Height         uint32      `json:"height"         gencodec:"required"`
 }
 
+func EmptyRavencoinKAWPOWInput() *RavencoinKAWPOWInput {
+	return &RavencoinKAWPOWInput{
+		Version:        0,
+		HashPrevBlock:  common.Hash{},
+		HashMerkleRoot: common.Hash{},
+		Time:           0,
+		Bits:           0,
+		Height:         0,
+	}
+}
+
 // KAWPOW activation time constants (matching Ravencoin)
 const (
 	MainnetKAWPOWActivationTime = 1588788000 // May 6, 2020

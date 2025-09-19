@@ -85,36 +85,36 @@ type AuxTemplate struct {
 }
 
 // Getters for AuxTemplate fields
-func (at *AuxTemplate) ChainID() ChainID         { return at.chainID }
-func (at *AuxTemplate) PrevHash() [32]byte       { return at.prevHash }
-func (at *AuxTemplate) PayoutScript() []byte     { return at.payoutScript }
-func (at *AuxTemplate) ScriptSigMaxLen() uint16  { return at.scriptSigMaxLen }
-func (at *AuxTemplate) Version() uint32          { return at.version }
-func (at *AuxTemplate) NBits() uint32            { return at.nBits }
-func (at *AuxTemplate) NTimeMask() NTimeMask     { return at.nTimeMask }
-func (at *AuxTemplate) Height() uint32           { return at.height }
-func (at *AuxTemplate) CoinbaseValue() uint64    { return at.coinbaseValue }
-func (at *AuxTemplate) CoinbaseOnly() bool       { return at.coinbaseOnly }
-func (at *AuxTemplate) TxCount() uint32          { return at.txCount }
-func (at *AuxTemplate) MerkleBranch() [][]byte   { return at.merkleBranch }
-func (at *AuxTemplate) Extranonce2Size() uint8   { return at.extranonce2Size }
-func (at *AuxTemplate) Sigs() []SignerEnvelope   { return at.sigs }
+func (at *AuxTemplate) ChainID() ChainID        { return at.chainID }
+func (at *AuxTemplate) PrevHash() [32]byte      { return at.prevHash }
+func (at *AuxTemplate) PayoutScript() []byte    { return at.payoutScript }
+func (at *AuxTemplate) ScriptSigMaxLen() uint16 { return at.scriptSigMaxLen }
+func (at *AuxTemplate) Version() uint32         { return at.version }
+func (at *AuxTemplate) NBits() uint32           { return at.nBits }
+func (at *AuxTemplate) NTimeMask() NTimeMask    { return at.nTimeMask }
+func (at *AuxTemplate) Height() uint32          { return at.height }
+func (at *AuxTemplate) CoinbaseValue() uint64   { return at.coinbaseValue }
+func (at *AuxTemplate) CoinbaseOnly() bool      { return at.coinbaseOnly }
+func (at *AuxTemplate) TxCount() uint32         { return at.txCount }
+func (at *AuxTemplate) MerkleBranch() [][]byte  { return at.merkleBranch }
+func (at *AuxTemplate) Extranonce2Size() uint8  { return at.extranonce2Size }
+func (at *AuxTemplate) Sigs() []SignerEnvelope  { return at.sigs }
 
 // Setters for AuxTemplate fields
-func (at *AuxTemplate) SetChainID(id ChainID)               { at.chainID = id }
-func (at *AuxTemplate) SetPrevHash(hash [32]byte)           { at.prevHash = hash }
-func (at *AuxTemplate) SetPayoutScript(script []byte)       { at.payoutScript = script }
-func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)       { at.scriptSigMaxLen = len }
-func (at *AuxTemplate) SetVersion(v uint32)                 { at.version = v }
-func (at *AuxTemplate) SetNBits(bits uint32)                { at.nBits = bits }
-func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)         { at.nTimeMask = mask }
-func (at *AuxTemplate) SetHeight(h uint32)                  { at.height = h }
-func (at *AuxTemplate) SetCoinbaseValue(val uint64)         { at.coinbaseValue = val }
-func (at *AuxTemplate) SetCoinbaseOnly(only bool)           { at.coinbaseOnly = only }
-func (at *AuxTemplate) SetTxCount(count uint32)             { at.txCount = count }
-func (at *AuxTemplate) SetMerkleBranch(branch [][]byte)     { at.merkleBranch = branch }
-func (at *AuxTemplate) SetExtranonce2Size(size uint8)       { at.extranonce2Size = size }
-func (at *AuxTemplate) SetSigs(sigs []SignerEnvelope)       { at.sigs = sigs }
+func (at *AuxTemplate) SetChainID(id ChainID)           { at.chainID = id }
+func (at *AuxTemplate) SetPrevHash(hash [32]byte)       { at.prevHash = hash }
+func (at *AuxTemplate) SetPayoutScript(script []byte)   { at.payoutScript = script }
+func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)   { at.scriptSigMaxLen = len }
+func (at *AuxTemplate) SetVersion(v uint32)             { at.version = v }
+func (at *AuxTemplate) SetNBits(bits uint32)            { at.nBits = bits }
+func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)     { at.nTimeMask = mask }
+func (at *AuxTemplate) SetHeight(h uint32)              { at.height = h }
+func (at *AuxTemplate) SetCoinbaseValue(val uint64)     { at.coinbaseValue = val }
+func (at *AuxTemplate) SetCoinbaseOnly(only bool)       { at.coinbaseOnly = only }
+func (at *AuxTemplate) SetTxCount(count uint32)         { at.txCount = count }
+func (at *AuxTemplate) SetMerkleBranch(branch [][]byte) { at.merkleBranch = branch }
+func (at *AuxTemplate) SetExtranonce2Size(size uint8)   { at.extranonce2Size = size }
+func (at *AuxTemplate) SetSigs(sigs []SignerEnvelope)   { at.sigs = sigs }
 
 // ProtoEncode converts AuxTemplate to its protobuf representation
 func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
@@ -206,10 +206,30 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	ChainID   ChainID // Chain identifier
-	Header    []byte  // 80B donor header
-	Signature []byte  // Signature proving the work
+	chainID   ChainID // Chain identifier
+	header    []byte  // 80B donor header
+	signature []byte  // Signature proving the work
 }
+
+func NewAuxPow(chainID ChainID, header []byte, signature []byte) *AuxPow {
+	return &AuxPow{
+		chainID:   chainID,
+		header:    header,
+		signature: signature,
+	}
+}
+
+func (ap *AuxPow) ChainID() ChainID { return ap.chainID }
+
+func (ap *AuxPow) Header() []byte { return ap.header }
+
+func (ap *AuxPow) Signature() []byte { return ap.signature }
+
+func (ap *AuxPow) SetChainID(id ChainID) { ap.chainID = id }
+
+func (ap *AuxPow) SetHeader(header []byte) { ap.header = header }
+
+func (ap *AuxPow) SetSignature(sig []byte) { ap.signature = sig }
 
 // ProtoEncode converts AuxPow to its protobuf representation
 func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
@@ -217,12 +237,12 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 		return nil
 	}
 
-	chainID := uint32(ap.ChainID)
+	chainID := uint32(ap.ChainID())
 
 	return &ProtoAuxPow{
 		ChainId:   &chainID,
-		Header:    ap.Header,
-		Signature: ap.Signature,
+		Header:    ap.Header(),
+		Signature: ap.Signature(),
 	}
 }
 
@@ -232,9 +252,9 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		return nil
 	}
 
-	ap.ChainID = ChainID(data.GetChainId())
-	ap.Header = data.GetHeader()
-	ap.Signature = data.GetSignature()
+	ap.SetChainID(ChainID(data.GetChainId()))
+	ap.SetHeader(data.GetHeader())
+	ap.SetSignature(data.GetSignature())
 
 	return nil
 }

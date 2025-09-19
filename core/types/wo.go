@@ -225,6 +225,10 @@ func (wo *WorkObject) Time() uint64 {
 	return wo.WorkObjectHeader().Time()
 }
 
+func (wo *WorkObject) AuxPow() *AuxPow {
+	return wo.WorkObjectHeader().AuxPow()
+}
+
 func (wo *WorkObject) Header() *Header {
 	return wo.Body().Header()
 }
@@ -845,7 +849,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 }
 
 func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, woType WorkObjectView) *WorkObject {
-	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.WorkObjectHeader().number, header.WorkObjectHeader().difficulty, header.WorkObjectHeader().PrimeTerminusNumber(), header.WorkObjectHeader().txHash, header.WorkObjectHeader().nonce, header.WorkObjectHeader().lock, header.WorkObjectHeader().time, header.Location(), header.PrimaryCoinbase(), header.WorkObjectHeader().data)
+	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.WorkObjectHeader().number, header.WorkObjectHeader().difficulty, header.WorkObjectHeader().PrimeTerminusNumber(), header.WorkObjectHeader().txHash, header.WorkObjectHeader().nonce, header.WorkObjectHeader().lock, header.WorkObjectHeader().time, header.Location(), header.PrimaryCoinbase(), header.WorkObjectHeader().data, header.WorkObjectHeader().AuxPow())
 	woBody, _ := NewWorkObjectBody(header.Body().Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
 }
@@ -1019,7 +1023,7 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Locatio
 	return nil
 }
 
-func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte) *WorkObjectHeader {
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow) *WorkObjectHeader {
 	return &WorkObjectHeader{
 		headerHash:          headerHash,
 		parentHash:          parentHash,
@@ -1033,6 +1037,7 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 		location:            location,
 		primaryCoinbase:     primaryCoinbase,
 		data:                data,
+		auxPow:              auxpow,
 	}
 }
 
@@ -1054,11 +1059,11 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
-		cpy.auxPow = &AuxPow{
-			ChainID:   wh.auxPow.ChainID,
-			Header:    append([]byte(nil), wh.auxPow.Header...),
-			Signature: append([]byte(nil), wh.auxPow.Signature...),
-		}
+		cpy.auxPow = NewAuxPow(
+			wh.auxPow.ChainID(),
+			append([]byte(nil), wh.auxPow.Header()...),
+			append([]byte(nil), wh.auxPow.Signature()...),
+		)
 	}
 
 	return &cpy
