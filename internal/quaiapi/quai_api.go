@@ -1241,7 +1241,31 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
-	pendingHeader, err := s.b.GetPendingHeader()
+	pendingHeader, err := s.b.GetPendingHeader(types.Progpow) // 0 is default progpow
+	if err != nil {
+		return nil, err
+	} else if pendingHeader == nil {
+		return nil, errors.New("no pending header found")
+	}
+	// Only keep the Header in the body
+	pendingHeaderForMining := pendingHeader.WithBody(pendingHeader.Header(), nil, nil, nil, nil, nil)
+	// Marshal the response.
+	protoWo, err := pendingHeaderForMining.ProtoEncode(types.PEtxObject)
+	if err != nil {
+		return nil, err
+	}
+	data, err := proto.Marshal(protoWo)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (s *PublicBlockChainQuaiAPI) GetKawPowPendingHeader(ctx context.Context) (hexutil.Bytes, error) {
+	if !s.b.ProcessingState() {
+		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
+	}
+	pendingHeader, err := s.b.GetPendingHeader(types.Kawpow)
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

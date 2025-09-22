@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,4 +97,110 @@ func TestBuildCoinbaseScriptSigLargeData(t *testing.T) {
 	require.Equal(t, byte(0x4d), scriptSig2[5], "Should use OP_PUSHDATA2 for 300 bytes")
 	require.Equal(t, byte(44), scriptSig2[6], "Low byte of length (300 = 0x012c)")
 	require.Equal(t, byte(1), scriptSig2[7], "High byte of length")
+}
+
+func TestBuildCoinbaseScriptSigWithNonce(t *testing.T) {
+	blockHeight := uint32(680000)
+	extraNonce1 := uint32(0x12345678)
+	extraNonce2 := uint64(0x123456789abcdef0)
+	extraData := []byte("KAWPOW")
+
+	scriptSig := BuildCoinbaseScriptSigWithNonce(blockHeight, extraNonce1, extraNonce2, extraData)
+
+	// Expected structure:
+	// [0x04][height 4 bytes][0x04][nonce1 4 bytes][0x08][nonce2 8 bytes][0x06]["KAWPOW"]
+	// Total: 1 + 4 + 1 + 4 + 1 + 8 + 1 + 6 = 26 bytes
+
+	require.Equal(t, 26, len(scriptSig), "ScriptSig should be 26 bytes")
+
+	// Check height section
+	require.Equal(t, byte(0x04), scriptSig[0], "Height should use OP_PUSH4")
+	require.Equal(t, []byte{0x40, 0x60, 0x0a, 0x00}, scriptSig[1:5], "Height 680000 in little-endian")
+
+	// Check extra nonce 1 section
+	require.Equal(t, byte(0x04), scriptSig[5], "ExtraNonce1 should use OP_PUSH4")
+	require.Equal(t, []byte{0x78, 0x56, 0x34, 0x12}, scriptSig[6:10], "ExtraNonce1 in little-endian")
+
+	// Check extra nonce 2 section
+	require.Equal(t, byte(0x08), scriptSig[10], "ExtraNonce2 should use OP_PUSH8")
+	require.Equal(t, []byte{0xf0, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12}, scriptSig[11:19], "ExtraNonce2 in little-endian")
+
+	// Check extra data section
+	require.Equal(t, byte(0x06), scriptSig[19], "Extra data should use OP_PUSH6")
+	require.Equal(t, []byte("KAWPOW"), scriptSig[20:26], "Extra data should be 'KAWPOW'")
+}
+
+func TestBuildCoinbaseScriptSigWithPartialNonces(t *testing.T) {
+	blockHeight := uint32(700000)
+	extraNonce1 := uint32(0x11223344)
+	extraNonce2 := uint64(0) // No second nonce
+	extraData := []byte("Quai")
+
+	scriptSig := BuildCoinbaseScriptSigWithNonce(blockHeight, extraNonce1, extraNonce2, extraData)
+
+	// Expected: height(5) + nonce1(5) + data(5) = 15 bytes
+	require.Equal(t, 15, len(scriptSig))
+
+	// Verify structure
+	require.Equal(t, byte(0x04), scriptSig[0], "Height OP_PUSH4")
+	require.Equal(t, byte(0x04), scriptSig[5], "ExtraNonce1 OP_PUSH4")
+	require.Equal(t, byte(0x04), scriptSig[10], "Extra data length")
+	require.Equal(t, []byte("Quai"), scriptSig[11:15], "Extra data")
+}
+
+func TestCreateCoinbaseTxWithNonce(t *testing.T) {
+	blockHeight := uint32(680000)
+	extraNonce1 := uint32(0xdeadbeef)
+	extraNonce2 := uint64(0xcafebabecafebabe)
+	extraData := []byte("KAWPOW Test")
+	minerAddress, _ := hex.DecodeString("76a914" + "89abcdefabbaabbaabbaabbaabbaabbaabbaabba" + "88ac")
+	blockReward := int64(5000000000)
+
+	tx := CreateCoinbaseTxWithNonce(blockHeight, extraNonce1, extraNonce2, extraData, minerAddress, blockReward)
+
+	require.NotNil(t, tx)
+	require.Len(t, tx.TxIn, 1)
+	require.Len(t, tx.TxOut, 1)
+
+	// Check coinbase input scriptSig contains our nonces
+	scriptSig := tx.TxIn[0].SignatureScript
+	require.True(t, len(scriptSig) > 20, "ScriptSig should contain height + nonces + data")
+
+	// Verify it's a proper coinbase
+	require.Equal(t, chainhash.Hash{}, tx.TxIn[0].PreviousOutPoint.Hash)
+	require.Equal(t, uint32(0xFFFFFFFF), tx.TxIn[0].PreviousOutPoint.Index)
+
+	// Verify output
+	require.Equal(t, blockReward, tx.TxOut[0].Value)
+	require.Equal(t, minerAddress, tx.TxOut[0].PkScript)
+}
+
+func TestExtractNoncesFromCoinbase(t *testing.T) {
+	blockHeight := uint32(680000)
+	extraNonce1 := uint32(0x12345678)
+	extraNonce2 := uint64(0x123456789abcdef0)
+	extraData := []byte("Test")
+
+	// Create scriptSig with nonces
+	scriptSig := BuildCoinbaseScriptSigWithNonce(blockHeight, extraNonce1, extraNonce2, extraData)
+
+	// Extract nonces back
+	extractedHeight, extractedNonce1, extractedNonce2, extractedData := ExtractNoncesFromCoinbase(scriptSig)
+
+	// Verify all values match
+	require.Equal(t, blockHeight, extractedHeight, "Height should match")
+	require.Equal(t, extraNonce1, extractedNonce1, "ExtraNonce1 should match")
+	require.Equal(t, extraNonce2, extractedNonce2, "ExtraNonce2 should match")
+	require.Equal(t, extraData, extractedData, "Extra data should match")
+}
+
+func TestExtractHeightFromCoinbase(t *testing.T) {
+	blockHeight := uint32(1000000)
+	extraData := []byte("Height test")
+
+	scriptSig := BuildCoinbaseScriptSig(blockHeight, extraData)
+	extractedHeight, offset := ExtractHeightFromCoinbase(scriptSig)
+
+	require.Equal(t, blockHeight, extractedHeight, "Height should match")
+	require.Equal(t, 5, offset, "Offset should be 5 (after OP_PUSH4 + 4 bytes)")
 }

@@ -82,7 +82,7 @@ type Backend interface {
 	PendingBlock() *types.WorkObject
 	RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int)
 	NewGenesisPendingHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, hash common.Hash) error
-	GetPendingHeader() (*types.WorkObject, error)
+	GetPendingHeader(powType types.ChainID) (*types.WorkObject, error)
 	GetPendingBlockBody(workShare *types.WorkObjectHeader) *types.WorkObject
 	GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, error)
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)

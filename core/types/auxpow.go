@@ -9,6 +9,11 @@ import (
 // ChainID represents a unique identifier for a blockchain
 type ChainID uint32
 
+const (
+	Progpow ChainID = iota
+	Kawpow
+)
+
 // NTimeMask represents a time mask for mining operations
 type NTimeMask uint32
 
@@ -88,6 +93,25 @@ type AuxTemplate struct {
 
 	// === Quorum signatures over CanonicalEncode(template WITHOUT Sigs) ===
 	sigs []SignerEnvelope
+}
+
+func EmptyAuxTemplate() *AuxTemplate {
+	return &AuxTemplate{
+		chainID:         0,
+		prevHash:        [32]byte{},
+		payoutScript:    nil,
+		scriptSigMaxLen: 100,
+		version:         536870912, // 0x20000000 (RVN)
+		nBits:           0,
+		nTimeMask:       0,
+		height:          0,
+		coinbaseValue:   0,
+		coinbaseOnly:    true,
+		txCount:         1,
+		merkleBranch:    nil,
+		extranonce2Size: 4,
+		sigs:            nil,
+	}
 }
 
 // Getters for AuxTemplate fields
@@ -212,20 +236,20 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	chainID       ChainID     // Chain identifier
-	header        []byte      // 120B donor header for KAWPOW
-	signature     []byte      // Signature proving the work
-	merkleBranch  [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
-	transaction   *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
+	chainID      ChainID     // Chain identifier
+	header       []byte      // 120B donor header for KAWPOW
+	signature    []byte      // Signature proving the work
+	merkleBranch [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
+	transaction  *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
 }
 
 func NewAuxPow(chainID ChainID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
 	return &AuxPow{
-		chainID:       chainID,
-		header:        header,
-		signature:     signature,
-		merkleBranch:  merkleBranch,
-		transaction:   transaction,
+		chainID:      chainID,
+		header:       header,
+		signature:    signature,
+		merkleBranch: merkleBranch,
+		transaction:  transaction,
 	}
 }
 
@@ -271,11 +295,11 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 	}
 
 	return &ProtoAuxPow{
-		ChainId:       &chainID,
-		Header:        ap.Header(),
-		Signature:     ap.Signature(),
-		MerkleBranch:  merkleBranch,
-		Transaction:   txBytes,
+		ChainId:      &chainID,
+		Header:       ap.Header(),
+		Signature:    ap.Signature(),
+		MerkleBranch: merkleBranch,
+		Transaction:  txBytes,
 	}
 }
 
