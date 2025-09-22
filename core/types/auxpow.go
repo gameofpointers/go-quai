@@ -1,5 +1,11 @@
 package types
 
+import (
+	"bytes"
+
+	"github.com/btcsuite/btcd/wire"
+)
+
 // ChainID represents a unique identifier for a blockchain
 type ChainID uint32
 
@@ -206,21 +212,19 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	chainID       ChainID              // Chain identifier
-	header        []byte               // 80B donor header
-	signature     []byte               // Signature proving the work
-	merkleBranch  [][]byte             // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
-	coinbaseValue uint64               // subsidy + fees for output[0] (in RVN sats)
-	transaction   RavencoinTransaction // Full coinbase transaction (for signature verification)
+	chainID       ChainID     // Chain identifier
+	header        []byte      // 120B donor header for KAWPOW
+	signature     []byte      // Signature proving the work
+	merkleBranch  [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
+	transaction   *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
 }
 
-func NewAuxPow(chainID ChainID, header []byte, signature []byte, merkleBranch [][]byte, coinbaseValue uint64, transaction RavencoinTransaction) *AuxPow {
+func NewAuxPow(chainID ChainID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
 	return &AuxPow{
 		chainID:       chainID,
 		header:        header,
 		signature:     signature,
 		merkleBranch:  merkleBranch,
-		coinbaseValue: coinbaseValue,
 		transaction:   transaction,
 	}
 }
@@ -233,9 +237,7 @@ func (ap *AuxPow) Signature() []byte { return ap.signature }
 
 func (ap *AuxPow) MerkleBranch() [][]byte { return ap.merkleBranch }
 
-func (ap *AuxPow) CoinbaseValue() uint64 { return ap.coinbaseValue }
-
-func (ap *AuxPow) Transaction() RavencoinTransaction { return ap.transaction }
+func (ap *AuxPow) Transaction() *wire.MsgTx { return ap.transaction }
 
 func (ap *AuxPow) SetChainID(id ChainID) { ap.chainID = id }
 
@@ -245,9 +247,7 @@ func (ap *AuxPow) SetSignature(sig []byte) { ap.signature = sig }
 
 func (ap *AuxPow) SetMerkleBranch(branch [][]byte) { ap.merkleBranch = branch }
 
-func (ap *AuxPow) SetCoinbaseValue(val uint64) { ap.coinbaseValue = val }
-
-func (ap *AuxPow) SetTransaction(tx RavencoinTransaction) { ap.transaction = tx }
+func (ap *AuxPow) SetTransaction(tx *wire.MsgTx) { ap.transaction = tx }
 
 // ProtoEncode converts AuxPow to its protobuf representation
 func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
@@ -256,16 +256,18 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 	}
 
 	chainID := uint32(ap.ChainID())
-	coinbaseValue := ap.CoinbaseValue()
 
 	// Convert merkle branch
 	merkleBranch := make([][]byte, len(ap.MerkleBranch()))
 	copy(merkleBranch, ap.MerkleBranch())
 
-	// Convert transaction
-	var txProto *ProtoRavencoinTransaction
-	if ap.transaction.Version != 0 { // Check if transaction is not empty
-		txProto = ap.transaction.ProtoEncode()
+	// Serialize transaction to bytes
+	var txBytes []byte
+	if ap.transaction != nil {
+		var buf bytes.Buffer
+		if err := ap.transaction.Serialize(&buf); err == nil {
+			txBytes = buf.Bytes()
+		}
 	}
 
 	return &ProtoAuxPow{
@@ -273,8 +275,7 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 		Header:        ap.Header(),
 		Signature:     ap.Signature(),
 		MerkleBranch:  merkleBranch,
-		CoinbaseValue: &coinbaseValue,
-		Transaction:   txProto,
+		Transaction:   txBytes,
 	}
 }
 
@@ -287,7 +288,6 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 	ap.SetChainID(ChainID(data.GetChainId()))
 	ap.SetHeader(data.GetHeader())
 	ap.SetSignature(data.GetSignature())
-	ap.SetCoinbaseValue(data.GetCoinbaseValue())
 
 	// Decode merkle branch
 	ap.merkleBranch = make([][]byte, len(data.GetMerkleBranch()))
@@ -296,9 +296,10 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		copy(ap.merkleBranch[i], hash)
 	}
 
-	// Decode transaction
-	if data.GetTransaction() != nil {
-		if err := ap.transaction.ProtoDecode(data.GetTransaction()); err != nil {
+	// Deserialize transaction from bytes
+	if txBytes := data.GetTransaction(); len(txBytes) > 0 {
+		ap.transaction = new(wire.MsgTx)
+		if err := ap.transaction.Deserialize(bytes.NewReader(txBytes)); err != nil {
 			return err
 		}
 	}

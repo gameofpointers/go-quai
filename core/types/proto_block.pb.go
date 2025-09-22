@@ -767,13 +767,12 @@ func (x *ProtoAccessList) GetAccessTuples() []*ProtoAccessTuple {
 }
 
 type ProtoAuxPow struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	ChainId       *uint32                    `protobuf:"varint,1,opt,name=chain_id,json=chainId,proto3,oneof" json:"chain_id,omitempty"`
-	Header        []byte                     `protobuf:"bytes,2,opt,name=header,proto3,oneof" json:"header,omitempty"`                                     // 120B donor header for KAWPOW (was 80B for pre-KAWPOW)
-	Signature     []byte                     `protobuf:"bytes,3,opt,name=signature,proto3,oneof" json:"signature,omitempty"`                               // Signature proving the work
-	MerkleBranch  [][]byte                   `protobuf:"bytes,4,rep,name=merkle_branch,json=merkleBranch,proto3" json:"merkle_branch,omitempty"`           // Merkle branch for coinbase
-	CoinbaseValue *uint64                    `protobuf:"varint,5,opt,name=coinbase_value,json=coinbaseValue,proto3,oneof" json:"coinbase_value,omitempty"` // Subsidy + fees for output[0] (in RVN sats)
-	Transaction   *ProtoRavencoinTransaction `protobuf:"bytes,6,opt,name=transaction,proto3,oneof" json:"transaction,omitempty"`                           // Full coinbase transaction
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChainId       *uint32                `protobuf:"varint,1,opt,name=chain_id,json=chainId,proto3,oneof" json:"chain_id,omitempty"`
+	Header        []byte                 `protobuf:"bytes,2,opt,name=header,proto3,oneof" json:"header,omitempty"`                           // 120B donor header for KAWPOW (was 80B for pre-KAWPOW)
+	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3,oneof" json:"signature,omitempty"`                     // Signature proving the work
+	MerkleBranch  [][]byte               `protobuf:"bytes,4,rep,name=merkle_branch,json=merkleBranch,proto3" json:"merkle_branch,omitempty"` // Merkle branch for coinbase
+	Transaction   []byte                 `protobuf:"bytes,5,opt,name=transaction,proto3,oneof" json:"transaction,omitempty"`                 // Full coinbase transaction (serialized wire format, contains value in TxOut[0])
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -836,250 +835,11 @@ func (x *ProtoAuxPow) GetMerkleBranch() [][]byte {
 	return nil
 }
 
-func (x *ProtoAuxPow) GetCoinbaseValue() uint64 {
-	if x != nil && x.CoinbaseValue != nil {
-		return *x.CoinbaseValue
-	}
-	return 0
-}
-
-func (x *ProtoAuxPow) GetTransaction() *ProtoRavencoinTransaction {
+func (x *ProtoAuxPow) GetTransaction() []byte {
 	if x != nil {
 		return x.Transaction
 	}
 	return nil
-}
-
-type ProtoRavencoinTransaction struct {
-	state         protoimpl.MessageState          `protogen:"open.v1"`
-	Version       *int32                          `protobuf:"varint,1,opt,name=version,proto3,oneof" json:"version,omitempty"`
-	Inputs        []*ProtoRavencoinTransactionIn  `protobuf:"bytes,2,rep,name=inputs,proto3" json:"inputs,omitempty"`
-	Outputs       []*ProtoRavencoinTransactionOut `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty"`
-	LockTime      *uint32                         `protobuf:"varint,4,opt,name=lock_time,json=lockTime,proto3,oneof" json:"lock_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProtoRavencoinTransaction) Reset() {
-	*x = ProtoRavencoinTransaction{}
-	mi := &file_core_types_proto_block_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProtoRavencoinTransaction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProtoRavencoinTransaction) ProtoMessage() {}
-
-func (x *ProtoRavencoinTransaction) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProtoRavencoinTransaction.ProtoReflect.Descriptor instead.
-func (*ProtoRavencoinTransaction) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ProtoRavencoinTransaction) GetVersion() int32 {
-	if x != nil && x.Version != nil {
-		return *x.Version
-	}
-	return 0
-}
-
-func (x *ProtoRavencoinTransaction) GetInputs() []*ProtoRavencoinTransactionIn {
-	if x != nil {
-		return x.Inputs
-	}
-	return nil
-}
-
-func (x *ProtoRavencoinTransaction) GetOutputs() []*ProtoRavencoinTransactionOut {
-	if x != nil {
-		return x.Outputs
-	}
-	return nil
-}
-
-func (x *ProtoRavencoinTransaction) GetLockTime() uint32 {
-	if x != nil && x.LockTime != nil {
-		return *x.LockTime
-	}
-	return 0
-}
-
-type ProtoRavencoinTransactionIn struct {
-	state          protoimpl.MessageState  `protogen:"open.v1"`
-	PreviousOutput *ProtoRavencoinOutPoint `protobuf:"bytes,1,opt,name=previous_output,json=previousOutput,proto3,oneof" json:"previous_output,omitempty"`
-	ScriptSig      []byte                  `protobuf:"bytes,2,opt,name=script_sig,json=scriptSig,proto3,oneof" json:"script_sig,omitempty"`
-	Sequence       *uint32                 `protobuf:"varint,3,opt,name=sequence,proto3,oneof" json:"sequence,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *ProtoRavencoinTransactionIn) Reset() {
-	*x = ProtoRavencoinTransactionIn{}
-	mi := &file_core_types_proto_block_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProtoRavencoinTransactionIn) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProtoRavencoinTransactionIn) ProtoMessage() {}
-
-func (x *ProtoRavencoinTransactionIn) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProtoRavencoinTransactionIn.ProtoReflect.Descriptor instead.
-func (*ProtoRavencoinTransactionIn) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *ProtoRavencoinTransactionIn) GetPreviousOutput() *ProtoRavencoinOutPoint {
-	if x != nil {
-		return x.PreviousOutput
-	}
-	return nil
-}
-
-func (x *ProtoRavencoinTransactionIn) GetScriptSig() []byte {
-	if x != nil {
-		return x.ScriptSig
-	}
-	return nil
-}
-
-func (x *ProtoRavencoinTransactionIn) GetSequence() uint32 {
-	if x != nil && x.Sequence != nil {
-		return *x.Sequence
-	}
-	return 0
-}
-
-type ProtoRavencoinTransactionOut struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         *int64                 `protobuf:"varint,1,opt,name=value,proto3,oneof" json:"value,omitempty"`
-	ScriptPubKey  []byte                 `protobuf:"bytes,2,opt,name=script_pub_key,json=scriptPubKey,proto3,oneof" json:"script_pub_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProtoRavencoinTransactionOut) Reset() {
-	*x = ProtoRavencoinTransactionOut{}
-	mi := &file_core_types_proto_block_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProtoRavencoinTransactionOut) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProtoRavencoinTransactionOut) ProtoMessage() {}
-
-func (x *ProtoRavencoinTransactionOut) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProtoRavencoinTransactionOut.ProtoReflect.Descriptor instead.
-func (*ProtoRavencoinTransactionOut) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ProtoRavencoinTransactionOut) GetValue() int64 {
-	if x != nil && x.Value != nil {
-		return *x.Value
-	}
-	return 0
-}
-
-func (x *ProtoRavencoinTransactionOut) GetScriptPubKey() []byte {
-	if x != nil {
-		return x.ScriptPubKey
-	}
-	return nil
-}
-
-type ProtoRavencoinOutPoint struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hash          []byte                 `protobuf:"bytes,1,opt,name=hash,proto3,oneof" json:"hash,omitempty"` // 32 bytes transaction hash
-	Index         *uint32                `protobuf:"varint,2,opt,name=index,proto3,oneof" json:"index,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProtoRavencoinOutPoint) Reset() {
-	*x = ProtoRavencoinOutPoint{}
-	mi := &file_core_types_proto_block_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProtoRavencoinOutPoint) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProtoRavencoinOutPoint) ProtoMessage() {}
-
-func (x *ProtoRavencoinOutPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProtoRavencoinOutPoint.ProtoReflect.Descriptor instead.
-func (*ProtoRavencoinOutPoint) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ProtoRavencoinOutPoint) GetHash() []byte {
-	if x != nil {
-		return x.Hash
-	}
-	return nil
-}
-
-func (x *ProtoRavencoinOutPoint) GetIndex() uint32 {
-	if x != nil && x.Index != nil {
-		return *x.Index
-	}
-	return 0
 }
 
 type ProtoSignerEnvelope struct {
@@ -1092,7 +852,7 @@ type ProtoSignerEnvelope struct {
 
 func (x *ProtoSignerEnvelope) Reset() {
 	*x = ProtoSignerEnvelope{}
-	mi := &file_core_types_proto_block_proto_msgTypes[11]
+	mi := &file_core_types_proto_block_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +864,7 @@ func (x *ProtoSignerEnvelope) String() string {
 func (*ProtoSignerEnvelope) ProtoMessage() {}
 
 func (x *ProtoSignerEnvelope) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[11]
+	mi := &file_core_types_proto_block_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1117,7 +877,7 @@ func (x *ProtoSignerEnvelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoSignerEnvelope.ProtoReflect.Descriptor instead.
 func (*ProtoSignerEnvelope) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{11}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProtoSignerEnvelope) GetSignerId() string {
@@ -1163,7 +923,7 @@ type ProtoAuxTemplate struct {
 
 func (x *ProtoAuxTemplate) Reset() {
 	*x = ProtoAuxTemplate{}
-	mi := &file_core_types_proto_block_proto_msgTypes[12]
+	mi := &file_core_types_proto_block_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1175,7 +935,7 @@ func (x *ProtoAuxTemplate) String() string {
 func (*ProtoAuxTemplate) ProtoMessage() {}
 
 func (x *ProtoAuxTemplate) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[12]
+	mi := &file_core_types_proto_block_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1188,7 +948,7 @@ func (x *ProtoAuxTemplate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoAuxTemplate.ProtoReflect.Descriptor instead.
 func (*ProtoAuxTemplate) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{12}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProtoAuxTemplate) GetChainId() uint32 {
@@ -1311,7 +1071,7 @@ type ProtoWorkObjectHeader struct {
 
 func (x *ProtoWorkObjectHeader) Reset() {
 	*x = ProtoWorkObjectHeader{}
-	mi := &file_core_types_proto_block_proto_msgTypes[13]
+	mi := &file_core_types_proto_block_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1323,7 +1083,7 @@ func (x *ProtoWorkObjectHeader) String() string {
 func (*ProtoWorkObjectHeader) ProtoMessage() {}
 
 func (x *ProtoWorkObjectHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[13]
+	mi := &file_core_types_proto_block_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1336,7 +1096,7 @@ func (x *ProtoWorkObjectHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectHeader.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectHeader) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{13}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProtoWorkObjectHeader) GetHeaderHash() *common.ProtoHash {
@@ -1446,7 +1206,7 @@ type ProtoWorkObjectHeaders struct {
 
 func (x *ProtoWorkObjectHeaders) Reset() {
 	*x = ProtoWorkObjectHeaders{}
-	mi := &file_core_types_proto_block_proto_msgTypes[14]
+	mi := &file_core_types_proto_block_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1218,7 @@ func (x *ProtoWorkObjectHeaders) String() string {
 func (*ProtoWorkObjectHeaders) ProtoMessage() {}
 
 func (x *ProtoWorkObjectHeaders) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[14]
+	mi := &file_core_types_proto_block_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1231,7 @@ func (x *ProtoWorkObjectHeaders) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectHeaders.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectHeaders) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{14}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProtoWorkObjectHeaders) GetWoHeaders() []*ProtoWorkObjectHeader {
@@ -1495,7 +1255,7 @@ type ProtoWorkObjectBody struct {
 
 func (x *ProtoWorkObjectBody) Reset() {
 	*x = ProtoWorkObjectBody{}
-	mi := &file_core_types_proto_block_proto_msgTypes[15]
+	mi := &file_core_types_proto_block_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1507,7 +1267,7 @@ func (x *ProtoWorkObjectBody) String() string {
 func (*ProtoWorkObjectBody) ProtoMessage() {}
 
 func (x *ProtoWorkObjectBody) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[15]
+	mi := &file_core_types_proto_block_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1520,7 +1280,7 @@ func (x *ProtoWorkObjectBody) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectBody.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectBody) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{15}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ProtoWorkObjectBody) GetHeader() *ProtoHeader {
@@ -1576,7 +1336,7 @@ type ProtoWorkObject struct {
 
 func (x *ProtoWorkObject) Reset() {
 	*x = ProtoWorkObject{}
-	mi := &file_core_types_proto_block_proto_msgTypes[16]
+	mi := &file_core_types_proto_block_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1588,7 +1348,7 @@ func (x *ProtoWorkObject) String() string {
 func (*ProtoWorkObject) ProtoMessage() {}
 
 func (x *ProtoWorkObject) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[16]
+	mi := &file_core_types_proto_block_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1601,7 +1361,7 @@ func (x *ProtoWorkObject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObject.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObject) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{16}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ProtoWorkObject) GetWoHeader() *ProtoWorkObjectHeader {
@@ -1634,7 +1394,7 @@ type ProtoWorkObjects struct {
 
 func (x *ProtoWorkObjects) Reset() {
 	*x = ProtoWorkObjects{}
-	mi := &file_core_types_proto_block_proto_msgTypes[17]
+	mi := &file_core_types_proto_block_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1646,7 +1406,7 @@ func (x *ProtoWorkObjects) String() string {
 func (*ProtoWorkObjects) ProtoMessage() {}
 
 func (x *ProtoWorkObjects) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[17]
+	mi := &file_core_types_proto_block_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1659,7 +1419,7 @@ func (x *ProtoWorkObjects) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjects.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjects) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{17}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ProtoWorkObjects) GetWorkObjects() []*ProtoWorkObject {
@@ -1678,7 +1438,7 @@ type ProtoWorkObjectBlockView struct {
 
 func (x *ProtoWorkObjectBlockView) Reset() {
 	*x = ProtoWorkObjectBlockView{}
-	mi := &file_core_types_proto_block_proto_msgTypes[18]
+	mi := &file_core_types_proto_block_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1690,7 +1450,7 @@ func (x *ProtoWorkObjectBlockView) String() string {
 func (*ProtoWorkObjectBlockView) ProtoMessage() {}
 
 func (x *ProtoWorkObjectBlockView) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[18]
+	mi := &file_core_types_proto_block_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1703,7 +1463,7 @@ func (x *ProtoWorkObjectBlockView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectBlockView.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectBlockView) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{18}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ProtoWorkObjectBlockView) GetWorkObject() *ProtoWorkObject {
@@ -1722,7 +1482,7 @@ type ProtoWorkObjectBlocksView struct {
 
 func (x *ProtoWorkObjectBlocksView) Reset() {
 	*x = ProtoWorkObjectBlocksView{}
-	mi := &file_core_types_proto_block_proto_msgTypes[19]
+	mi := &file_core_types_proto_block_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1734,7 +1494,7 @@ func (x *ProtoWorkObjectBlocksView) String() string {
 func (*ProtoWorkObjectBlocksView) ProtoMessage() {}
 
 func (x *ProtoWorkObjectBlocksView) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[19]
+	mi := &file_core_types_proto_block_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1747,7 +1507,7 @@ func (x *ProtoWorkObjectBlocksView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectBlocksView.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectBlocksView) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{19}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ProtoWorkObjectBlocksView) GetWorkObjects() []*ProtoWorkObjectBlockView {
@@ -1766,7 +1526,7 @@ type ProtoWorkObjectHeaderView struct {
 
 func (x *ProtoWorkObjectHeaderView) Reset() {
 	*x = ProtoWorkObjectHeaderView{}
-	mi := &file_core_types_proto_block_proto_msgTypes[20]
+	mi := &file_core_types_proto_block_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1778,7 +1538,7 @@ func (x *ProtoWorkObjectHeaderView) String() string {
 func (*ProtoWorkObjectHeaderView) ProtoMessage() {}
 
 func (x *ProtoWorkObjectHeaderView) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[20]
+	mi := &file_core_types_proto_block_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1791,7 +1551,7 @@ func (x *ProtoWorkObjectHeaderView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectHeaderView.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectHeaderView) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{20}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ProtoWorkObjectHeaderView) GetWorkObject() *ProtoWorkObject {
@@ -1810,7 +1570,7 @@ type ProtoWorkObjectShareView struct {
 
 func (x *ProtoWorkObjectShareView) Reset() {
 	*x = ProtoWorkObjectShareView{}
-	mi := &file_core_types_proto_block_proto_msgTypes[21]
+	mi := &file_core_types_proto_block_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1822,7 +1582,7 @@ func (x *ProtoWorkObjectShareView) String() string {
 func (*ProtoWorkObjectShareView) ProtoMessage() {}
 
 func (x *ProtoWorkObjectShareView) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[21]
+	mi := &file_core_types_proto_block_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1835,7 +1595,7 @@ func (x *ProtoWorkObjectShareView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoWorkObjectShareView.ProtoReflect.Descriptor instead.
 func (*ProtoWorkObjectShareView) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{21}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProtoWorkObjectShareView) GetWorkObject() *ProtoWorkObject {
@@ -1855,7 +1615,7 @@ type ProtoAccessTuple struct {
 
 func (x *ProtoAccessTuple) Reset() {
 	*x = ProtoAccessTuple{}
-	mi := &file_core_types_proto_block_proto_msgTypes[22]
+	mi := &file_core_types_proto_block_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +1627,7 @@ func (x *ProtoAccessTuple) String() string {
 func (*ProtoAccessTuple) ProtoMessage() {}
 
 func (x *ProtoAccessTuple) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[22]
+	mi := &file_core_types_proto_block_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +1640,7 @@ func (x *ProtoAccessTuple) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoAccessTuple.ProtoReflect.Descriptor instead.
 func (*ProtoAccessTuple) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{22}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ProtoAccessTuple) GetAddress() []byte {
@@ -1912,7 +1672,7 @@ type ProtoReceiptForStorage struct {
 
 func (x *ProtoReceiptForStorage) Reset() {
 	*x = ProtoReceiptForStorage{}
-	mi := &file_core_types_proto_block_proto_msgTypes[23]
+	mi := &file_core_types_proto_block_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1924,7 +1684,7 @@ func (x *ProtoReceiptForStorage) String() string {
 func (*ProtoReceiptForStorage) ProtoMessage() {}
 
 func (x *ProtoReceiptForStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[23]
+	mi := &file_core_types_proto_block_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1937,7 +1697,7 @@ func (x *ProtoReceiptForStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoReceiptForStorage.ProtoReflect.Descriptor instead.
 func (*ProtoReceiptForStorage) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{23}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ProtoReceiptForStorage) GetPostStateOrStatus() []byte {
@@ -1998,7 +1758,7 @@ type ProtoReceiptsForStorage struct {
 
 func (x *ProtoReceiptsForStorage) Reset() {
 	*x = ProtoReceiptsForStorage{}
-	mi := &file_core_types_proto_block_proto_msgTypes[24]
+	mi := &file_core_types_proto_block_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2010,7 +1770,7 @@ func (x *ProtoReceiptsForStorage) String() string {
 func (*ProtoReceiptsForStorage) ProtoMessage() {}
 
 func (x *ProtoReceiptsForStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[24]
+	mi := &file_core_types_proto_block_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2023,7 +1783,7 @@ func (x *ProtoReceiptsForStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoReceiptsForStorage.ProtoReflect.Descriptor instead.
 func (*ProtoReceiptsForStorage) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{24}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ProtoReceiptsForStorage) GetReceipts() []*ProtoReceiptForStorage {
@@ -2044,7 +1804,7 @@ type ProtoLogForStorage struct {
 
 func (x *ProtoLogForStorage) Reset() {
 	*x = ProtoLogForStorage{}
-	mi := &file_core_types_proto_block_proto_msgTypes[25]
+	mi := &file_core_types_proto_block_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2056,7 +1816,7 @@ func (x *ProtoLogForStorage) String() string {
 func (*ProtoLogForStorage) ProtoMessage() {}
 
 func (x *ProtoLogForStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[25]
+	mi := &file_core_types_proto_block_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2069,7 +1829,7 @@ func (x *ProtoLogForStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoLogForStorage.ProtoReflect.Descriptor instead.
 func (*ProtoLogForStorage) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{25}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ProtoLogForStorage) GetAddress() *common.ProtoAddress {
@@ -2102,7 +1862,7 @@ type ProtoLogsForStorage struct {
 
 func (x *ProtoLogsForStorage) Reset() {
 	*x = ProtoLogsForStorage{}
-	mi := &file_core_types_proto_block_proto_msgTypes[26]
+	mi := &file_core_types_proto_block_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2114,7 +1874,7 @@ func (x *ProtoLogsForStorage) String() string {
 func (*ProtoLogsForStorage) ProtoMessage() {}
 
 func (x *ProtoLogsForStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[26]
+	mi := &file_core_types_proto_block_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2127,7 +1887,7 @@ func (x *ProtoLogsForStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoLogsForStorage.ProtoReflect.Descriptor instead.
 func (*ProtoLogsForStorage) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{26}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ProtoLogsForStorage) GetLogs() []*ProtoLogForStorage {
@@ -2147,7 +1907,7 @@ type ProtoPendingHeader struct {
 
 func (x *ProtoPendingHeader) Reset() {
 	*x = ProtoPendingHeader{}
-	mi := &file_core_types_proto_block_proto_msgTypes[27]
+	mi := &file_core_types_proto_block_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2159,7 +1919,7 @@ func (x *ProtoPendingHeader) String() string {
 func (*ProtoPendingHeader) ProtoMessage() {}
 
 func (x *ProtoPendingHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[27]
+	mi := &file_core_types_proto_block_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2172,7 +1932,7 @@ func (x *ProtoPendingHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoPendingHeader.ProtoReflect.Descriptor instead.
 func (*ProtoPendingHeader) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{27}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ProtoPendingHeader) GetWo() *ProtoWorkObject {
@@ -2199,7 +1959,7 @@ type ProtoTermini struct {
 
 func (x *ProtoTermini) Reset() {
 	*x = ProtoTermini{}
-	mi := &file_core_types_proto_block_proto_msgTypes[28]
+	mi := &file_core_types_proto_block_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2211,7 +1971,7 @@ func (x *ProtoTermini) String() string {
 func (*ProtoTermini) ProtoMessage() {}
 
 func (x *ProtoTermini) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[28]
+	mi := &file_core_types_proto_block_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2224,7 +1984,7 @@ func (x *ProtoTermini) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTermini.ProtoReflect.Descriptor instead.
 func (*ProtoTermini) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{28}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ProtoTermini) GetDomTermini() []*common.ProtoHash {
@@ -2250,7 +2010,7 @@ type ProtoEtxSet struct {
 
 func (x *ProtoEtxSet) Reset() {
 	*x = ProtoEtxSet{}
-	mi := &file_core_types_proto_block_proto_msgTypes[29]
+	mi := &file_core_types_proto_block_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2262,7 +2022,7 @@ func (x *ProtoEtxSet) String() string {
 func (*ProtoEtxSet) ProtoMessage() {}
 
 func (x *ProtoEtxSet) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[29]
+	mi := &file_core_types_proto_block_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2275,7 +2035,7 @@ func (x *ProtoEtxSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoEtxSet.ProtoReflect.Descriptor instead.
 func (*ProtoEtxSet) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{29}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ProtoEtxSet) GetEtxHashes() []byte {
@@ -2295,7 +2055,7 @@ type ProtoPendingEtxs struct {
 
 func (x *ProtoPendingEtxs) Reset() {
 	*x = ProtoPendingEtxs{}
-	mi := &file_core_types_proto_block_proto_msgTypes[30]
+	mi := &file_core_types_proto_block_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2307,7 +2067,7 @@ func (x *ProtoPendingEtxs) String() string {
 func (*ProtoPendingEtxs) ProtoMessage() {}
 
 func (x *ProtoPendingEtxs) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[30]
+	mi := &file_core_types_proto_block_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2320,7 +2080,7 @@ func (x *ProtoPendingEtxs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoPendingEtxs.ProtoReflect.Descriptor instead.
 func (*ProtoPendingEtxs) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{30}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ProtoPendingEtxs) GetHeader() *ProtoWorkObject {
@@ -2347,7 +2107,7 @@ type ProtoPendingEtxsRollup struct {
 
 func (x *ProtoPendingEtxsRollup) Reset() {
 	*x = ProtoPendingEtxsRollup{}
-	mi := &file_core_types_proto_block_proto_msgTypes[31]
+	mi := &file_core_types_proto_block_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2359,7 +2119,7 @@ func (x *ProtoPendingEtxsRollup) String() string {
 func (*ProtoPendingEtxsRollup) ProtoMessage() {}
 
 func (x *ProtoPendingEtxsRollup) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[31]
+	mi := &file_core_types_proto_block_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2372,7 +2132,7 @@ func (x *ProtoPendingEtxsRollup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoPendingEtxsRollup.ProtoReflect.Descriptor instead.
 func (*ProtoPendingEtxsRollup) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{31}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ProtoPendingEtxsRollup) GetHeader() *ProtoWorkObject {
@@ -2398,7 +2158,7 @@ type ProtoTxIns struct {
 
 func (x *ProtoTxIns) Reset() {
 	*x = ProtoTxIns{}
-	mi := &file_core_types_proto_block_proto_msgTypes[32]
+	mi := &file_core_types_proto_block_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2410,7 +2170,7 @@ func (x *ProtoTxIns) String() string {
 func (*ProtoTxIns) ProtoMessage() {}
 
 func (x *ProtoTxIns) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[32]
+	mi := &file_core_types_proto_block_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2423,7 +2183,7 @@ func (x *ProtoTxIns) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTxIns.ProtoReflect.Descriptor instead.
 func (*ProtoTxIns) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{32}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ProtoTxIns) GetTxIns() []*ProtoTxIn {
@@ -2442,7 +2202,7 @@ type ProtoTxOuts struct {
 
 func (x *ProtoTxOuts) Reset() {
 	*x = ProtoTxOuts{}
-	mi := &file_core_types_proto_block_proto_msgTypes[33]
+	mi := &file_core_types_proto_block_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2454,7 +2214,7 @@ func (x *ProtoTxOuts) String() string {
 func (*ProtoTxOuts) ProtoMessage() {}
 
 func (x *ProtoTxOuts) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[33]
+	mi := &file_core_types_proto_block_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2467,7 +2227,7 @@ func (x *ProtoTxOuts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTxOuts.ProtoReflect.Descriptor instead.
 func (*ProtoTxOuts) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{33}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ProtoTxOuts) GetTxOuts() []*ProtoTxOut {
@@ -2487,7 +2247,7 @@ type ProtoTxIn struct {
 
 func (x *ProtoTxIn) Reset() {
 	*x = ProtoTxIn{}
-	mi := &file_core_types_proto_block_proto_msgTypes[34]
+	mi := &file_core_types_proto_block_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2499,7 +2259,7 @@ func (x *ProtoTxIn) String() string {
 func (*ProtoTxIn) ProtoMessage() {}
 
 func (x *ProtoTxIn) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[34]
+	mi := &file_core_types_proto_block_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2512,7 +2272,7 @@ func (x *ProtoTxIn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTxIn.ProtoReflect.Descriptor instead.
 func (*ProtoTxIn) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{34}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ProtoTxIn) GetPreviousOutPoint() *ProtoOutPoint {
@@ -2539,7 +2299,7 @@ type ProtoOutPoint struct {
 
 func (x *ProtoOutPoint) Reset() {
 	*x = ProtoOutPoint{}
-	mi := &file_core_types_proto_block_proto_msgTypes[35]
+	mi := &file_core_types_proto_block_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2551,7 +2311,7 @@ func (x *ProtoOutPoint) String() string {
 func (*ProtoOutPoint) ProtoMessage() {}
 
 func (x *ProtoOutPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[35]
+	mi := &file_core_types_proto_block_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2564,7 +2324,7 @@ func (x *ProtoOutPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoOutPoint.ProtoReflect.Descriptor instead.
 func (*ProtoOutPoint) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{35}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ProtoOutPoint) GetHash() *common.ProtoHash {
@@ -2592,7 +2352,7 @@ type ProtoTxOut struct {
 
 func (x *ProtoTxOut) Reset() {
 	*x = ProtoTxOut{}
-	mi := &file_core_types_proto_block_proto_msgTypes[36]
+	mi := &file_core_types_proto_block_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2604,7 +2364,7 @@ func (x *ProtoTxOut) String() string {
 func (*ProtoTxOut) ProtoMessage() {}
 
 func (x *ProtoTxOut) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[36]
+	mi := &file_core_types_proto_block_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2617,7 +2377,7 @@ func (x *ProtoTxOut) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTxOut.ProtoReflect.Descriptor instead.
 func (*ProtoTxOut) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{36}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ProtoTxOut) GetDenomination() uint32 {
@@ -2653,7 +2413,7 @@ type ProtoOutPointAndDenomination struct {
 
 func (x *ProtoOutPointAndDenomination) Reset() {
 	*x = ProtoOutPointAndDenomination{}
-	mi := &file_core_types_proto_block_proto_msgTypes[37]
+	mi := &file_core_types_proto_block_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2665,7 +2425,7 @@ func (x *ProtoOutPointAndDenomination) String() string {
 func (*ProtoOutPointAndDenomination) ProtoMessage() {}
 
 func (x *ProtoOutPointAndDenomination) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[37]
+	mi := &file_core_types_proto_block_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2678,7 +2438,7 @@ func (x *ProtoOutPointAndDenomination) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoOutPointAndDenomination.ProtoReflect.Descriptor instead.
 func (*ProtoOutPointAndDenomination) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{37}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ProtoOutPointAndDenomination) GetHash() *common.ProtoHash {
@@ -2718,7 +2478,7 @@ type ProtoAddressOutPoints struct {
 
 func (x *ProtoAddressOutPoints) Reset() {
 	*x = ProtoAddressOutPoints{}
-	mi := &file_core_types_proto_block_proto_msgTypes[38]
+	mi := &file_core_types_proto_block_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2730,7 +2490,7 @@ func (x *ProtoAddressOutPoints) String() string {
 func (*ProtoAddressOutPoints) ProtoMessage() {}
 
 func (x *ProtoAddressOutPoints) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[38]
+	mi := &file_core_types_proto_block_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2743,7 +2503,7 @@ func (x *ProtoAddressOutPoints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoAddressOutPoints.ProtoReflect.Descriptor instead.
 func (*ProtoAddressOutPoints) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{38}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ProtoAddressOutPoints) GetOutPoints() []*ProtoOutPointAndDenomination {
@@ -2763,7 +2523,7 @@ type ProtoSpentUTXO struct {
 
 func (x *ProtoSpentUTXO) Reset() {
 	*x = ProtoSpentUTXO{}
-	mi := &file_core_types_proto_block_proto_msgTypes[39]
+	mi := &file_core_types_proto_block_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2775,7 +2535,7 @@ func (x *ProtoSpentUTXO) String() string {
 func (*ProtoSpentUTXO) ProtoMessage() {}
 
 func (x *ProtoSpentUTXO) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[39]
+	mi := &file_core_types_proto_block_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2788,7 +2548,7 @@ func (x *ProtoSpentUTXO) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoSpentUTXO.ProtoReflect.Descriptor instead.
 func (*ProtoSpentUTXO) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{39}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ProtoSpentUTXO) GetOutpoint() *ProtoOutPoint {
@@ -2814,7 +2574,7 @@ type ProtoSpentUTXOs struct {
 
 func (x *ProtoSpentUTXOs) Reset() {
 	*x = ProtoSpentUTXOs{}
-	mi := &file_core_types_proto_block_proto_msgTypes[40]
+	mi := &file_core_types_proto_block_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2826,7 +2586,7 @@ func (x *ProtoSpentUTXOs) String() string {
 func (*ProtoSpentUTXOs) ProtoMessage() {}
 
 func (x *ProtoSpentUTXOs) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[40]
+	mi := &file_core_types_proto_block_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2839,7 +2599,7 @@ func (x *ProtoSpentUTXOs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoSpentUTXOs.ProtoReflect.Descriptor instead.
 func (*ProtoSpentUTXOs) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{40}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ProtoSpentUTXOs) GetSutxos() []*ProtoSpentUTXO {
@@ -2858,7 +2618,7 @@ type ProtoKeys struct {
 
 func (x *ProtoKeys) Reset() {
 	*x = ProtoKeys{}
-	mi := &file_core_types_proto_block_proto_msgTypes[41]
+	mi := &file_core_types_proto_block_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +2630,7 @@ func (x *ProtoKeys) String() string {
 func (*ProtoKeys) ProtoMessage() {}
 
 func (x *ProtoKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[41]
+	mi := &file_core_types_proto_block_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +2643,7 @@ func (x *ProtoKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoKeys.ProtoReflect.Descriptor instead.
 func (*ProtoKeys) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{41}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ProtoKeys) GetKeys() [][]byte {
@@ -2903,7 +2663,7 @@ type ProtoKeyValue struct {
 
 func (x *ProtoKeyValue) Reset() {
 	*x = ProtoKeyValue{}
-	mi := &file_core_types_proto_block_proto_msgTypes[42]
+	mi := &file_core_types_proto_block_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2915,7 +2675,7 @@ func (x *ProtoKeyValue) String() string {
 func (*ProtoKeyValue) ProtoMessage() {}
 
 func (x *ProtoKeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[42]
+	mi := &file_core_types_proto_block_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2928,7 +2688,7 @@ func (x *ProtoKeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoKeyValue.ProtoReflect.Descriptor instead.
 func (*ProtoKeyValue) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{42}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ProtoKeyValue) GetKey() []byte {
@@ -2954,7 +2714,7 @@ type ProtoKeysAndValues struct {
 
 func (x *ProtoKeysAndValues) Reset() {
 	*x = ProtoKeysAndValues{}
-	mi := &file_core_types_proto_block_proto_msgTypes[43]
+	mi := &file_core_types_proto_block_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2966,7 +2726,7 @@ func (x *ProtoKeysAndValues) String() string {
 func (*ProtoKeysAndValues) ProtoMessage() {}
 
 func (x *ProtoKeysAndValues) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[43]
+	mi := &file_core_types_proto_block_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2979,7 +2739,7 @@ func (x *ProtoKeysAndValues) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoKeysAndValues.ProtoReflect.Descriptor instead.
 func (*ProtoKeysAndValues) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{43}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ProtoKeysAndValues) GetKeysAndValues() []*ProtoKeyValue {
@@ -2998,7 +2758,7 @@ type ProtoTrimDepths struct {
 
 func (x *ProtoTrimDepths) Reset() {
 	*x = ProtoTrimDepths{}
-	mi := &file_core_types_proto_block_proto_msgTypes[44]
+	mi := &file_core_types_proto_block_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3010,7 +2770,7 @@ func (x *ProtoTrimDepths) String() string {
 func (*ProtoTrimDepths) ProtoMessage() {}
 
 func (x *ProtoTrimDepths) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[44]
+	mi := &file_core_types_proto_block_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3023,7 +2783,7 @@ func (x *ProtoTrimDepths) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTrimDepths.ProtoReflect.Descriptor instead.
 func (*ProtoTrimDepths) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{44}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ProtoTrimDepths) GetTrimDepths() map[uint32]uint64 {
@@ -3042,7 +2802,7 @@ type ProtoTokenChoiceSet struct {
 
 func (x *ProtoTokenChoiceSet) Reset() {
 	*x = ProtoTokenChoiceSet{}
-	mi := &file_core_types_proto_block_proto_msgTypes[45]
+	mi := &file_core_types_proto_block_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3054,7 +2814,7 @@ func (x *ProtoTokenChoiceSet) String() string {
 func (*ProtoTokenChoiceSet) ProtoMessage() {}
 
 func (x *ProtoTokenChoiceSet) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[45]
+	mi := &file_core_types_proto_block_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3067,7 +2827,7 @@ func (x *ProtoTokenChoiceSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTokenChoiceSet.ProtoReflect.Descriptor instead.
 func (*ProtoTokenChoiceSet) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{45}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ProtoTokenChoiceSet) GetTokenChoiceArray() []*ProtoTokenChoiceArray {
@@ -3086,7 +2846,7 @@ type ProtoTokenChoiceArray struct {
 
 func (x *ProtoTokenChoiceArray) Reset() {
 	*x = ProtoTokenChoiceArray{}
-	mi := &file_core_types_proto_block_proto_msgTypes[46]
+	mi := &file_core_types_proto_block_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3098,7 +2858,7 @@ func (x *ProtoTokenChoiceArray) String() string {
 func (*ProtoTokenChoiceArray) ProtoMessage() {}
 
 func (x *ProtoTokenChoiceArray) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[46]
+	mi := &file_core_types_proto_block_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3111,7 +2871,7 @@ func (x *ProtoTokenChoiceArray) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTokenChoiceArray.ProtoReflect.Descriptor instead.
 func (*ProtoTokenChoiceArray) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{46}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ProtoTokenChoiceArray) GetTokenChoices() *ProtoTokenChoice {
@@ -3132,7 +2892,7 @@ type ProtoTokenChoice struct {
 
 func (x *ProtoTokenChoice) Reset() {
 	*x = ProtoTokenChoice{}
-	mi := &file_core_types_proto_block_proto_msgTypes[47]
+	mi := &file_core_types_proto_block_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3144,7 +2904,7 @@ func (x *ProtoTokenChoice) String() string {
 func (*ProtoTokenChoice) ProtoMessage() {}
 
 func (x *ProtoTokenChoice) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[47]
+	mi := &file_core_types_proto_block_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3157,7 +2917,7 @@ func (x *ProtoTokenChoice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoTokenChoice.ProtoReflect.Descriptor instead.
 func (*ProtoTokenChoice) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{47}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ProtoTokenChoice) GetQuai() uint64 {
@@ -3191,7 +2951,7 @@ type ProtoBetas struct {
 
 func (x *ProtoBetas) Reset() {
 	*x = ProtoBetas{}
-	mi := &file_core_types_proto_block_proto_msgTypes[48]
+	mi := &file_core_types_proto_block_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3203,7 +2963,7 @@ func (x *ProtoBetas) String() string {
 func (*ProtoBetas) ProtoMessage() {}
 
 func (x *ProtoBetas) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[48]
+	mi := &file_core_types_proto_block_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3216,7 +2976,7 @@ func (x *ProtoBetas) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoBetas.ProtoReflect.Descriptor instead.
 func (*ProtoBetas) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{48}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ProtoBetas) GetBeta0() []byte {
@@ -3244,7 +3004,7 @@ type ProtoLockup struct {
 
 func (x *ProtoLockup) Reset() {
 	*x = ProtoLockup{}
-	mi := &file_core_types_proto_block_proto_msgTypes[49]
+	mi := &file_core_types_proto_block_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3256,7 +3016,7 @@ func (x *ProtoLockup) String() string {
 func (*ProtoLockup) ProtoMessage() {}
 
 func (x *ProtoLockup) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[49]
+	mi := &file_core_types_proto_block_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3269,7 +3029,7 @@ func (x *ProtoLockup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoLockup.ProtoReflect.Descriptor instead.
 func (*ProtoLockup) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{49}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ProtoLockup) GetValue() []byte {
@@ -3303,7 +3063,7 @@ type ProtoUnlock struct {
 
 func (x *ProtoUnlock) Reset() {
 	*x = ProtoUnlock{}
-	mi := &file_core_types_proto_block_proto_msgTypes[50]
+	mi := &file_core_types_proto_block_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3315,7 +3075,7 @@ func (x *ProtoUnlock) String() string {
 func (*ProtoUnlock) ProtoMessage() {}
 
 func (x *ProtoUnlock) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[50]
+	mi := &file_core_types_proto_block_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3328,7 +3088,7 @@ func (x *ProtoUnlock) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoUnlock.ProtoReflect.Descriptor instead.
 func (*ProtoUnlock) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{50}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ProtoUnlock) GetValue() []byte {
@@ -3354,7 +3114,7 @@ type ProtoUnlocks struct {
 
 func (x *ProtoUnlocks) Reset() {
 	*x = ProtoUnlocks{}
-	mi := &file_core_types_proto_block_proto_msgTypes[51]
+	mi := &file_core_types_proto_block_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3366,7 +3126,7 @@ func (x *ProtoUnlocks) String() string {
 func (*ProtoUnlocks) ProtoMessage() {}
 
 func (x *ProtoUnlocks) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[51]
+	mi := &file_core_types_proto_block_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3379,7 +3139,7 @@ func (x *ProtoUnlocks) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoUnlocks.ProtoReflect.Descriptor instead.
 func (*ProtoUnlocks) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{51}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ProtoUnlocks) GetUnlocks() []*ProtoUnlock {
@@ -3398,7 +3158,7 @@ type ProtoLockedBalance struct {
 
 func (x *ProtoLockedBalance) Reset() {
 	*x = ProtoLockedBalance{}
-	mi := &file_core_types_proto_block_proto_msgTypes[52]
+	mi := &file_core_types_proto_block_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3410,7 +3170,7 @@ func (x *ProtoLockedBalance) String() string {
 func (*ProtoLockedBalance) ProtoMessage() {}
 
 func (x *ProtoLockedBalance) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[52]
+	mi := &file_core_types_proto_block_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3423,7 +3183,7 @@ func (x *ProtoLockedBalance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoLockedBalance.ProtoReflect.Descriptor instead.
 func (*ProtoLockedBalance) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{52}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ProtoLockedBalance) GetValue() []byte {
@@ -3442,7 +3202,7 @@ type ProtoLockups struct {
 
 func (x *ProtoLockups) Reset() {
 	*x = ProtoLockups{}
-	mi := &file_core_types_proto_block_proto_msgTypes[53]
+	mi := &file_core_types_proto_block_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3454,7 +3214,7 @@ func (x *ProtoLockups) String() string {
 func (*ProtoLockups) ProtoMessage() {}
 
 func (x *ProtoLockups) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[53]
+	mi := &file_core_types_proto_block_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3467,7 +3227,7 @@ func (x *ProtoLockups) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoLockups.ProtoReflect.Descriptor instead.
 func (*ProtoLockups) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{53}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ProtoLockups) GetLockups() []*ProtoLockup {
@@ -3491,7 +3251,7 @@ type ProtoSupplyAnalytics struct {
 
 func (x *ProtoSupplyAnalytics) Reset() {
 	*x = ProtoSupplyAnalytics{}
-	mi := &file_core_types_proto_block_proto_msgTypes[54]
+	mi := &file_core_types_proto_block_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3503,7 +3263,7 @@ func (x *ProtoSupplyAnalytics) String() string {
 func (*ProtoSupplyAnalytics) ProtoMessage() {}
 
 func (x *ProtoSupplyAnalytics) ProtoReflect() protoreflect.Message {
-	mi := &file_core_types_proto_block_proto_msgTypes[54]
+	mi := &file_core_types_proto_block_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3516,7 +3276,7 @@ func (x *ProtoSupplyAnalytics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtoSupplyAnalytics.ProtoReflect.Descriptor instead.
 func (*ProtoSupplyAnalytics) Descriptor() ([]byte, []int) {
-	return file_core_types_proto_block_proto_rawDescGZIP(), []int{54}
+	return file_core_types_proto_block_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ProtoSupplyAnalytics) GetSupplyAddedQuai() []byte {
@@ -3716,47 +3476,18 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\rProtoManifest\x12-\n" +
 	"\bmanifest\x18\x01 \x03(\v2\x11.common.ProtoHashR\bmanifest\"O\n" +
 	"\x0fProtoAccessList\x12<\n" +
-	"\raccess_tuples\x18\x01 \x03(\v2\x17.block.ProtoAccessTupleR\faccessTuples\"\xd0\x02\n" +
+	"\raccess_tuples\x18\x01 \x03(\v2\x17.block.ProtoAccessTupleR\faccessTuples\"\xef\x01\n" +
 	"\vProtoAuxPow\x12\x1e\n" +
 	"\bchain_id\x18\x01 \x01(\rH\x00R\achainId\x88\x01\x01\x12\x1b\n" +
 	"\x06header\x18\x02 \x01(\fH\x01R\x06header\x88\x01\x01\x12!\n" +
 	"\tsignature\x18\x03 \x01(\fH\x02R\tsignature\x88\x01\x01\x12#\n" +
-	"\rmerkle_branch\x18\x04 \x03(\fR\fmerkleBranch\x12*\n" +
-	"\x0ecoinbase_value\x18\x05 \x01(\x04H\x03R\rcoinbaseValue\x88\x01\x01\x12G\n" +
-	"\vtransaction\x18\x06 \x01(\v2 .block.ProtoRavencoinTransactionH\x04R\vtransaction\x88\x01\x01B\v\n" +
+	"\rmerkle_branch\x18\x04 \x03(\fR\fmerkleBranch\x12%\n" +
+	"\vtransaction\x18\x05 \x01(\fH\x03R\vtransaction\x88\x01\x01B\v\n" +
 	"\t_chain_idB\t\n" +
 	"\a_headerB\f\n" +
 	"\n" +
-	"_signatureB\x11\n" +
-	"\x0f_coinbase_valueB\x0e\n" +
-	"\f_transaction\"\xf1\x01\n" +
-	"\x19ProtoRavencoinTransaction\x12\x1d\n" +
-	"\aversion\x18\x01 \x01(\x05H\x00R\aversion\x88\x01\x01\x12:\n" +
-	"\x06inputs\x18\x02 \x03(\v2\".block.ProtoRavencoinTransactionInR\x06inputs\x12=\n" +
-	"\aoutputs\x18\x03 \x03(\v2#.block.ProtoRavencoinTransactionOutR\aoutputs\x12 \n" +
-	"\tlock_time\x18\x04 \x01(\rH\x01R\blockTime\x88\x01\x01B\n" +
-	"\n" +
-	"\b_versionB\f\n" +
-	"\n" +
-	"_lock_time\"\xdf\x01\n" +
-	"\x1bProtoRavencoinTransactionIn\x12K\n" +
-	"\x0fprevious_output\x18\x01 \x01(\v2\x1d.block.ProtoRavencoinOutPointH\x00R\x0epreviousOutput\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"script_sig\x18\x02 \x01(\fH\x01R\tscriptSig\x88\x01\x01\x12\x1f\n" +
-	"\bsequence\x18\x03 \x01(\rH\x02R\bsequence\x88\x01\x01B\x12\n" +
-	"\x10_previous_outputB\r\n" +
-	"\v_script_sigB\v\n" +
-	"\t_sequence\"\x81\x01\n" +
-	"\x1cProtoRavencoinTransactionOut\x12\x19\n" +
-	"\x05value\x18\x01 \x01(\x03H\x00R\x05value\x88\x01\x01\x12)\n" +
-	"\x0escript_pub_key\x18\x02 \x01(\fH\x01R\fscriptPubKey\x88\x01\x01B\b\n" +
-	"\x06_valueB\x11\n" +
-	"\x0f_script_pub_key\"_\n" +
-	"\x16ProtoRavencoinOutPoint\x12\x17\n" +
-	"\x04hash\x18\x01 \x01(\fH\x00R\x04hash\x88\x01\x01\x12\x19\n" +
-	"\x05index\x18\x02 \x01(\rH\x01R\x05index\x88\x01\x01B\a\n" +
-	"\x05_hashB\b\n" +
-	"\x06_index\"v\n" +
+	"_signatureB\x0e\n" +
+	"\f_transaction\"v\n" +
 	"\x13ProtoSignerEnvelope\x12 \n" +
 	"\tsigner_id\x18\x01 \x01(\tH\x00R\bsignerId\x88\x01\x01\x12!\n" +
 	"\tsignature\x18\x02 \x01(\fH\x01R\tsignature\x88\x01\x01B\f\n" +
@@ -4022,7 +3753,7 @@ func file_core_types_proto_block_proto_rawDescGZIP() []byte {
 	return file_core_types_proto_block_proto_rawDescData
 }
 
-var file_core_types_proto_block_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
+var file_core_types_proto_block_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_core_types_proto_block_proto_goTypes = []any{
 	(*ProtoHeader)(nil),                  // 0: block.ProtoHeader
 	(*ProtoTransaction)(nil),             // 1: block.ProtoTransaction
@@ -4031,154 +3762,146 @@ var file_core_types_proto_block_proto_goTypes = []any{
 	(*ProtoManifest)(nil),                // 4: block.ProtoManifest
 	(*ProtoAccessList)(nil),              // 5: block.ProtoAccessList
 	(*ProtoAuxPow)(nil),                  // 6: block.ProtoAuxPow
-	(*ProtoRavencoinTransaction)(nil),    // 7: block.ProtoRavencoinTransaction
-	(*ProtoRavencoinTransactionIn)(nil),  // 8: block.ProtoRavencoinTransactionIn
-	(*ProtoRavencoinTransactionOut)(nil), // 9: block.ProtoRavencoinTransactionOut
-	(*ProtoRavencoinOutPoint)(nil),       // 10: block.ProtoRavencoinOutPoint
-	(*ProtoSignerEnvelope)(nil),          // 11: block.ProtoSignerEnvelope
-	(*ProtoAuxTemplate)(nil),             // 12: block.ProtoAuxTemplate
-	(*ProtoWorkObjectHeader)(nil),        // 13: block.ProtoWorkObjectHeader
-	(*ProtoWorkObjectHeaders)(nil),       // 14: block.ProtoWorkObjectHeaders
-	(*ProtoWorkObjectBody)(nil),          // 15: block.ProtoWorkObjectBody
-	(*ProtoWorkObject)(nil),              // 16: block.ProtoWorkObject
-	(*ProtoWorkObjects)(nil),             // 17: block.ProtoWorkObjects
-	(*ProtoWorkObjectBlockView)(nil),     // 18: block.ProtoWorkObjectBlockView
-	(*ProtoWorkObjectBlocksView)(nil),    // 19: block.ProtoWorkObjectBlocksView
-	(*ProtoWorkObjectHeaderView)(nil),    // 20: block.ProtoWorkObjectHeaderView
-	(*ProtoWorkObjectShareView)(nil),     // 21: block.ProtoWorkObjectShareView
-	(*ProtoAccessTuple)(nil),             // 22: block.ProtoAccessTuple
-	(*ProtoReceiptForStorage)(nil),       // 23: block.ProtoReceiptForStorage
-	(*ProtoReceiptsForStorage)(nil),      // 24: block.ProtoReceiptsForStorage
-	(*ProtoLogForStorage)(nil),           // 25: block.ProtoLogForStorage
-	(*ProtoLogsForStorage)(nil),          // 26: block.ProtoLogsForStorage
-	(*ProtoPendingHeader)(nil),           // 27: block.ProtoPendingHeader
-	(*ProtoTermini)(nil),                 // 28: block.ProtoTermini
-	(*ProtoEtxSet)(nil),                  // 29: block.ProtoEtxSet
-	(*ProtoPendingEtxs)(nil),             // 30: block.ProtoPendingEtxs
-	(*ProtoPendingEtxsRollup)(nil),       // 31: block.ProtoPendingEtxsRollup
-	(*ProtoTxIns)(nil),                   // 32: block.ProtoTxIns
-	(*ProtoTxOuts)(nil),                  // 33: block.ProtoTxOuts
-	(*ProtoTxIn)(nil),                    // 34: block.ProtoTxIn
-	(*ProtoOutPoint)(nil),                // 35: block.ProtoOutPoint
-	(*ProtoTxOut)(nil),                   // 36: block.ProtoTxOut
-	(*ProtoOutPointAndDenomination)(nil), // 37: block.ProtoOutPointAndDenomination
-	(*ProtoAddressOutPoints)(nil),        // 38: block.ProtoAddressOutPoints
-	(*ProtoSpentUTXO)(nil),               // 39: block.ProtoSpentUTXO
-	(*ProtoSpentUTXOs)(nil),              // 40: block.ProtoSpentUTXOs
-	(*ProtoKeys)(nil),                    // 41: block.ProtoKeys
-	(*ProtoKeyValue)(nil),                // 42: block.ProtoKeyValue
-	(*ProtoKeysAndValues)(nil),           // 43: block.ProtoKeysAndValues
-	(*ProtoTrimDepths)(nil),              // 44: block.ProtoTrimDepths
-	(*ProtoTokenChoiceSet)(nil),          // 45: block.ProtoTokenChoiceSet
-	(*ProtoTokenChoiceArray)(nil),        // 46: block.ProtoTokenChoiceArray
-	(*ProtoTokenChoice)(nil),             // 47: block.ProtoTokenChoice
-	(*ProtoBetas)(nil),                   // 48: block.ProtoBetas
-	(*ProtoLockup)(nil),                  // 49: block.ProtoLockup
-	(*ProtoUnlock)(nil),                  // 50: block.ProtoUnlock
-	(*ProtoUnlocks)(nil),                 // 51: block.ProtoUnlocks
-	(*ProtoLockedBalance)(nil),           // 52: block.ProtoLockedBalance
-	(*ProtoLockups)(nil),                 // 53: block.ProtoLockups
-	(*ProtoSupplyAnalytics)(nil),         // 54: block.ProtoSupplyAnalytics
-	nil,                                  // 55: block.ProtoTrimDepths.TrimDepthsEntry
-	(*common.ProtoHash)(nil),             // 56: common.ProtoHash
-	(*common.ProtoLocation)(nil),         // 57: common.ProtoLocation
-	(*common.ProtoAddress)(nil),          // 58: common.ProtoAddress
-	(*common.ProtoHashes)(nil),           // 59: common.ProtoHashes
+	(*ProtoSignerEnvelope)(nil),          // 7: block.ProtoSignerEnvelope
+	(*ProtoAuxTemplate)(nil),             // 8: block.ProtoAuxTemplate
+	(*ProtoWorkObjectHeader)(nil),        // 9: block.ProtoWorkObjectHeader
+	(*ProtoWorkObjectHeaders)(nil),       // 10: block.ProtoWorkObjectHeaders
+	(*ProtoWorkObjectBody)(nil),          // 11: block.ProtoWorkObjectBody
+	(*ProtoWorkObject)(nil),              // 12: block.ProtoWorkObject
+	(*ProtoWorkObjects)(nil),             // 13: block.ProtoWorkObjects
+	(*ProtoWorkObjectBlockView)(nil),     // 14: block.ProtoWorkObjectBlockView
+	(*ProtoWorkObjectBlocksView)(nil),    // 15: block.ProtoWorkObjectBlocksView
+	(*ProtoWorkObjectHeaderView)(nil),    // 16: block.ProtoWorkObjectHeaderView
+	(*ProtoWorkObjectShareView)(nil),     // 17: block.ProtoWorkObjectShareView
+	(*ProtoAccessTuple)(nil),             // 18: block.ProtoAccessTuple
+	(*ProtoReceiptForStorage)(nil),       // 19: block.ProtoReceiptForStorage
+	(*ProtoReceiptsForStorage)(nil),      // 20: block.ProtoReceiptsForStorage
+	(*ProtoLogForStorage)(nil),           // 21: block.ProtoLogForStorage
+	(*ProtoLogsForStorage)(nil),          // 22: block.ProtoLogsForStorage
+	(*ProtoPendingHeader)(nil),           // 23: block.ProtoPendingHeader
+	(*ProtoTermini)(nil),                 // 24: block.ProtoTermini
+	(*ProtoEtxSet)(nil),                  // 25: block.ProtoEtxSet
+	(*ProtoPendingEtxs)(nil),             // 26: block.ProtoPendingEtxs
+	(*ProtoPendingEtxsRollup)(nil),       // 27: block.ProtoPendingEtxsRollup
+	(*ProtoTxIns)(nil),                   // 28: block.ProtoTxIns
+	(*ProtoTxOuts)(nil),                  // 29: block.ProtoTxOuts
+	(*ProtoTxIn)(nil),                    // 30: block.ProtoTxIn
+	(*ProtoOutPoint)(nil),                // 31: block.ProtoOutPoint
+	(*ProtoTxOut)(nil),                   // 32: block.ProtoTxOut
+	(*ProtoOutPointAndDenomination)(nil), // 33: block.ProtoOutPointAndDenomination
+	(*ProtoAddressOutPoints)(nil),        // 34: block.ProtoAddressOutPoints
+	(*ProtoSpentUTXO)(nil),               // 35: block.ProtoSpentUTXO
+	(*ProtoSpentUTXOs)(nil),              // 36: block.ProtoSpentUTXOs
+	(*ProtoKeys)(nil),                    // 37: block.ProtoKeys
+	(*ProtoKeyValue)(nil),                // 38: block.ProtoKeyValue
+	(*ProtoKeysAndValues)(nil),           // 39: block.ProtoKeysAndValues
+	(*ProtoTrimDepths)(nil),              // 40: block.ProtoTrimDepths
+	(*ProtoTokenChoiceSet)(nil),          // 41: block.ProtoTokenChoiceSet
+	(*ProtoTokenChoiceArray)(nil),        // 42: block.ProtoTokenChoiceArray
+	(*ProtoTokenChoice)(nil),             // 43: block.ProtoTokenChoice
+	(*ProtoBetas)(nil),                   // 44: block.ProtoBetas
+	(*ProtoLockup)(nil),                  // 45: block.ProtoLockup
+	(*ProtoUnlock)(nil),                  // 46: block.ProtoUnlock
+	(*ProtoUnlocks)(nil),                 // 47: block.ProtoUnlocks
+	(*ProtoLockedBalance)(nil),           // 48: block.ProtoLockedBalance
+	(*ProtoLockups)(nil),                 // 49: block.ProtoLockups
+	(*ProtoSupplyAnalytics)(nil),         // 50: block.ProtoSupplyAnalytics
+	nil,                                  // 51: block.ProtoTrimDepths.TrimDepthsEntry
+	(*common.ProtoHash)(nil),             // 52: common.ProtoHash
+	(*common.ProtoLocation)(nil),         // 53: common.ProtoLocation
+	(*common.ProtoAddress)(nil),          // 54: common.ProtoAddress
+	(*common.ProtoHashes)(nil),           // 55: common.ProtoHashes
 }
 var file_core_types_proto_block_proto_depIdxs = []int32{
-	56, // 0: block.ProtoHeader.parent_hash:type_name -> common.ProtoHash
-	56, // 1: block.ProtoHeader.uncle_hash:type_name -> common.ProtoHash
-	56, // 2: block.ProtoHeader.evm_root:type_name -> common.ProtoHash
-	56, // 3: block.ProtoHeader.tx_hash:type_name -> common.ProtoHash
-	56, // 4: block.ProtoHeader.outbound_etx_hash:type_name -> common.ProtoHash
-	56, // 5: block.ProtoHeader.etx_rollup_hash:type_name -> common.ProtoHash
-	56, // 6: block.ProtoHeader.manifest_hash:type_name -> common.ProtoHash
-	56, // 7: block.ProtoHeader.receipt_hash:type_name -> common.ProtoHash
-	57, // 8: block.ProtoHeader.location:type_name -> common.ProtoLocation
-	56, // 9: block.ProtoHeader.mix_hash:type_name -> common.ProtoHash
-	56, // 10: block.ProtoHeader.utxo_root:type_name -> common.ProtoHash
-	56, // 11: block.ProtoHeader.etx_set_root:type_name -> common.ProtoHash
-	56, // 12: block.ProtoHeader.etx_eligible_slices:type_name -> common.ProtoHash
-	56, // 13: block.ProtoHeader.prime_terminus_hash:type_name -> common.ProtoHash
-	56, // 14: block.ProtoHeader.interlink_root_hash:type_name -> common.ProtoHash
-	56, // 15: block.ProtoHeader.prime_state_root:type_name -> common.ProtoHash
-	56, // 16: block.ProtoHeader.region_state_root:type_name -> common.ProtoHash
+	52, // 0: block.ProtoHeader.parent_hash:type_name -> common.ProtoHash
+	52, // 1: block.ProtoHeader.uncle_hash:type_name -> common.ProtoHash
+	52, // 2: block.ProtoHeader.evm_root:type_name -> common.ProtoHash
+	52, // 3: block.ProtoHeader.tx_hash:type_name -> common.ProtoHash
+	52, // 4: block.ProtoHeader.outbound_etx_hash:type_name -> common.ProtoHash
+	52, // 5: block.ProtoHeader.etx_rollup_hash:type_name -> common.ProtoHash
+	52, // 6: block.ProtoHeader.manifest_hash:type_name -> common.ProtoHash
+	52, // 7: block.ProtoHeader.receipt_hash:type_name -> common.ProtoHash
+	53, // 8: block.ProtoHeader.location:type_name -> common.ProtoLocation
+	52, // 9: block.ProtoHeader.mix_hash:type_name -> common.ProtoHash
+	52, // 10: block.ProtoHeader.utxo_root:type_name -> common.ProtoHash
+	52, // 11: block.ProtoHeader.etx_set_root:type_name -> common.ProtoHash
+	52, // 12: block.ProtoHeader.etx_eligible_slices:type_name -> common.ProtoHash
+	52, // 13: block.ProtoHeader.prime_terminus_hash:type_name -> common.ProtoHash
+	52, // 14: block.ProtoHeader.interlink_root_hash:type_name -> common.ProtoHash
+	52, // 15: block.ProtoHeader.prime_state_root:type_name -> common.ProtoHash
+	52, // 16: block.ProtoHeader.region_state_root:type_name -> common.ProtoHash
 	5,  // 17: block.ProtoTransaction.access_list:type_name -> block.ProtoAccessList
-	56, // 18: block.ProtoTransaction.originating_tx_hash:type_name -> common.ProtoHash
-	32, // 19: block.ProtoTransaction.tx_ins:type_name -> block.ProtoTxIns
-	33, // 20: block.ProtoTransaction.tx_outs:type_name -> block.ProtoTxOuts
-	56, // 21: block.ProtoTransaction.parent_hash:type_name -> common.ProtoHash
-	56, // 22: block.ProtoTransaction.mix_hash:type_name -> common.ProtoHash
+	52, // 18: block.ProtoTransaction.originating_tx_hash:type_name -> common.ProtoHash
+	28, // 19: block.ProtoTransaction.tx_ins:type_name -> block.ProtoTxIns
+	29, // 20: block.ProtoTransaction.tx_outs:type_name -> block.ProtoTxOuts
+	52, // 21: block.ProtoTransaction.parent_hash:type_name -> common.ProtoHash
+	52, // 22: block.ProtoTransaction.mix_hash:type_name -> common.ProtoHash
 	1,  // 23: block.ProtoTransactions.transactions:type_name -> block.ProtoTransaction
 	0,  // 24: block.ProtoHeaders.headers:type_name -> block.ProtoHeader
-	56, // 25: block.ProtoManifest.manifest:type_name -> common.ProtoHash
-	22, // 26: block.ProtoAccessList.access_tuples:type_name -> block.ProtoAccessTuple
-	7,  // 27: block.ProtoAuxPow.transaction:type_name -> block.ProtoRavencoinTransaction
-	8,  // 28: block.ProtoRavencoinTransaction.inputs:type_name -> block.ProtoRavencoinTransactionIn
-	9,  // 29: block.ProtoRavencoinTransaction.outputs:type_name -> block.ProtoRavencoinTransactionOut
-	10, // 30: block.ProtoRavencoinTransactionIn.previous_output:type_name -> block.ProtoRavencoinOutPoint
-	11, // 31: block.ProtoAuxTemplate.sigs:type_name -> block.ProtoSignerEnvelope
-	56, // 32: block.ProtoWorkObjectHeader.header_hash:type_name -> common.ProtoHash
-	56, // 33: block.ProtoWorkObjectHeader.parent_hash:type_name -> common.ProtoHash
-	56, // 34: block.ProtoWorkObjectHeader.tx_hash:type_name -> common.ProtoHash
-	57, // 35: block.ProtoWorkObjectHeader.location:type_name -> common.ProtoLocation
-	56, // 36: block.ProtoWorkObjectHeader.mix_hash:type_name -> common.ProtoHash
-	58, // 37: block.ProtoWorkObjectHeader.primary_coinbase:type_name -> common.ProtoAddress
-	6,  // 38: block.ProtoWorkObjectHeader.aux_pow:type_name -> block.ProtoAuxPow
-	13, // 39: block.ProtoWorkObjectHeaders.wo_headers:type_name -> block.ProtoWorkObjectHeader
-	0,  // 40: block.ProtoWorkObjectBody.header:type_name -> block.ProtoHeader
-	2,  // 41: block.ProtoWorkObjectBody.transactions:type_name -> block.ProtoTransactions
-	14, // 42: block.ProtoWorkObjectBody.uncles:type_name -> block.ProtoWorkObjectHeaders
-	2,  // 43: block.ProtoWorkObjectBody.outbound_etxs:type_name -> block.ProtoTransactions
-	4,  // 44: block.ProtoWorkObjectBody.manifest:type_name -> block.ProtoManifest
-	59, // 45: block.ProtoWorkObjectBody.interlink_hashes:type_name -> common.ProtoHashes
-	13, // 46: block.ProtoWorkObject.wo_header:type_name -> block.ProtoWorkObjectHeader
-	15, // 47: block.ProtoWorkObject.wo_body:type_name -> block.ProtoWorkObjectBody
-	1,  // 48: block.ProtoWorkObject.tx:type_name -> block.ProtoTransaction
-	16, // 49: block.ProtoWorkObjects.work_objects:type_name -> block.ProtoWorkObject
-	16, // 50: block.ProtoWorkObjectBlockView.work_object:type_name -> block.ProtoWorkObject
-	18, // 51: block.ProtoWorkObjectBlocksView.work_objects:type_name -> block.ProtoWorkObjectBlockView
-	16, // 52: block.ProtoWorkObjectHeaderView.work_object:type_name -> block.ProtoWorkObject
-	16, // 53: block.ProtoWorkObjectShareView.work_object:type_name -> block.ProtoWorkObject
-	56, // 54: block.ProtoAccessTuple.storage_key:type_name -> common.ProtoHash
-	26, // 55: block.ProtoReceiptForStorage.logs:type_name -> block.ProtoLogsForStorage
-	56, // 56: block.ProtoReceiptForStorage.tx_hash:type_name -> common.ProtoHash
-	58, // 57: block.ProtoReceiptForStorage.contract_address:type_name -> common.ProtoAddress
-	2,  // 58: block.ProtoReceiptForStorage.outbound_etxs:type_name -> block.ProtoTransactions
-	23, // 59: block.ProtoReceiptsForStorage.receipts:type_name -> block.ProtoReceiptForStorage
-	58, // 60: block.ProtoLogForStorage.address:type_name -> common.ProtoAddress
-	56, // 61: block.ProtoLogForStorage.topics:type_name -> common.ProtoHash
-	25, // 62: block.ProtoLogsForStorage.logs:type_name -> block.ProtoLogForStorage
-	16, // 63: block.ProtoPendingHeader.wo:type_name -> block.ProtoWorkObject
-	28, // 64: block.ProtoPendingHeader.termini:type_name -> block.ProtoTermini
-	56, // 65: block.ProtoTermini.dom_termini:type_name -> common.ProtoHash
-	56, // 66: block.ProtoTermini.sub_termini:type_name -> common.ProtoHash
-	16, // 67: block.ProtoPendingEtxs.header:type_name -> block.ProtoWorkObject
-	2,  // 68: block.ProtoPendingEtxs.outbound_etxs:type_name -> block.ProtoTransactions
-	16, // 69: block.ProtoPendingEtxsRollup.header:type_name -> block.ProtoWorkObject
-	2,  // 70: block.ProtoPendingEtxsRollup.etxs_rollup:type_name -> block.ProtoTransactions
-	34, // 71: block.ProtoTxIns.tx_ins:type_name -> block.ProtoTxIn
-	36, // 72: block.ProtoTxOuts.tx_outs:type_name -> block.ProtoTxOut
-	35, // 73: block.ProtoTxIn.previous_out_point:type_name -> block.ProtoOutPoint
-	56, // 74: block.ProtoOutPoint.hash:type_name -> common.ProtoHash
-	56, // 75: block.ProtoOutPointAndDenomination.hash:type_name -> common.ProtoHash
-	37, // 76: block.ProtoAddressOutPoints.out_points:type_name -> block.ProtoOutPointAndDenomination
-	35, // 77: block.ProtoSpentUTXO.outpoint:type_name -> block.ProtoOutPoint
-	36, // 78: block.ProtoSpentUTXO.sutxo:type_name -> block.ProtoTxOut
-	39, // 79: block.ProtoSpentUTXOs.sutxos:type_name -> block.ProtoSpentUTXO
-	42, // 80: block.ProtoKeysAndValues.keys_and_values:type_name -> block.ProtoKeyValue
-	55, // 81: block.ProtoTrimDepths.trim_depths:type_name -> block.ProtoTrimDepths.TrimDepthsEntry
-	46, // 82: block.ProtoTokenChoiceSet.token_choice_array:type_name -> block.ProtoTokenChoiceArray
-	47, // 83: block.ProtoTokenChoiceArray.token_choices:type_name -> block.ProtoTokenChoice
-	58, // 84: block.ProtoLockup.address:type_name -> common.ProtoAddress
-	58, // 85: block.ProtoUnlock.address:type_name -> common.ProtoAddress
-	50, // 86: block.ProtoUnlocks.unlocks:type_name -> block.ProtoUnlock
-	49, // 87: block.ProtoLockups.lockups:type_name -> block.ProtoLockup
-	88, // [88:88] is the sub-list for method output_type
-	88, // [88:88] is the sub-list for method input_type
-	88, // [88:88] is the sub-list for extension type_name
-	88, // [88:88] is the sub-list for extension extendee
-	0,  // [0:88] is the sub-list for field type_name
+	52, // 25: block.ProtoManifest.manifest:type_name -> common.ProtoHash
+	18, // 26: block.ProtoAccessList.access_tuples:type_name -> block.ProtoAccessTuple
+	7,  // 27: block.ProtoAuxTemplate.sigs:type_name -> block.ProtoSignerEnvelope
+	52, // 28: block.ProtoWorkObjectHeader.header_hash:type_name -> common.ProtoHash
+	52, // 29: block.ProtoWorkObjectHeader.parent_hash:type_name -> common.ProtoHash
+	52, // 30: block.ProtoWorkObjectHeader.tx_hash:type_name -> common.ProtoHash
+	53, // 31: block.ProtoWorkObjectHeader.location:type_name -> common.ProtoLocation
+	52, // 32: block.ProtoWorkObjectHeader.mix_hash:type_name -> common.ProtoHash
+	54, // 33: block.ProtoWorkObjectHeader.primary_coinbase:type_name -> common.ProtoAddress
+	6,  // 34: block.ProtoWorkObjectHeader.aux_pow:type_name -> block.ProtoAuxPow
+	9,  // 35: block.ProtoWorkObjectHeaders.wo_headers:type_name -> block.ProtoWorkObjectHeader
+	0,  // 36: block.ProtoWorkObjectBody.header:type_name -> block.ProtoHeader
+	2,  // 37: block.ProtoWorkObjectBody.transactions:type_name -> block.ProtoTransactions
+	10, // 38: block.ProtoWorkObjectBody.uncles:type_name -> block.ProtoWorkObjectHeaders
+	2,  // 39: block.ProtoWorkObjectBody.outbound_etxs:type_name -> block.ProtoTransactions
+	4,  // 40: block.ProtoWorkObjectBody.manifest:type_name -> block.ProtoManifest
+	55, // 41: block.ProtoWorkObjectBody.interlink_hashes:type_name -> common.ProtoHashes
+	9,  // 42: block.ProtoWorkObject.wo_header:type_name -> block.ProtoWorkObjectHeader
+	11, // 43: block.ProtoWorkObject.wo_body:type_name -> block.ProtoWorkObjectBody
+	1,  // 44: block.ProtoWorkObject.tx:type_name -> block.ProtoTransaction
+	12, // 45: block.ProtoWorkObjects.work_objects:type_name -> block.ProtoWorkObject
+	12, // 46: block.ProtoWorkObjectBlockView.work_object:type_name -> block.ProtoWorkObject
+	14, // 47: block.ProtoWorkObjectBlocksView.work_objects:type_name -> block.ProtoWorkObjectBlockView
+	12, // 48: block.ProtoWorkObjectHeaderView.work_object:type_name -> block.ProtoWorkObject
+	12, // 49: block.ProtoWorkObjectShareView.work_object:type_name -> block.ProtoWorkObject
+	52, // 50: block.ProtoAccessTuple.storage_key:type_name -> common.ProtoHash
+	22, // 51: block.ProtoReceiptForStorage.logs:type_name -> block.ProtoLogsForStorage
+	52, // 52: block.ProtoReceiptForStorage.tx_hash:type_name -> common.ProtoHash
+	54, // 53: block.ProtoReceiptForStorage.contract_address:type_name -> common.ProtoAddress
+	2,  // 54: block.ProtoReceiptForStorage.outbound_etxs:type_name -> block.ProtoTransactions
+	19, // 55: block.ProtoReceiptsForStorage.receipts:type_name -> block.ProtoReceiptForStorage
+	54, // 56: block.ProtoLogForStorage.address:type_name -> common.ProtoAddress
+	52, // 57: block.ProtoLogForStorage.topics:type_name -> common.ProtoHash
+	21, // 58: block.ProtoLogsForStorage.logs:type_name -> block.ProtoLogForStorage
+	12, // 59: block.ProtoPendingHeader.wo:type_name -> block.ProtoWorkObject
+	24, // 60: block.ProtoPendingHeader.termini:type_name -> block.ProtoTermini
+	52, // 61: block.ProtoTermini.dom_termini:type_name -> common.ProtoHash
+	52, // 62: block.ProtoTermini.sub_termini:type_name -> common.ProtoHash
+	12, // 63: block.ProtoPendingEtxs.header:type_name -> block.ProtoWorkObject
+	2,  // 64: block.ProtoPendingEtxs.outbound_etxs:type_name -> block.ProtoTransactions
+	12, // 65: block.ProtoPendingEtxsRollup.header:type_name -> block.ProtoWorkObject
+	2,  // 66: block.ProtoPendingEtxsRollup.etxs_rollup:type_name -> block.ProtoTransactions
+	30, // 67: block.ProtoTxIns.tx_ins:type_name -> block.ProtoTxIn
+	32, // 68: block.ProtoTxOuts.tx_outs:type_name -> block.ProtoTxOut
+	31, // 69: block.ProtoTxIn.previous_out_point:type_name -> block.ProtoOutPoint
+	52, // 70: block.ProtoOutPoint.hash:type_name -> common.ProtoHash
+	52, // 71: block.ProtoOutPointAndDenomination.hash:type_name -> common.ProtoHash
+	33, // 72: block.ProtoAddressOutPoints.out_points:type_name -> block.ProtoOutPointAndDenomination
+	31, // 73: block.ProtoSpentUTXO.outpoint:type_name -> block.ProtoOutPoint
+	32, // 74: block.ProtoSpentUTXO.sutxo:type_name -> block.ProtoTxOut
+	35, // 75: block.ProtoSpentUTXOs.sutxos:type_name -> block.ProtoSpentUTXO
+	38, // 76: block.ProtoKeysAndValues.keys_and_values:type_name -> block.ProtoKeyValue
+	51, // 77: block.ProtoTrimDepths.trim_depths:type_name -> block.ProtoTrimDepths.TrimDepthsEntry
+	42, // 78: block.ProtoTokenChoiceSet.token_choice_array:type_name -> block.ProtoTokenChoiceArray
+	43, // 79: block.ProtoTokenChoiceArray.token_choices:type_name -> block.ProtoTokenChoice
+	54, // 80: block.ProtoLockup.address:type_name -> common.ProtoAddress
+	54, // 81: block.ProtoUnlock.address:type_name -> common.ProtoAddress
+	46, // 82: block.ProtoUnlocks.unlocks:type_name -> block.ProtoUnlock
+	45, // 83: block.ProtoLockups.lockups:type_name -> block.ProtoLockup
+	84, // [84:84] is the sub-list for method output_type
+	84, // [84:84] is the sub-list for method input_type
+	84, // [84:84] is the sub-list for extension type_name
+	84, // [84:84] is the sub-list for extension extendee
+	0,  // [0:84] is the sub-list for field type_name
 }
 
 func init() { file_core_types_proto_block_proto_init() }
@@ -4192,32 +3915,28 @@ func file_core_types_proto_block_proto_init() {
 	file_core_types_proto_block_proto_msgTypes[7].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[8].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[9].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[10].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[11].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[12].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[13].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[15].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[14].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[16].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[18].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[20].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[21].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[17].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[23].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[25].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[26].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[27].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[29].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[30].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[31].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[34].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[32].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[33].OneofWrappers = []any{}
 	file_core_types_proto_block_proto_msgTypes[35].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[36].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[37].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[39].OneofWrappers = []any{}
-	file_core_types_proto_block_proto_msgTypes[46].OneofWrappers = []any{}
+	file_core_types_proto_block_proto_msgTypes[42].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_types_proto_block_proto_rawDesc), len(file_core_types_proto_block_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   56,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

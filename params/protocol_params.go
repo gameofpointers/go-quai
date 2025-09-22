@@ -248,6 +248,10 @@ var (
 	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
 )
 
+var (
+	KawPowForkBlock uint64 = 3000000 // Block at which KawPow activates
+)
+
 const (
 	TokenChoiceSetSize uint64 = 4000 // This should be same as the MinerDifficultyWindow
 )

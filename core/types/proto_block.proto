@@ -86,32 +86,10 @@ message ProtoAuxPow {
   optional bytes header = 2;  // 120B donor header for KAWPOW (was 80B for pre-KAWPOW)
   optional bytes signature = 3;  // Signature proving the work
   repeated bytes merkle_branch = 4;  // Merkle branch for coinbase
-  optional uint64 coinbase_value = 5;  // Subsidy + fees for output[0] (in RVN sats)
-  optional ProtoRavencoinTransaction transaction = 6;  // Full coinbase transaction
+  optional bytes transaction = 5;  // Full coinbase transaction (serialized wire format, contains value in TxOut[0])
 }
 
-message ProtoRavencoinTransaction {
-  optional int32 version = 1;
-  repeated ProtoRavencoinTransactionIn inputs = 2;
-  repeated ProtoRavencoinTransactionOut outputs = 3;
-  optional uint32 lock_time = 4;
-}
-
-message ProtoRavencoinTransactionIn {
-  optional ProtoRavencoinOutPoint previous_output = 1;
-  optional bytes script_sig = 2;
-  optional uint32 sequence = 3;
-}
-
-message ProtoRavencoinTransactionOut {
-  optional int64 value = 1;
-  optional bytes script_pub_key = 2;
-}
-
-message ProtoRavencoinOutPoint {
-  optional bytes hash = 1;  // 32 bytes transaction hash
-  optional uint32 index = 2;
-}
+// Removed ProtoRavencoinTransaction messages as we're using btcd wire.MsgTx serialization
 
 message ProtoSignerEnvelope {
   optional string signer_id = 1;

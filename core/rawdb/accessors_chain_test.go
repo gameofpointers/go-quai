@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -18,18 +19,12 @@ import (
 
 // testAuxPow creates a test AuxPow with default values
 func testAuxPow() *types.AuxPow {
-	testTx := types.RavencoinTransaction{
-		Version:  1,
-		Inputs:   []types.RavencoinTransactionIn{},
-		Outputs:  []types.RavencoinTransactionOut{},
-		LockTime: 0,
-	}
+	testTx := wire.NewMsgTx(1)
 	return types.NewAuxPow(
 		100,
 		[]byte{0x01, 0x02},
 		[]byte{0x03, 0x04},
 		[][]byte{},
-		5000000000,
 		testTx,
 	)
 }

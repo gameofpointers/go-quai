@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"google.golang.org/protobuf/proto"
 	"lukechampine.com/blake3"
@@ -102,18 +103,12 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	testTx := RavencoinTransaction{
-		Version:  1,
-		Inputs:   []RavencoinTransactionIn{},
-		Outputs:  []RavencoinTransactionOut{},
-		LockTime: 0,
-	}
+	testTx := wire.NewMsgTx(1)
 	auxPow := NewAuxPow(
 		1234,
 		bytes.Repeat([]byte{0xaa}, 120),
 		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
 		[][]byte{},
-		5000000000,
 		testTx,
 	)
 
@@ -208,18 +203,12 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	}
 
 	// Create AuxPow data
-	testTx := RavencoinTransaction{
-		Version:  1,
-		Inputs:   []RavencoinTransactionIn{},
-		Outputs:  []RavencoinTransactionOut{},
-		LockTime: 0,
-	}
+	testTx := wire.NewMsgTx(1)
 	auxPow := NewAuxPow(
 		1234,
 		bytes.Repeat([]byte{0xaa}, 120),
 		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
 		[][]byte{},
-		5000000000,
 		testTx,
 	)
 
@@ -291,18 +280,12 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	testTx := RavencoinTransaction{
-		Version:  1,
-		Inputs:   []RavencoinTransactionIn{},
-		Outputs:  []RavencoinTransactionOut{},
-		LockTime: 0,
-	}
+	testTx := wire.NewMsgTx(1)
 	auxPow := NewAuxPow(
 		1234,
 		bytes.Repeat([]byte{0xaa}, 120),
 		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
 		[][]byte{},
-		5000000000,
 		testTx,
 	)
 
@@ -516,18 +499,12 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
-	testTx := RavencoinTransaction{
-		Version:  1,
-		Inputs:   []RavencoinTransactionIn{},
-		Outputs:  []RavencoinTransactionOut{},
-		LockTime: 0,
-	}
+	testTx := wire.NewMsgTx(1)
 	auxPow := NewAuxPow(
 		1234,
 		bytes.Repeat([]byte{0xaa}, 120),
 		bytes.Repeat([]byte{0xbb}, 64),
 		[][]byte{},
-		5000000000,
 		testTx,
 	)
 

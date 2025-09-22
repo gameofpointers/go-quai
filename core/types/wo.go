@@ -11,6 +11,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	"google.golang.org/protobuf/proto"
 	"lukechampine.com/blake3"
 )
@@ -521,6 +522,12 @@ func (wo *WorkObject) SetNumber(val *big.Int, nodeCtx int) {
 ////////////////////////////////////////////////////////////
 /////////////////// Work Object Header Getters ///////////////
 ////////////////////////////////////////////////////////////
+
+// KawpowActivationHappened checks if the AuxPow field is non-nil, indicating
+// that Kawpow activation has occurred.
+func (wh *WorkObjectHeader) IsKawPowBlock() bool {
+	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock
+}
 
 func (wh *WorkObjectHeader) HeaderHash() common.Hash {
 	return wh.headerHash
@@ -1070,7 +1077,6 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 			append([]byte(nil), wh.auxPow.Header()...),
 			append([]byte(nil), wh.auxPow.Signature()...),
 			merkleBranch,
-			wh.auxPow.CoinbaseValue(),
 			wh.auxPow.Transaction(),
 		)
 	}

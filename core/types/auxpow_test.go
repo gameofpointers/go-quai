@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/stretchr/testify/require"
@@ -13,27 +15,18 @@ import (
 
 // Test data generators
 func testAuxPow() *AuxPow {
-	// Create a simple test coinbase transaction
-	testTx := RavencoinTransaction{
-		Version: 1,
-		Inputs: []RavencoinTransactionIn{
-			{
-				PreviousOutput: RavencoinOutPoint{
-					Hash:  common.Hash{},
-					Index: 0xFFFFFFFF,
-				},
-				ScriptSig: []byte{0x01, 0x02, 0x03},
-				Sequence:  0xFFFFFFFF,
-			},
-		},
-		Outputs: []RavencoinTransactionOut{
-			{
-				Value:        5000000000,
-				ScriptPubKey: []byte{0x76, 0xa9, 0x14},
-			},
-		},
-		LockTime: 0,
-	}
+	// Create a simple test coinbase transaction using btcd wire.MsgTx
+	testTx := wire.NewMsgTx(1)
+
+	// Add coinbase input (previous output is null)
+	prevOut := wire.NewOutPoint(&chainhash.Hash{}, 0xFFFFFFFF)
+	txIn := wire.NewTxIn(prevOut, []byte{0x01, 0x02, 0x03}, nil)
+	testTx.AddTxIn(txIn)
+
+	// Add output
+	pkScript := []byte{0x76, 0xa9, 0x14} // OP_DUP OP_HASH160 PUSH(20)
+	txOut := wire.NewTxOut(5000000000, pkScript)
+	testTx.AddTxOut(txOut)
 
 	merkleBranch := [][]byte{
 		bytes.Repeat([]byte{0xcc}, 32),
@@ -45,7 +38,6 @@ func testAuxPow() *AuxPow {
 		bytes.Repeat([]byte{0xaa}, 120), // header (KAWPOW is 120 bytes)
 		bytes.Repeat([]byte{0xbb}, 64),  // signature
 		merkleBranch,                     // merkle branch
-		5000000000,                       // coinbase value
 		testTx,                           // transaction
 	)
 }
@@ -105,11 +97,13 @@ func TestAuxPowProtoEncodeDecode(t *testing.T) {
 	require.Equal(t, original.ChainID(), decoded.ChainID())
 	require.Equal(t, original.Header(), decoded.Header())
 	require.Equal(t, original.Signature(), decoded.Signature())
-	require.Equal(t, original.CoinbaseValue(), decoded.CoinbaseValue())
 	require.Equal(t, len(original.MerkleBranch()), len(decoded.MerkleBranch()))
 	for i := range original.MerkleBranch() {
 		require.Equal(t, original.MerkleBranch()[i], decoded.MerkleBranch()[i])
 	}
+	// Verify transaction was properly serialized/deserialized
+	require.NotNil(t, decoded.Transaction())
+	require.Equal(t, original.Transaction().Version, decoded.Transaction().Version)
 }
 
 // TestAuxPowProtoEncodeNil tests encoding nil AuxPow
