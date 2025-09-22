@@ -58,7 +58,7 @@ type HeaderChain struct {
 	config *params.ChainConfig
 
 	bc     *BodyDb
-	engine consensus.Engine
+	engine []consensus.Engine
 	pool   *TxPool
 
 	currentExpansionNumber uint8
@@ -109,7 +109,7 @@ func NewTestHeaderChain() *HeaderChain {
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
 // to the parent's interrupt semaphore.
-func NewHeaderChain(db ethdb.Database, engine consensus.Engine, pEtxsRollupFetcher getPendingEtxsRollup, pEtxsFetcher getPendingEtxs, primeBlockFetcher getPrimeBlock, kQuaiAndUpdateBitGetter getKQuaiAndUpdateBit, chainConfig *params.ChainConfig, cacheConfig *CacheConfig, txLookupLimit *uint64, vmConfig vm.Config, slicesRunning []common.Location, currentExpansionNumber uint8, logger *log.Logger) (*HeaderChain, error) {
+func NewHeaderChain(db ethdb.Database, engine []consensus.Engine, pEtxsRollupFetcher getPendingEtxsRollup, pEtxsFetcher getPendingEtxs, primeBlockFetcher getPrimeBlock, kQuaiAndUpdateBitGetter getKQuaiAndUpdateBit, chainConfig *params.ChainConfig, cacheConfig *CacheConfig, txLookupLimit *uint64, vmConfig vm.Config, slicesRunning []common.Location, currentExpansionNumber uint8, logger *log.Logger) (*HeaderChain, error) {
 
 	nodeCtx := chainConfig.Location.Context()
 
@@ -190,6 +190,37 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, pEtxsRollupFetch
 	hc.heads = heads
 
 	return hc, nil
+}
+
+// GetEngineForPowID returns the consensus engine for the given PowID
+func (hc *HeaderChain) GetEngineForPowID(powID types.PowID) consensus.Engine {
+	// For now, we assume engine[0] is Progpow and engine[1] is Kawpow
+	// This should be made more robust with proper engine registration
+	switch powID {
+	case types.Progpow:
+		if len(hc.engine) > 0 {
+			return hc.engine[0]
+		}
+	case types.Kawpow:
+		if len(hc.engine) > 1 {
+			return hc.engine[1]
+		}
+	}
+	// Default to first engine if not found
+	if len(hc.engine) > 0 {
+		return hc.engine[0]
+	}
+	return nil
+}
+
+// GetEngineForHeader returns the consensus engine for the given header
+func (hc *HeaderChain) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
+	// Check if header has AuxPow to determine which engine to use
+	if header.AuxPow() != nil {
+		return hc.GetEngineForPowID(header.AuxPow().PowID())
+	}
+	// Default to Progpow if no AuxPow
+	return hc.GetEngineForPowID(types.Progpow)
 }
 
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
@@ -290,7 +321,8 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 		return newEtxs, nil
 	}
 	// Terminate the search on coincidence with dom chain
-	if hc.engine.IsDomCoincident(hc, b) {
+	engine := hc.GetEngineForHeader(b.WorkObjectHeader())
+	if engine.IsDomCoincident(hc, b) {
 		return newEtxs, nil
 	}
 	// Recursively get the ancestor rollup, until a coincident ancestor is found
@@ -316,7 +348,8 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		"Parent":   header.ParentHash(nodeCtx),
 	}).Debug("Headerchain Append")
 
-	err := hc.engine.VerifyHeader(hc, header)
+	engine := hc.GetEngineForHeader(header.WorkObjectHeader())
+	err := engine.VerifyHeader(hc, header)
 	if err != nil {
 		return err
 	}
@@ -358,7 +391,8 @@ func (hc *HeaderChain) CalculateInterlink(block *types.WorkObject) (common.Hashe
 		interlinkHashes = common.Hashes{header.Hash(), header.Hash(), header.Hash(), header.Hash()}
 	} else {
 		// check if parent belongs to any interlink level
-		rank, err := hc.engine.CalcRank(hc, header)
+		engine := hc.GetEngineForHeader(header.WorkObjectHeader())
+		rank, err := engine.CalcRank(hc, header)
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +427,7 @@ func (hc *HeaderChain) CalculateManifest(header *types.WorkObject) types.BlockMa
 		if nodeCtx == common.PRIME_CTX {
 			// Nothing to do for prime chain
 			manifest = types.BlockManifest{}
-		} else if hc.engine.IsDomCoincident(hc, header) {
+		} else if hc.GetEngineForHeader(header.WorkObjectHeader()).IsDomCoincident(hc, header) {
 			manifest = types.BlockManifest{header.Hash()}
 		} else {
 			parentManifest := rawdb.ReadManifest(hc.headerDb, header.ParentHash(nodeCtx))
@@ -1211,8 +1245,8 @@ func (hc *HeaderChain) NodeCtx() int {
 }
 
 // Engine reterives the consensus engine.
-func (hc *HeaderChain) Engine() consensus.Engine {
-	return hc.engine
+func (hc *HeaderChain) Engine(header *types.WorkObjectHeader) consensus.Engine {
+	return hc.GetEngineForHeader(header)
 }
 
 // SubscribeChainHeadEvent registers a subscription of ChainHeadEvent.
@@ -1240,7 +1274,8 @@ func (hc *HeaderChain) SlicesRunning() []common.Location {
 
 func (hc *HeaderChain) ComputeExpansionNumber(parent *types.WorkObject) (uint8, error) {
 	// If the parent is a prime block, prime terminus is the parent hash
-	_, order, err := hc.engine.CalcOrder(hc, parent)
+	engine := hc.GetEngineForHeader(parent.WorkObjectHeader())
+	_, order, err := engine.CalcOrder(hc, parent)
 	if err != nil {
 		return 0, err
 	}

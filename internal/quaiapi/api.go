@@ -1709,9 +1709,8 @@ func toHexSlice(b [][]byte) []string {
 }
 
 type PublicWorkSharesAPI struct {
-	b        Backend
-	txPool   *PublicTransactionPoolAPI
-	txWorker *TxWorker
+	b      Backend
+	txPool *PublicTransactionPoolAPI
 }
 
 // NewPublicWorkSharesAPI creates a new RPC service with methods specific for the transaction pool.
@@ -1719,12 +1718,6 @@ func NewPublicWorkSharesAPI(txpoolAPi *PublicTransactionPoolAPI, b Backend) *Pub
 	api := &PublicWorkSharesAPI{
 		b,
 		txpoolAPi,
-		nil,
-	}
-	if b.TxMiningEnabled() {
-		// Start WorkShare workers
-		worker := StartTxWorker(b.Engine(), b.GetMinerEndpoints(), b.NodeLocation(), api, b.GetWorkShareThreshold())
-		api.txWorker = worker
 	}
 
 	return api
@@ -1750,22 +1743,6 @@ func (s *PublicWorkSharesAPI) GetWork(ctx context.Context) (hexutil.Bytes, int, 
 // GetWorkShareThreshold returns the minimal WorkShareThreshold that this node will accept
 func (s *PublicWorkSharesAPI) GetWorkShareThreshold(ctx context.Context) (int, error) {
 	return s.b.GetWorkShareThreshold(), nil
-}
-
-// SendWorkedTransaction will check that the transaction in the form of a worked WorkObject
-// fufills the work threshold before adding it to the transaction pool.
-func (s *PublicWorkSharesAPI) SendUnworkedTransaction(ctx context.Context, input hexutil.Bytes) (common.Hash, error) {
-	tx := new(types.Transaction)
-	protoTransaction := new(types.ProtoTransaction)
-	err := proto.Unmarshal(input, protoTransaction)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	err = tx.ProtoDecode(protoTransaction, s.b.NodeLocation())
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return tx.Hash(), s.txWorker.AddTransaction(tx)
 }
 
 func (s *PublicWorkSharesAPI) ReceiveSubWorkshare(ctx context.Context, input hexutil.Bytes) error {

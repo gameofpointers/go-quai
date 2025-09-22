@@ -103,6 +103,7 @@ type backend interface {
 	NodeLocation() common.Location
 	Logger() *log.Logger
 	Database() ethdb.Database
+	Engine(header *types.WorkObjectHeader) consensus.Engine
 }
 
 // fullNodeBackend encompasses the functionality necessary for a full node
@@ -254,7 +255,7 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(node *node.Node, backend backend, engine consensus.Engine, url string, sendfullstats bool) error {
+func New(node *node.Node, backend backend, url string, sendfullstats bool) error {
 	parts, err := parseEthstatsURL(url)
 	if err != nil {
 		return err
@@ -286,7 +287,6 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string, 
 
 	quaistats := &Service{
 		backend:               backend,
-		engine:                engine,
 		node:                  parts[0],
 		pass:                  parts[1],
 		host:                  parts[2],
@@ -1273,7 +1273,7 @@ func (s *Service) assembleBlockDetailStats(block *types.WorkObject) *blockDetail
 	uncleCount := uint64(0)
 	woCount := uint64(0)
 	for _, uncle := range block.Uncles() {
-		_, err := s.engine.VerifySeal(uncle)
+		_, err := s.backend.Engine(uncle).VerifySeal(uncle)
 		if err == nil {
 			uncleCount += 1
 		} else {

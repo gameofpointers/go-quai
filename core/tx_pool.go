@@ -164,7 +164,7 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 	IsGenesisHash(hash common.Hash) bool
 	CheckIfEtxIsEligible(hash common.Hash, location common.Location) bool
-	Engine() consensus.Engine
+	Engine(header *types.WorkObjectHeader) consensus.Engine
 	GetHeaderOrCandidateByHash(common.Hash) *types.WorkObject
 	NodeCtx() int
 	GetHeaderByHash(common.Hash) *types.WorkObject

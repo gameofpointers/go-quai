@@ -109,7 +109,7 @@ var defaultCacheConfig = &CacheConfig{
 type StateProcessor struct {
 	config                              *params.ChainConfig // Chain configuration options
 	hc                                  *HeaderChain        // Canonical block chain
-	engine                              consensus.Engine    // Consensus engine used for block rewards
+	engine                              []consensus.Engine  // Consensus engines used for block rewards
 	logsFeed                            event.Feed
 	rmLogsFeed                          event.Feed
 	cacheConfig                         *CacheConfig                            // CacheConfig for StateProcessor
@@ -134,7 +134,7 @@ type StateProcessor struct {
 }
 
 // NewStateProcessor initialises a new StateProcessor.
-func NewStateProcessor(config *params.ChainConfig, hc *HeaderChain, engine consensus.Engine, vmConfig vm.Config, cacheConfig *CacheConfig, txLookupLimit *uint64) *StateProcessor {
+func NewStateProcessor(config *params.ChainConfig, hc *HeaderChain, engine []consensus.Engine, vmConfig vm.Config, cacheConfig *CacheConfig, txLookupLimit *uint64) *StateProcessor {
 
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
@@ -1114,11 +1114,12 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		}
 
 		totalEntropy := big.NewInt(0)
-		powHash, err := p.engine.ComputePowHash(targetBlock.WorkObjectHeader())
+		engine := p.hc.GetEngineForHeader(targetBlock.WorkObjectHeader())
+		powHash, err := engine.ComputePowHash(targetBlock.WorkObjectHeader())
 		if err != nil {
 			return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute pow hash for the target block")
 		}
-		zoneThresholdEntropy := p.engine.IntrinsicLogEntropy(powHash)
+		zoneThresholdEntropy := engine.IntrinsicLogEntropy(powHash)
 		totalEntropy = new(big.Int).Add(totalEntropy, zoneThresholdEntropy)
 
 		// First step is to collect all the workshares and uncles at this targetBlockNumber depth, then
@@ -1141,19 +1142,20 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			for _, uncle := range uncles {
 				var uncleEntropy *big.Int
 				if uncle.NumberU64() == targetBlockNumber {
-					_, err := p.engine.VerifySeal(uncle)
+					engine := p.hc.GetEngineForHeader(uncle)
+					_, err := engine.VerifySeal(uncle)
 					if err != nil {
 						// uncle is a workshare
-						powHash, err := p.engine.ComputePowHash(uncle)
+						powHash, err := engine.ComputePowHash(uncle)
 						if err != nil {
 							return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
 						}
-						uncleEntropy = new(big.Int).Set(p.engine.IntrinsicLogEntropy(powHash))
+						uncleEntropy = new(big.Int).Set(engine.IntrinsicLogEntropy(powHash))
 						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 					} else {
 						// Add the target weight into the uncles
 						target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-						uncleEntropy = p.engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+						uncleEntropy = engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 					}
 					sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)
@@ -1203,7 +1205,8 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 
 	time4 := common.PrettyDuration(time.Since(start))
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	multiSet, utxoSetSize, trimmedUtxos, err := p.engine.Finalize(p.hc, batch, block, statedb, false, parentUtxoSetSize, utxosCreatedDeleted.UtxosCreatedHashes, utxosCreatedDeleted.UtxosDeletedHashes, supplyRemovedQi)
+	engine := p.hc.GetEngineForHeader(block.WorkObjectHeader())
+	multiSet, utxoSetSize, trimmedUtxos, err := engine.Finalize(p.hc, batch, block, statedb, false, parentUtxoSetSize, utxosCreatedDeleted.UtxosCreatedHashes, utxosCreatedDeleted.UtxosDeletedHashes, supplyRemovedQi)
 	if err != nil {
 		return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
 	}

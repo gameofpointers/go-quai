@@ -61,7 +61,7 @@ type blockNumberAndRetryCounter struct {
 
 type Core struct {
 	sl     *Slice
-	engine consensus.Engine
+	engine []consensus.Engine
 
 	appendQueue     *lru.Cache[common.Hash, blockNumberAndRetryCounter]
 	processingCache *expireLru.LRU[common.Hash, interface{}]
@@ -81,7 +81,7 @@ type Core struct {
 	logger *log.Logger
 }
 
-func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.WorkObject) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
+func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.WorkObject) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
 	slice, err := NewSlice(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, currentExpansionNumber, genesisBlock, engine, cacheConfig, vmConfig, genesis, logger)
 	if err != nil {
 		return nil, err
@@ -116,6 +116,16 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.W
 	}
 
 	return c, nil
+}
+
+// GetEngineForPowID returns the consensus engine for the given PowID
+func (c *Core) GetEngineForPowID(powID types.PowID) consensus.Engine {
+	return c.sl.GetEngineForPowID(powID)
+}
+
+// GetEngineForHeader returns the consensus engine for the given header
+func (c *Core) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
+	return c.sl.GetEngineForHeader(header)
 }
 
 // InsertChain attempts to append a list of blocks to the slice, optionally
@@ -276,13 +286,15 @@ func (c *Core) EntropyWindow() *big.Int {
 	}
 	powhash, exists := c.sl.hc.powHashCache.Peek(currentHeader.Hash())
 	if !exists {
-		powhash, err = c.engine.VerifySeal(currentHeader.WorkObjectHeader())
+		engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
+		powhash, err = engine.VerifySeal(currentHeader.WorkObjectHeader())
 		if err != nil {
 			return nil
 		}
 		c.sl.hc.powHashCache.Add(currentHeader.Hash(), powhash)
 	}
-	currentBlockIntrinsic := c.engine.IntrinsicLogEntropy(powhash)
+	engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
+	currentBlockIntrinsic := engine.IntrinsicLogEntropy(powhash)
 	MaxAllowableEntropyDist := new(big.Int).Mul(currentBlockIntrinsic, big.NewInt(c_maxFutureEntropyMultiple))
 	currentHeaderEntropy := c.CurrentHeader().ParentEntropy(common.ZONE_CTX)
 	return new(big.Int).Add(currentHeaderEntropy, MaxAllowableEntropyDist)
@@ -569,12 +581,13 @@ func (c *Core) Config() *params.ChainConfig {
 }
 
 // Engine retreives the blake3 consensus engine.
-func (c *Core) Engine() consensus.Engine {
-	return c.engine
+func (c *Core) Engine(header *types.WorkObjectHeader) consensus.Engine {
+	return c.GetEngineForHeader(header)
 }
 
 func (c *Core) CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity {
-	return c.engine.CheckIfValidWorkShare(workShare)
+	engine := c.GetEngineForHeader(workShare)
+	return engine.CheckIfValidWorkShare(workShare)
 }
 
 // Slice retrieves the slice struct.
@@ -911,17 +924,21 @@ func (c *Core) ComputeMinerDifficulty(parent *types.WorkObject) *big.Int {
 
 // CurrentLogEntropy returns the logarithm of the total entropy reduction since genesis for our current head block
 func (c *Core) CurrentLogEntropy() *big.Int {
-	return c.engine.TotalLogEntropy(c, c.sl.hc.CurrentHeader())
+	currentHeader := c.sl.hc.CurrentHeader()
+	engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
+	return engine.TotalLogEntropy(c, currentHeader)
 }
 
 // TotalLogEntropy returns the total entropy reduction if the chain since genesis to the given header
 func (c *Core) TotalLogEntropy(header *types.WorkObject) *big.Int {
-	return c.engine.TotalLogEntropy(c, header)
+	engine := c.GetEngineForHeader(header.WorkObjectHeader())
+	return engine.TotalLogEntropy(c, header)
 }
 
 // CalcOrder returns the order of the block within the hierarchy of chains
 func (c *Core) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	return c.engine.CalcOrder(c, header)
+	engine := c.GetEngineForHeader(header.WorkObjectHeader())
+	return engine.CalcOrder(c, header)
 }
 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if

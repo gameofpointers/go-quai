@@ -63,7 +63,7 @@ type Quai struct {
 	chainDb ethdb.Database // Block chain database
 
 	eventMux *event.TypeMux
-	engine   consensus.Engine
+	engine   []consensus.Engine
 
 	bloomRequests     chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
 	bloomIndexer      *core.ChainIndexer             // Bloom indexer operating during block imports
@@ -193,14 +193,19 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		blake3Config.NotifyFull = config.Miner.NotifyFull
 		blake3Config.NodeLocation = config.NodeLocation
 		blake3Config.GenAllocs = config.GenesisAllocs
-		quai.engine = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, config.Miner.WorkShareThreshold, chainDb, logger)
+		quai.engine = make([]consensus.Engine, 1)
+		quai.engine[0] = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, config.Miner.WorkShareThreshold, chainDb, logger)
 	} else {
 		// Transfer mining-related config to the progpow config.
 		progpowConfig := config.Progpow
 		progpowConfig.NodeLocation = config.NodeLocation
 		progpowConfig.NotifyFull = config.Miner.NotifyFull
 		progpowConfig.GenAllocs = config.GenesisAllocs
-		quai.engine = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
+		quai.engine = make([]consensus.Engine, params.TotalPowEngines)
+		quai.engine[0] = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
+
+		quai.engine[1] = quaiconfig.CreateKawPowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
+
 	}
 	logger.WithField("config", config).Info("Initialized chain configuration")
 
@@ -276,6 +281,11 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	return quai, nil
 }
 
+// getEngineForHeader returns the consensus engine for the given header
+func (s *Quai) getEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
+	return s.core.GetEngineForHeader(header)
+}
+
 // APIs return the collection of RPC services the go-quai package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Quai) APIs() []rpc.API {
@@ -331,7 +341,8 @@ func (s *Quai) APIs() []rpc.API {
 // We regard two types of accounts as local miner account: etherbase
 // and accounts specified via `txpool.locals` flag.
 func (s *Quai) isLocalBlock(header *types.WorkObject) bool {
-	author, err := s.engine.Author(header)
+	engine := s.getEngineForHeader(header.WorkObjectHeader())
+	author, err := engine.Author(header)
 	if err != nil {
 		s.logger.WithFields(log.Fields{
 			"number": header.NumberU64(s.core.NodeCtx()),
@@ -357,16 +368,12 @@ func (s *Quai) isLocalBlock(header *types.WorkObject) bool {
 	return slices.Contains(s.config.TxPool.Locals, internal)
 }
 
-// shouldPreserve checks whether we should preserve the given block
-// during the chain reorg depending on whether the author of block
-// is a local account.
-func (s *Quai) shouldPreserve(block *types.WorkObject) bool {
-	return s.isLocalBlock(block)
+func (s *Quai) Core() *core.Core         { return s.core }
+func (s *Quai) EventMux() *event.TypeMux { return s.eventMux }
+func (s *Quai) Engine(header *types.WorkObjectHeader) consensus.Engine {
+	// Return the default engine (Progpow)
+	return s.core.GetEngineForHeader(header)
 }
-
-func (s *Quai) Core() *core.Core                 { return s.core }
-func (s *Quai) EventMux() *event.TypeMux         { return s.eventMux }
-func (s *Quai) Engine() consensus.Engine         { return s.engine }
 func (s *Quai) ChainDb() ethdb.Database          { return s.chainDb }
 func (s *Quai) IsListening() bool                { return true } // Always listening
 func (s *Quai) ArchiveMode() bool                { return s.config.NoPruning }

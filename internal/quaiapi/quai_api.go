@@ -1032,7 +1032,7 @@ func RPCMarshalBlock(backend Backend, block *types.WorkObject, inclTx bool, full
 	marshalWorkShares := make([]map[string]interface{}, 0)
 	for _, uncle := range block.Uncles() {
 		rpcMarshalUncle := uncle.RPCMarshalWorkObjectHeader()
-		_, err := backend.Engine().VerifySeal(uncle)
+		_, err := backend.Engine(uncle).VerifySeal(uncle)
 		if err != nil {
 			marshalWorkShares = append(marshalWorkShares, rpcMarshalUncle)
 		} else {
@@ -1197,7 +1197,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 	if workShare != nil {
 		var isWorkShare, isSubShare bool
 		threshold := s.b.GetWorkShareP2PThreshold()
-		isSubShare = s.b.Engine().CheckWorkThreshold(workShare, threshold)
+		isSubShare = s.b.Engine(workShare).CheckWorkThreshold(workShare, threshold)
 		if !isSubShare {
 			return errors.New("workshare has less entropy than the workshare p2p threshold")
 		}
@@ -1213,7 +1213,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 		}
 		// If the share qualifies is not a workshare and there are no transactions,
 		// there is no need to broadcast the share
-		isWorkShare = s.b.Engine().CheckWorkThreshold(workShare, params.WorkSharesThresholdDiff)
+		isWorkShare = s.b.Engine(workShare).CheckWorkThreshold(workShare, params.WorkSharesThresholdDiff)
 		if !isWorkShare && len(txs) == 0 {
 			return nil
 		}

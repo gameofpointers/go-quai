@@ -31,7 +31,7 @@ import (
 // current blockchain to be used during transaction processing.
 type ChainContext interface {
 	// Engine retrieves the chain's consensus engine.
-	Engine() consensus.Engine
+	Engine(header *types.WorkObjectHeader) consensus.Engine
 
 	// GetHeader returns a block header from the database by hash.
 	// The header might not be on the canonical chain.
@@ -69,7 +69,7 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 
 	// If we don't have an explicit author (i.e. not mining), extract from the header
 	if author == nil {
-		beneficiary, _ = chain.Engine().Author(header) // Ignore error, we're past header validation
+		beneficiary, _ = chain.Engine(header.WorkObjectHeader()).Author(header) // Ignore error, we're past header validation
 	} else {
 		beneficiary = *author
 	}
@@ -90,7 +90,7 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 
 	// Prime terminus determines which location is eligible to accept the etx
 	primeTerminusHash := header.PrimeTerminusHash()
-	_, parentOrder, err := chain.Engine().CalcOrder(chain, parent)
+	_, parentOrder, err := chain.Engine(parent.WorkObjectHeader()).CalcOrder(chain, parent)
 	if err != nil {
 		return vm.BlockContext{}, fmt.Errorf("parent order cannot be calculated, err %s", err)
 	}

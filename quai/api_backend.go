@@ -481,8 +481,8 @@ func (b *QuaiAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.M
 	}
 }
 
-func (b *QuaiAPIBackend) Engine() consensus.Engine {
-	return b.quai.engine
+func (b *QuaiAPIBackend) Engine(header *types.WorkObjectHeader) consensus.Engine {
+	return b.quai.Engine(header)
 }
 
 func (b *QuaiAPIBackend) CurrentHeader() *types.WorkObject {

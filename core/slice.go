@@ -76,7 +76,7 @@ type Slice struct {
 
 	sliceDb ethdb.Database
 	config  *params.ChainConfig
-	engine  consensus.Engine
+	engine  []consensus.Engine
 
 	quit chan struct{} // slice quit channel
 
@@ -106,7 +106,7 @@ type Slice struct {
 	recomputeRequired bool
 }
 
-func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.WorkObject) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
+func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.WorkObject) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
 	nodeCtx := chainConfig.Location.Context()
 	sl := &Slice{
 		config:            chainConfig,
@@ -163,6 +163,16 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 	}
 
 	return sl, nil
+}
+
+// GetEngineForPowID returns the consensus engine for the given PowID
+func (sl *Slice) GetEngineForPowID(powID types.PowID) consensus.Engine {
+	return sl.hc.GetEngineForPowID(powID)
+}
+
+// GetEngineForHeader returns the consensus engine for the given header
+func (sl *Slice) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
+	return sl.hc.GetEngineForHeader(header)
 }
 
 func (sl *Slice) SetDomInterface(domInterface CoreBackend) {
@@ -696,7 +706,8 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 	time7 := common.PrettyDuration(time.Since(start))
 
 	if order == sl.NodeCtx() {
-		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogEntropy(sl.hc, block)})
+		engine := sl.GetEngineForHeader(block.WorkObjectHeader())
+		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
 	}
 
 	if sl.NodeCtx() == common.ZONE_CTX && sl.ProcessingState() {
@@ -750,8 +761,9 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 		"t5_3": time5_3,
 	}).Info("Times during sub append")
 
-	intrinsicS := sl.engine.IntrinsicLogEntropy(block.Hash())
-	workShare, err := sl.engine.WorkShareLogEntropy(sl.hc, block)
+	engine := sl.GetEngineForHeader(block.WorkObjectHeader())
+	intrinsicS := engine.IntrinsicLogEntropy(block.Hash())
+	workShare, err := engine.WorkShareLogEntropy(sl.hc, block)
 	if err != nil {
 		sl.logger.WithField("err", err).Error("Error calculating the work share log entropy")
 		workShare = big.NewInt(0)
@@ -1071,10 +1083,11 @@ func (sl *Slice) GetKQuaiAndUpdateBit(hash common.Hash) (*big.Int, uint8, error)
 			if block != nil {
 				// In the case of this block being a region and state is not
 				// processed, send an update to the hierarchical coordinator
-				_, order, calcOrderErr := sl.engine.CalcOrder(sl.hc, block)
+				engine := sl.GetEngineForHeader(block.WorkObjectHeader())
+				_, order, calcOrderErr := engine.CalcOrder(sl.hc, block)
 				if calcOrderErr == nil {
 					if order == sl.NodeCtx() {
-						sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogEntropy(sl.hc, block)})
+						sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
 					}
 				}
 			}
@@ -1088,10 +1101,11 @@ func (sl *Slice) GetKQuaiAndUpdateBit(hash common.Hash) (*big.Int, uint8, error)
 		kQuai, updateBit, err := sl.hc.bc.processor.GetKQuaiAndUpdateBit(block)
 		if err != nil && err.Error() == ErrSubNotSyncedToDom.Error() {
 			// send an update to the hierarchical coordinator
-			_, order, calcOrderErr := sl.engine.CalcOrder(sl.hc, block)
+			engine := sl.GetEngineForHeader(block.WorkObjectHeader())
+			_, order, calcOrderErr := engine.CalcOrder(sl.hc, block)
 			if calcOrderErr == nil {
 				if order == sl.NodeCtx() {
-					sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.engine.TotalLogEntropy(sl.hc, block)})
+					sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
 				}
 			}
 		}
@@ -1929,8 +1943,6 @@ func (sl *Slice) Stop() {
 
 func (sl *Slice) Config() *params.ChainConfig { return sl.config }
 
-func (sl *Slice) Engine() consensus.Engine { return sl.engine }
-
 func (sl *Slice) HeaderChain() *HeaderChain { return sl.hc }
 
 func (sl *Slice) TxPool() *TxPool { return sl.txPool }
@@ -2207,7 +2219,8 @@ func (sl *Slice) GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, e
 }
 
 func (sl *Slice) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	return sl.engine.CalcOrder(sl.hc, header)
+	engine := sl.GetEngineForHeader(header.WorkObjectHeader())
+	return engine.CalcOrder(sl.hc, header)
 }
 
 ////// Expansion related logic

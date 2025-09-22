@@ -114,7 +114,6 @@ type Backend interface {
 	GetPrimeBlock(blockHash common.Hash) *types.WorkObject
 	GetKQuaiAndUpdateBit(blockHash common.Hash) (*big.Int, uint8, error)
 	consensus.ChainHeaderReader
-	TxMiningEnabled() bool
 	GetWorkShareThreshold() int
 	GetMinerEndpoints() []string
 	GetWorkShareP2PThreshold() int
@@ -153,7 +152,7 @@ type Backend interface {
 	SubscribePendingHeaderEvent(ch chan<- *types.WorkObject) event.Subscription
 
 	ChainConfig() *params.ChainConfig
-	Engine() consensus.Engine
+	Engine(header *types.WorkObjectHeader) consensus.Engine
 
 	// Logger
 	Logger() *log.Logger

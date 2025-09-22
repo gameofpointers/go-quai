@@ -37,22 +37,28 @@ import (
 type Miner struct {
 	worker  *worker
 	hc      *HeaderChain
-	engine  consensus.Engine
+	engines []consensus.Engine
 	startCh chan []common.Address
 	logger  *log.Logger
 }
 
-func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engine consensus.Engine, isLocalBlock func(block *types.WorkObject) bool, processingState bool, logger *log.Logger) *Miner {
+func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engines []consensus.Engine, isLocalBlock func(block *types.WorkObject) bool, processingState bool, logger *log.Logger) *Miner {
 	miner := &Miner{
 		hc:      hc,
-		engine:  engine,
+		engines: engines,
 		startCh: make(chan []common.Address, 2),
-		worker:  newWorker(config, chainConfig, db, engine, hc, txPool, isLocalBlock, true, processingState, logger),
+		worker:  newWorker(config, chainConfig, db, engines[0], hc, txPool, isLocalBlock, true, processingState, logger),
 	}
 
 	miner.SetExtra(miner.MakeExtraData(config.ExtraData))
 
 	return miner
+}
+
+// getEngineForHeader returns the appropriate consensus engine for the given header
+func (miner *Miner) getEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
+	// Use HeaderChain's engine selection logic
+	return miner.hc.GetEngineForHeader(header)
 }
 
 func (miner *Miner) Stop() {
@@ -68,8 +74,11 @@ func (miner *Miner) StopMining() {
 	type threaded interface {
 		SetThreads(threads int)
 	}
-	if th, ok := miner.engine.(threaded); ok {
-		th.SetThreads(-1)
+	// Use the first engine for thread configuration
+	if len(miner.engines) > 0 {
+		if th, ok := miner.engines[0].(threaded); ok {
+			th.SetThreads(-1)
+		}
 	}
 	// Stop the block creating itself
 	miner.Stop()

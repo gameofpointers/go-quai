@@ -196,6 +196,31 @@ func CreateProgpowConsensusEngine(stack *node.Node, nodeLocation common.Location
 	return engine
 }
 
+// CreateKawPowConsensusEngine creates a kawpow consensus engine for the given chain configuration.
+func CreateKawPowConsensusEngine(stack *node.Node, nodeLocation common.Location, config *progpow.Config, notify []string, noverify bool, db ethdb.Database, logger *log.Logger) consensus.Engine {
+	// Otherwise assume proof-of-work
+	switch config.PowMode {
+	case progpow.ModeFake:
+		logger.Warn("KawPow used in fake mode")
+	case progpow.ModeTest:
+		logger.Warn("KawPow used in test mode")
+	case progpow.ModeShared:
+		logger.Warn("KawPow used in shared mode")
+	}
+	engine := progpow.New(progpow.Config{
+		PowMode:            config.PowMode,
+		NotifyFull:         config.NotifyFull,
+		DurationLimit:      config.DurationLimit,
+		NodeLocation:       nodeLocation,
+		GasCeil:            config.GasCeil,
+		GenAllocs:          config.GenAllocs,
+		MinDifficulty:      config.MinDifficulty,
+		WorkShareThreshold: config.WorkShareThreshold,
+	}, notify, noverify, logger)
+	engine.SetThreads(-1) // Disable CPU mining
+	return engine
+}
+
 // CreateBlake3ConsensusEngine creates a progpow consensus engine for the given chain configuration.
 func CreateBlake3ConsensusEngine(stack *node.Node, nodeLocation common.Location, config *blake3pow.Config, notify []string, noverify bool, workShareThreshold int, db ethdb.Database, logger *log.Logger) consensus.Engine {
 	// Otherwise assume proof-of-work
