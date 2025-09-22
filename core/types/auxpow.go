@@ -6,11 +6,11 @@ import (
 	"github.com/btcsuite/btcd/wire"
 )
 
-// ChainID represents a unique identifier for a blockchain
-type ChainID uint32
+// PowID represents a unique identifier for a proof-of-work algorithm
+type PowID uint32
 
 const (
-	Progpow ChainID = iota
+	Progpow PowID = iota
 	Kawpow
 )
 
@@ -64,7 +64,7 @@ func (se *SignerEnvelope) ProtoDecode(data *ProtoSignerEnvelope) error {
 // AuxTemplate defines the template structure for auxiliary proof-of-work
 type AuxTemplate struct {
 	// === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
-	chainID         ChainID  // must match ap.Chain (RVN)
+	powID           PowID    // must match ap.Chain (RVN)
 	prevHash        [32]byte // must equal donor_header.hashPrevBlock
 	payoutScript    []byte   // must equal coinbase.outputs[0].scriptPubKey
 	scriptSigMaxLen uint16   // ≤ 100
@@ -97,7 +97,7 @@ type AuxTemplate struct {
 
 func EmptyAuxTemplate() *AuxTemplate {
 	return &AuxTemplate{
-		chainID:         0,
+		powID:           0,
 		prevHash:        [32]byte{},
 		payoutScript:    nil,
 		scriptSigMaxLen: 100,
@@ -115,7 +115,7 @@ func EmptyAuxTemplate() *AuxTemplate {
 }
 
 // Getters for AuxTemplate fields
-func (at *AuxTemplate) ChainID() ChainID        { return at.chainID }
+func (at *AuxTemplate) PowID() PowID            { return at.powID }
 func (at *AuxTemplate) PrevHash() [32]byte      { return at.prevHash }
 func (at *AuxTemplate) PayoutScript() []byte    { return at.payoutScript }
 func (at *AuxTemplate) ScriptSigMaxLen() uint16 { return at.scriptSigMaxLen }
@@ -131,7 +131,7 @@ func (at *AuxTemplate) Extranonce2Size() uint8  { return at.extranonce2Size }
 func (at *AuxTemplate) Sigs() []SignerEnvelope  { return at.sigs }
 
 // Setters for AuxTemplate fields
-func (at *AuxTemplate) SetChainID(id ChainID)           { at.chainID = id }
+func (at *AuxTemplate) SetPowID(id PowID)               { at.powID = id }
 func (at *AuxTemplate) SetPrevHash(hash [32]byte)       { at.prevHash = hash }
 func (at *AuxTemplate) SetPayoutScript(script []byte)   { at.payoutScript = script }
 func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)   { at.scriptSigMaxLen = len }
@@ -152,7 +152,7 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 		return nil
 	}
 
-	chainID := uint32(at.chainID)
+	powID := uint32(at.powID)
 	scriptSigMaxLen := uint32(at.scriptSigMaxLen)
 	version := at.version
 	nbits := at.nBits
@@ -174,7 +174,7 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 	}
 
 	return &ProtoAuxTemplate{
-		ChainId:         &chainID,
+		ChainId:         &powID,
 		PrevHash:        at.prevHash[:],
 		PayoutScript:    at.payoutScript,
 		ScriptSigMaxLen: &scriptSigMaxLen,
@@ -197,7 +197,7 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 		return nil
 	}
 
-	at.chainID = ChainID(data.GetChainId())
+	at.powID = PowID(data.GetChainId())
 
 	// Copy PrevHash (32 bytes)
 	if len(data.GetPrevHash()) == 32 {
@@ -236,16 +236,16 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	chainID      ChainID     // Chain identifier
+	powID        PowID       // PoW algorithm identifier
 	header       []byte      // 120B donor header for KAWPOW
 	signature    []byte      // Signature proving the work
 	merkleBranch [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
 	transaction  *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
 }
 
-func NewAuxPow(chainID ChainID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
+func NewAuxPow(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
 	return &AuxPow{
-		chainID:      chainID,
+		powID:        powID,
 		header:       header,
 		signature:    signature,
 		merkleBranch: merkleBranch,
@@ -253,7 +253,7 @@ func NewAuxPow(chainID ChainID, header []byte, signature []byte, merkleBranch []
 	}
 }
 
-func (ap *AuxPow) ChainID() ChainID { return ap.chainID }
+func (ap *AuxPow) PowID() PowID { return ap.powID }
 
 func (ap *AuxPow) Header() []byte { return ap.header }
 
@@ -263,7 +263,7 @@ func (ap *AuxPow) MerkleBranch() [][]byte { return ap.merkleBranch }
 
 func (ap *AuxPow) Transaction() *wire.MsgTx { return ap.transaction }
 
-func (ap *AuxPow) SetChainID(id ChainID) { ap.chainID = id }
+func (ap *AuxPow) SetPowID(id PowID) { ap.powID = id }
 
 func (ap *AuxPow) SetHeader(header []byte) { ap.header = header }
 
@@ -279,7 +279,7 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 		return nil
 	}
 
-	chainID := uint32(ap.ChainID())
+	powID := uint32(ap.PowID())
 
 	// Convert merkle branch
 	merkleBranch := make([][]byte, len(ap.MerkleBranch()))
@@ -295,7 +295,7 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 	}
 
 	return &ProtoAuxPow{
-		ChainId:      &chainID,
+		ChainId:      &powID,
 		Header:       ap.Header(),
 		Signature:    ap.Signature(),
 		MerkleBranch: merkleBranch,
@@ -309,7 +309,7 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		return nil
 	}
 
-	ap.SetChainID(ChainID(data.GetChainId()))
+	ap.SetPowID(PowID(data.GetChainId()))
 	ap.SetHeader(data.GetHeader())
 	ap.SetSignature(data.GetSignature())
 

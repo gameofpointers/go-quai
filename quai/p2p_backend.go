@@ -164,7 +164,7 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, Id string, topic s
 
 		backend.Logger().WithFields(log.Fields{
 			"message id": Id,
-			"chainID":    data.ChainID(),
+			"chainID":    data.PowID(),
 			"nbits":      data.NBits(),
 		}).Info("Received an aux template broadcast")
 

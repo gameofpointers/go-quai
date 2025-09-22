@@ -864,7 +864,7 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 	sl.bestPhKawPow.Store(types.CopyWorkObject(bestPhKawPow))
 }
 
-func (sl *Slice) ReadBestPh(powType types.ChainID) *types.WorkObject {
+func (sl *Slice) ReadBestPh(powType types.PowID) *types.WorkObject {
 	switch powType {
 	case types.Progpow:
 		phCopy := types.CopyWorkObject(sl.bestPh.Load().(*types.WorkObject))
@@ -1024,7 +1024,7 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.WorkObject, domTerminus c
 }
 
 // GetPendingHeader is used by the miner to request the current pending header
-func (sl *Slice) GetPendingHeader(powType types.ChainID) (*types.WorkObject, error) {
+func (sl *Slice) GetPendingHeader(powType types.PowID) (*types.WorkObject, error) {
 	phCopy := types.CopyWorkObject(sl.ReadBestPh(powType))
 	return phCopy, nil
 }

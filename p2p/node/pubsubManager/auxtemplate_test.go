@@ -60,7 +60,7 @@ func createTestAuxTemplate(nonce uint64) *types.AuxTemplate {
 	copy(prevHash[:], bytes.Repeat([]byte{byte(nonce % 256)}, 32))
 
 	template := &types.AuxTemplate{}
-	template.SetChainID(types.ChainID(1000 + nonce))
+	template.SetPowID(types.PowID(1000 + nonce))
 	template.SetPrevHash(prevHash)
 	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14, byte(nonce)}) // Sample script with nonce
 	template.SetScriptSigMaxLen(100)
@@ -145,7 +145,7 @@ func TestAuxTemplatePubsubManager(t *testing.T) {
 		require.True(t, ok, "Unable to cast to AuxTemplate")
 
 		// Verify equality of the sent and received templates
-		require.Equal(t, auxTemplate.ChainID(), recvdAuxTemplate.ChainID())
+		require.Equal(t, auxTemplate.PowID(), recvdAuxTemplate.PowID())
 		require.Equal(t, auxTemplate.PrevHash(), recvdAuxTemplate.PrevHash())
 		require.Equal(t, auxTemplate.PayoutScript(), recvdAuxTemplate.PayoutScript())
 		require.Equal(t, auxTemplate.Height(), recvdAuxTemplate.Height())

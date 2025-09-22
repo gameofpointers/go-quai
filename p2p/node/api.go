@@ -392,7 +392,7 @@ func (p *P2PNode) handleBroadcast(sourcePeer peer.ID, Id string, topic string, d
 		// AuxTemplate doesn't have a timestamp, so we skip time measurement
 		// We also don't cache it as it doesn't have a Hash() method
 		log.Global.WithFields(log.Fields{
-			"chainID": v.ChainID(),
+			"chainID": v.PowID(),
 			"nbits":   v.NBits(),
 		}).Debug("Received AuxTemplate broadcast")
 	}

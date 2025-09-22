@@ -1073,7 +1073,7 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 		}
 
 		cpy.auxPow = NewAuxPow(
-			wh.auxPow.ChainID(),
+			wh.auxPow.PowID(),
 			append([]byte(nil), wh.auxPow.Header()...),
 			append([]byte(nil), wh.auxPow.Signature()...),
 			merkleBranch,

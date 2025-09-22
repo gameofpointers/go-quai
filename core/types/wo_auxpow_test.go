@@ -151,7 +151,7 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	fmt.Printf("Data:                  %s\n", string(data))
 	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
 	fmt.Printf("AuxPow:\n")
-	fmt.Printf("  ChainID:             %d\n", auxPow.ChainID())
+	fmt.Printf("  ChainID:             %d\n", auxPow.PowID())
 	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header()))
 	fmt.Printf("  Signature:           %x\n", auxPow.Signature())
 	fmt.Printf("=====================================\n")
@@ -338,7 +338,7 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	if decoded.AuxPow() == nil {
 		t.Fatal("AuxPow should not be nil after decoding")
 	}
-	if decoded.AuxPow().ChainID() != original.AuxPow().ChainID() {
+	if decoded.AuxPow().PowID() != original.AuxPow().PowID() {
 		t.Error("AuxPow.ChainID mismatch")
 	}
 	if !bytes.Equal(decoded.AuxPow().Header(), original.AuxPow().Header()) {

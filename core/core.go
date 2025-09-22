@@ -718,7 +718,7 @@ func (c *Core) WriteGenesisBlock(block *types.WorkObject, location common.Locati
 	c.sl.WriteGenesisBlock(block, location)
 }
 
-func (c *Core) GetPendingHeader(powType types.ChainID) (*types.WorkObject, error) {
+func (c *Core) GetPendingHeader(powType types.PowID) (*types.WorkObject, error) {
 	return c.sl.GetPendingHeader(powType)
 }
 

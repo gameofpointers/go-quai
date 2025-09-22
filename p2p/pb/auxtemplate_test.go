@@ -16,7 +16,7 @@ func createTestAuxTemplate() *types.AuxTemplate {
 	copy(prevHash[:], bytes.Repeat([]byte{0xaa}, 32))
 
 	template := &types.AuxTemplate{}
-	template.SetChainID(9999)
+	template.SetPowID(9999)
 	template.SetPrevHash(prevHash)
 	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14, 0x89}) // Sample script
 	template.SetScriptSigMaxLen(95)
@@ -70,7 +70,7 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all fields match original
-	require.Equal(t, auxTemplate.ChainID(), decodedTemplate.ChainID())
+	require.Equal(t, auxTemplate.PowID(), decodedTemplate.PowID())
 	require.Equal(t, auxTemplate.PrevHash(), decodedTemplate.PrevHash())
 	require.Equal(t, auxTemplate.PayoutScript(), decodedTemplate.PayoutScript())
 	require.Equal(t, auxTemplate.ScriptSigMaxLen(), decodedTemplate.ScriptSigMaxLen())
@@ -215,7 +215,7 @@ func TestQuaiMessageWithMultipleFields(t *testing.T) {
 	decodedTemplate := &types.AuxTemplate{}
 	err = decodedTemplate.ProtoDecode(decoded.GetAuxTemplate())
 	require.NoError(t, err)
-	require.Equal(t, auxTemplate.ChainID(), decodedTemplate.ChainID())
+	require.Equal(t, auxTemplate.PowID(), decodedTemplate.PowID())
 }
 
 // Benchmark tests

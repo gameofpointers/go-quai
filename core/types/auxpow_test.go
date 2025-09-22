@@ -47,7 +47,7 @@ func testAuxTemplate() *AuxTemplate {
 	copy(prevHash[:], bytes.Repeat([]byte{0x11}, 32))
 
 	template := &AuxTemplate{}
-	template.SetChainID(1337)
+	template.SetPowID(1337)
 	template.SetPrevHash(prevHash)
 	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14}) // OP_DUP OP_HASH160 PUSH(20)
 	template.SetScriptSigMaxLen(100)
@@ -94,7 +94,7 @@ func TestAuxPowProtoEncodeDecode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify fields match
-	require.Equal(t, original.ChainID(), decoded.ChainID())
+	require.Equal(t, original.PowID(), decoded.PowID())
 	require.Equal(t, original.Header(), decoded.Header())
 	require.Equal(t, original.Signature(), decoded.Signature())
 	require.Equal(t, len(original.MerkleBranch()), len(decoded.MerkleBranch()))
@@ -119,7 +119,7 @@ func TestAuxPowProtoDecodeNil(t *testing.T) {
 	err := auxPow.ProtoDecode(nil)
 	require.NoError(t, err)
 	// AuxPow should remain in zero state
-	require.Equal(t, ChainID(0), auxPow.ChainID())
+	require.Equal(t, PowID(0), auxPow.PowID())
 	require.Nil(t, auxPow.Header())
 	require.Nil(t, auxPow.Signature())
 }
@@ -148,7 +148,7 @@ func TestAuxTemplateProtoEncodeDecode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all fields match
-	require.Equal(t, original.ChainID(), decoded.ChainID())
+	require.Equal(t, original.PowID(), decoded.PowID())
 	require.Equal(t, original.PrevHash(), decoded.PrevHash())
 	require.Equal(t, original.PayoutScript(), decoded.PayoutScript())
 	require.Equal(t, original.ScriptSigMaxLen(), decoded.ScriptSigMaxLen())
@@ -183,7 +183,7 @@ func TestAuxTemplateProtoDecodeNil(t *testing.T) {
 	err := template.ProtoDecode(nil)
 	require.NoError(t, err)
 	// Template should remain in zero state
-	require.Equal(t, ChainID(0), template.ChainID())
+	require.Equal(t, PowID(0), template.PowID())
 	require.Equal(t, [32]byte{}, template.PrevHash())
 	require.Nil(t, template.PayoutScript())
 }
@@ -216,7 +216,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	copy(prevHash[:], bytes.Repeat([]byte{0x22}, 32))
 
 	original := &AuxTemplate{}
-	original.SetChainID(42)
+	original.SetPowID(42)
 	original.SetPrevHash(prevHash)
 	original.SetPayoutScript([]byte{0x51}) // OP_TRUE
 	original.SetScriptSigMaxLen(50)
@@ -236,7 +236,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Required fields should match
-	require.Equal(t, original.ChainID(), decoded.ChainID())
+	require.Equal(t, original.PowID(), decoded.PowID())
 	require.Equal(t, original.PrevHash(), decoded.PrevHash())
 	require.Equal(t, original.PayoutScript(), decoded.PayoutScript())
 	require.Equal(t, original.ScriptSigMaxLen(), decoded.ScriptSigMaxLen())
@@ -290,7 +290,7 @@ func TestAuxPowInWorkObjectHeader(t *testing.T) {
 	// Verify getter
 	retrieved := header.AuxPow()
 	require.NotNil(t, retrieved)
-	require.Equal(t, auxPow.ChainID(), retrieved.ChainID())
+	require.Equal(t, auxPow.PowID(), retrieved.PowID())
 	require.Equal(t, auxPow.Header(), retrieved.Header())
 	require.Equal(t, auxPow.Signature(), retrieved.Signature())
 
@@ -330,7 +330,7 @@ func TestAuxTemplateBroadcastFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all fields survived the round trip
-	require.Equal(t, auxTemplate.ChainID(), receivedTemplate.ChainID())
+	require.Equal(t, auxTemplate.PowID(), receivedTemplate.PowID())
 	require.Equal(t, auxTemplate.PrevHash(), receivedTemplate.PrevHash())
 	require.Equal(t, auxTemplate.PayoutScript(), receivedTemplate.PayoutScript())
 	require.Equal(t, auxTemplate.ScriptSigMaxLen(), receivedTemplate.ScriptSigMaxLen())
@@ -356,7 +356,7 @@ func TestAuxTemplateValidation(t *testing.T) {
 
 	// Test coinbase-only mode consistency
 	coinbaseOnlyTemplate := &AuxTemplate{}
-	coinbaseOnlyTemplate.SetChainID(1234)
+	coinbaseOnlyTemplate.SetPowID(1234)
 	coinbaseOnlyTemplate.SetCoinbaseOnly(true)
 	coinbaseOnlyTemplate.SetTxCount(1)        // Should be 1 for coinbase-only
 	coinbaseOnlyTemplate.SetMerkleBranch(nil) // Should be empty for coinbase-only
@@ -442,7 +442,7 @@ func TestAuxTemplateEventFeedBroadcast(t *testing.T) {
 	auxTemplateEvent := AuxTemplateEvent{
 		Template: auxTemplate,
 		Location: location,
-		ChainID:  auxTemplate.ChainID(),
+		ChainID:  auxTemplate.PowID(),
 	}
 
 	// Send the event
@@ -453,11 +453,11 @@ func TestAuxTemplateEventFeedBroadcast(t *testing.T) {
 		select {
 		case received := <-ch:
 			require.NotNil(t, received.Template, "Subscriber %d should receive template", i)
-			require.Equal(t, auxTemplate.ChainID(), received.Template.ChainID())
+			require.Equal(t, auxTemplate.PowID(), received.Template.PowID())
 			require.Equal(t, auxTemplate.PrevHash(), received.Template.PrevHash())
 			require.Equal(t, auxTemplate.Height(), received.Template.Height())
 			require.Equal(t, location, received.Location)
-			require.Equal(t, auxTemplate.ChainID(), received.ChainID)
+			require.Equal(t, auxTemplate.PowID(), received.ChainID)
 		case <-time.After(100 * time.Millisecond):
 			t.Fatalf("Subscriber %d did not receive AuxTemplate event", i)
 		}
@@ -478,7 +478,7 @@ func TestAuxTemplateEventFeedBroadcast(t *testing.T) {
 type AuxTemplateEvent struct {
 	Template *AuxTemplate
 	Location common.Location
-	ChainID  ChainID
+	ChainID  PowID
 }
 
 // Benchmarks

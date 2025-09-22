@@ -249,7 +249,8 @@ var (
 )
 
 var (
-	KawPowForkBlock uint64 = 3000000 // Block at which KawPow activates
+	KawPowForkBlock        uint64 = 3000000 // Block at which KawPow activates
+	KawPowTransitionPeriod uint64 = 10000   // Number of blocks over which the transition happens
 )
 
 const (
