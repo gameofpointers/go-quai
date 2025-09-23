@@ -2,8 +2,10 @@ package types
 
 import (
 	"bytes"
+	"encoding/json"
 
 	"github.com/btcsuite/btcd/wire"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 // PowID represents a unique identifier for a proof-of-work algorithm
@@ -297,6 +299,107 @@ func (ap *AuxPow) SetTransaction(tx *wire.MsgTx) { ap.transaction = tx }
 func (ap *AuxPow) SetPrevHash(hash []byte) { ap.prevHash = hash }
 
 func (ap *AuxPow) SetSignatureTime(time uint64) { ap.signatureTime = time }
+
+// RPCMarshal converts AuxPow to a map for RPC serialization
+func (ap *AuxPow) RPCMarshal() map[string]interface{} {
+	if ap == nil {
+		return nil
+	}
+
+	// Convert merkle branch to hex strings
+	merkleBranch := make([]string, len(ap.merkleBranch))
+	for i, hash := range ap.merkleBranch {
+		merkleBranch[i] = hexutil.Encode(hash)
+	}
+
+	// Serialize transaction to hex
+	var txHex string
+	if ap.transaction != nil {
+		var buf bytes.Buffer
+		if err := ap.transaction.Serialize(&buf); err == nil {
+			txHex = hexutil.Encode(buf.Bytes())
+		}
+	}
+
+	return map[string]interface{}{
+		"powId":         uint32(ap.powID),
+		"header":        hexutil.Encode(ap.header),
+		"signature":     hexutil.Encode(ap.signature),
+		"merkleBranch":  merkleBranch,
+		"transaction":   txHex,
+		"prevHash":      hexutil.Encode(ap.prevHash),
+		"signatureTime": ap.signatureTime,
+	}
+}
+
+// UnmarshalJSON implements json.Unmarshaler for AuxPow
+func (ap *AuxPow) UnmarshalJSON(data []byte) error {
+	var dec struct {
+		PowID         uint32   `json:"powId"`
+		Header        string   `json:"header"`
+		Signature     string   `json:"signature"`
+		MerkleBranch  []string `json:"merkleBranch"`
+		Transaction   string   `json:"transaction"`
+		PrevHash      string   `json:"prevHash"`
+		SignatureTime uint64   `json:"signatureTime"`
+	}
+
+	if err := json.Unmarshal(data, &dec); err != nil {
+		return err
+	}
+
+	// Decode header
+	header, err := hexutil.Decode(dec.Header)
+	if err != nil {
+		return err
+	}
+
+	// Decode signature
+	signature, err := hexutil.Decode(dec.Signature)
+	if err != nil {
+		return err
+	}
+
+	// Decode merkle branch
+	merkleBranch := make([][]byte, len(dec.MerkleBranch))
+	for i, hashHex := range dec.MerkleBranch {
+		hash, err := hexutil.Decode(hashHex)
+		if err != nil {
+			return err
+		}
+		merkleBranch[i] = hash
+	}
+
+	// Decode transaction
+	var tx *wire.MsgTx
+	if dec.Transaction != "" {
+		txBytes, err := hexutil.Decode(dec.Transaction)
+		if err != nil {
+			return err
+		}
+		tx = new(wire.MsgTx)
+		if err := tx.Deserialize(bytes.NewReader(txBytes)); err != nil {
+			return err
+		}
+	}
+
+	// Decode prevHash
+	prevHash, err := hexutil.Decode(dec.PrevHash)
+	if err != nil {
+		return err
+	}
+
+	// Set fields
+	ap.powID = PowID(dec.PowID)
+	ap.header = header
+	ap.signature = signature
+	ap.merkleBranch = merkleBranch
+	ap.transaction = tx
+	ap.prevHash = prevHash
+	ap.signatureTime = dec.SignatureTime
+
+	return nil
+}
 
 // ProtoEncode converts AuxPow to its protobuf representation
 func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {

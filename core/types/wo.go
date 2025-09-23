@@ -1114,6 +1114,12 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		"primaryCoinbase":     wh.PrimaryCoinbase().Hex(),
 		"data":                hexutil.Bytes(wh.Data()),
 	}
+
+	// Include AuxPow if present
+	if wh.AuxPow() != nil {
+		result["auxpow"] = wh.AuxPow().RPCMarshal()
+	}
+
 	return result
 }
 

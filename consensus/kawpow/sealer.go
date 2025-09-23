@@ -166,16 +166,56 @@ search:
 				}
 				return kawpowLight(size, cache, hash, nonce, blockNumber, ethashCache.cDag)
 			}
-			cache := kawpow.cache(workObject.PrimeTerminusNumber().Uint64())
-			size := datasetSize(workObject.PrimeTerminusNumber().Uint64())
-			// Compute the PoW value of this nonce
-			digest, result := powLight(size, cache.cache, workObject.SealHash().Bytes(), nonce, workObject.PrimeTerminusNumber().Uint64())
+
+			// Extract the height from the Ravencoin header in AuxPow (required for KAWPOW)
+			auxPow := workObject.WorkObjectHeader().AuxPow()
+			if auxPow == nil {
+				kawpow.logger.Error("AuxPow is nil for KAWPOW mining")
+				return
+			}
+
+			header, err := types.DecodeRavencoinHeader(auxPow.Header())
+			if err != nil {
+				kawpow.logger.WithField("err", err).Error("Failed to decode Ravencoin header for KAWPOW mining")
+				return
+			}
+
+			// Get the KAWPOW header hash (this is the input to the KAWPOW algorithm)
+			kawpowHeaderHash := header.GetKAWPOWHeaderHash()
+			blockHeight := uint64(header.Height)
+			cache := kawpow.cache(blockHeight)
+			size := datasetSize(blockHeight)
+			// Compute the PoW value of this nonce using the KAWPOW header hash
+			digest, result := powLight(size, cache.cache, kawpowHeaderHash.Bytes(), nonce, blockHeight)
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
-				// Correct nonce found, create a new header with it
+				// Correct nonce found, update the AuxPow with the new nonce and mix hash
 				workObject = types.CopyWorkObject(workObject)
-				workObject.WorkObjectHeader().SetNonce(types.EncodeNonce(nonce))
-				hashBytes := common.BytesToHash(digest)
-				workObject.SetMixHash(hashBytes)
+
+				// Update the Ravencoin header with the found nonce and mix hash
+				header.Nonce64 = nonce
+				header.MixHash = common.BytesToHash(digest)
+
+				// Re-encode the updated Ravencoin header
+				updatedHeaderBytes := header.EncodeBinaryRavencoinHeader()
+
+				// Update the coinbase transaction with the new nonce
+				// The nonce64 is typically stored as extraNonce2 in the coinbase scriptSig
+				updatedCoinbaseTx := types.UpdateCoinbaseNonce(auxPow.Transaction(), uint32(nonce>>32), nonce)
+
+				// Create a new AuxPow with the updated header and coinbase
+				updatedAuxPow := types.NewAuxPowWithFields(
+					auxPow.PowID(),
+					updatedHeaderBytes,
+					auxPow.Signature(),
+					auxPow.MerkleBranch(),
+					updatedCoinbaseTx,
+					auxPow.PrevHash(),
+					auxPow.SignatureTime(),
+				)
+
+				// Set the updated AuxPow (don't touch other WorkObject header fields)
+				workObject.WorkObjectHeader().SetAuxPow(updatedAuxPow)
+
 				found <- workObject
 				break search
 			}

@@ -249,9 +249,9 @@ var (
 )
 
 var (
-	KawPowForkBlock        uint64 = 3000000 // Block at which KawPow activates
-	KawPowTransitionPeriod uint64 = 10000   // Number of blocks over which the transition happens
-	TotalPowEngines        uint64 = 2       // Total number of PoW engines supported
+	KawPowForkBlock        uint64 = 10 // Block at which KawPow activates
+	KawPowTransitionPeriod uint64 = 10 // Number of blocks over which the transition happens
+	TotalPowEngines        uint64 = 2  // Total number of PoW engines supported
 )
 
 const (

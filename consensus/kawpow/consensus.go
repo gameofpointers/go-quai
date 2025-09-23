@@ -621,13 +621,39 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	}
 
 	// For quai blocks to rely on pow done on the raven coin donor header
+	if header.AuxPow() == nil {
+		kawpow.logger.Error("AuxPow is nil in ComputePowLight")
+		return common.Hash{}, common.Hash{}
+	}
+
 	ravencoinHeader, err := types.DecodeRavencoinHeader(header.AuxPow().Header())
 	if err != nil {
 		kawpow.logger.WithField("err", err).Error("Error decoding Ravencoin header")
 		return common.Hash{}, common.Hash{}
 	}
+
+	// Extract the nonce from the coinbase transaction
+	if header.AuxPow().Transaction() == nil || len(header.AuxPow().Transaction().TxIn) == 0 {
+		kawpow.logger.Error("Invalid coinbase transaction in AuxPow")
+		return common.Hash{}, common.Hash{}
+	}
+
+	scriptSig := header.AuxPow().Transaction().TxIn[0].SignatureScript
+	_, _, extraNonce2, _ := types.ExtractNoncesFromCoinbase(scriptSig)
+
+	// The actual nonce64 for KAWPOW is typically the extraNonce2
+	nonce64 := extraNonce2
+	if nonce64 == 0 {
+		// If extraNonce2 is not set, try using the Nonce64 from the header
+		nonce64 = ravencoinHeader.Nonce64
+	}
+
+	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
+	kawpowHeaderHash := ravencoinHeader.GetKAWPOWHeaderHash()
 	blockNumber := uint64(ravencoinHeader.Height)
-	digest, result := powLight(blockNumber, header.SealHash(), header.NonceU64())
+
+	// Compute the KAWPOW hash using the correct inputs
+	digest, result := powLight(blockNumber, kawpowHeaderHash, nonce64)
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
 	header.PowDigest.Store(mixHash)

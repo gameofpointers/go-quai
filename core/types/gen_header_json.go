@@ -394,6 +394,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		Lock 	   hexutil.Uint64  `json:"lock" gencoden:"required"`
 		PrimaryCoinbase   string  `json:"primaryCoinbase" gencoden:"required"`
 		Data hexutil.Bytes        `json:"data" gencoden:"required"`
+		AuxPow     json.RawMessage `json:"auxpow"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -421,6 +422,16 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	}
 	wh.SetPrimaryCoinbase(coinbaseAddr.Address())
 	wh.SetData(dec.Data)
+
+	// Handle AuxPow if present
+	if len(dec.AuxPow) > 0 {
+		auxPow := &AuxPow{}
+		if err := auxPow.UnmarshalJSON(dec.AuxPow); err != nil {
+			return err
+		}
+		wh.SetAuxPow(auxPow)
+	}
+
 	return nil
 }
 
