@@ -1084,12 +1084,14 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 			merkleBranch[i] = append([]byte(nil), hash...)
 		}
 
-		cpy.auxPow = NewAuxPow(
+		cpy.auxPow = NewAuxPowWithFields(
 			wh.auxPow.PowID(),
 			append([]byte(nil), wh.auxPow.Header()...),
 			append([]byte(nil), wh.auxPow.Signature()...),
 			merkleBranch,
 			wh.auxPow.Transaction(),
+			append([]byte(nil), wh.auxPow.PrevHash()...),
+			wh.auxPow.SignatureTime(),
 		)
 	}
 

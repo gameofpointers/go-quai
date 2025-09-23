@@ -236,20 +236,37 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 // AuxPow represents auxiliary proof-of-work data
 type AuxPow struct {
-	powID        PowID       // PoW algorithm identifier
-	header       []byte      // 120B donor header for KAWPOW
-	signature    []byte      // Signature proving the work
-	merkleBranch [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
-	transaction  *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
+	powID         PowID       // PoW algorithm identifier
+	header        []byte      // 120B donor header for KAWPOW
+	signature     []byte      // Signature proving the work
+	merkleBranch  [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
+	transaction   *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
+	prevHash      []byte      // Previous block hash reference
+	signatureTime uint64      // Timestamp when signature was created
 }
 
 func NewAuxPow(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
 	return &AuxPow{
-		powID:        powID,
-		header:       header,
-		signature:    signature,
-		merkleBranch: merkleBranch,
-		transaction:  transaction,
+		powID:         powID,
+		header:        header,
+		signature:     signature,
+		merkleBranch:  merkleBranch,
+		transaction:   transaction,
+		prevHash:      []byte{},
+		signatureTime: 0,
+	}
+}
+
+// NewAuxPowWithFields creates a new AuxPow with all fields specified
+func NewAuxPowWithFields(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx, prevHash []byte, signatureTime uint64) *AuxPow {
+	return &AuxPow{
+		powID:         powID,
+		header:        header,
+		signature:     signature,
+		merkleBranch:  merkleBranch,
+		transaction:   transaction,
+		prevHash:      prevHash,
+		signatureTime: signatureTime,
 	}
 }
 
@@ -263,6 +280,10 @@ func (ap *AuxPow) MerkleBranch() [][]byte { return ap.merkleBranch }
 
 func (ap *AuxPow) Transaction() *wire.MsgTx { return ap.transaction }
 
+func (ap *AuxPow) PrevHash() []byte { return ap.prevHash }
+
+func (ap *AuxPow) SignatureTime() uint64 { return ap.signatureTime }
+
 func (ap *AuxPow) SetPowID(id PowID) { ap.powID = id }
 
 func (ap *AuxPow) SetHeader(header []byte) { ap.header = header }
@@ -272,6 +293,10 @@ func (ap *AuxPow) SetSignature(sig []byte) { ap.signature = sig }
 func (ap *AuxPow) SetMerkleBranch(branch [][]byte) { ap.merkleBranch = branch }
 
 func (ap *AuxPow) SetTransaction(tx *wire.MsgTx) { ap.transaction = tx }
+
+func (ap *AuxPow) SetPrevHash(hash []byte) { ap.prevHash = hash }
+
+func (ap *AuxPow) SetSignatureTime(time uint64) { ap.signatureTime = time }
 
 // ProtoEncode converts AuxPow to its protobuf representation
 func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
@@ -295,11 +320,13 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 	}
 
 	return &ProtoAuxPow{
-		ChainId:      &powID,
-		Header:       ap.Header(),
-		Signature:    ap.Signature(),
-		MerkleBranch: merkleBranch,
-		Transaction:  txBytes,
+		ChainId:       &powID,
+		Header:        ap.Header(),
+		Signature:     ap.Signature(),
+		MerkleBranch:  merkleBranch,
+		Transaction:   txBytes,
+		PrevHash:      ap.PrevHash(),
+		SignatureTime: &ap.signatureTime,
 	}
 }
 
@@ -327,6 +354,10 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 			return err
 		}
 	}
+
+	// Decode new fields
+	ap.SetPrevHash(data.GetPrevHash())
+	ap.SetSignatureTime(data.GetSignatureTime())
 
 	return nil
 }

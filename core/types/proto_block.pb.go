@@ -769,10 +769,12 @@ func (x *ProtoAccessList) GetAccessTuples() []*ProtoAccessTuple {
 type ProtoAuxPow struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ChainId       *uint32                `protobuf:"varint,1,opt,name=chain_id,json=chainId,proto3,oneof" json:"chain_id,omitempty"`
-	Header        []byte                 `protobuf:"bytes,2,opt,name=header,proto3,oneof" json:"header,omitempty"`                           // 120B donor header for KAWPOW (was 80B for pre-KAWPOW)
-	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3,oneof" json:"signature,omitempty"`                     // Signature proving the work
-	MerkleBranch  [][]byte               `protobuf:"bytes,4,rep,name=merkle_branch,json=merkleBranch,proto3" json:"merkle_branch,omitempty"` // Merkle branch for coinbase
-	Transaction   []byte                 `protobuf:"bytes,5,opt,name=transaction,proto3,oneof" json:"transaction,omitempty"`                 // Full coinbase transaction (serialized wire format, contains value in TxOut[0])
+	Header        []byte                 `protobuf:"bytes,2,opt,name=header,proto3,oneof" json:"header,omitempty"`                                     // 120B donor header for KAWPOW (was 80B for pre-KAWPOW)
+	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3,oneof" json:"signature,omitempty"`                               // Signature proving the work
+	MerkleBranch  [][]byte               `protobuf:"bytes,4,rep,name=merkle_branch,json=merkleBranch,proto3" json:"merkle_branch,omitempty"`           // Merkle branch for coinbase
+	Transaction   []byte                 `protobuf:"bytes,5,opt,name=transaction,proto3,oneof" json:"transaction,omitempty"`                           // Full coinbase transaction (serialized wire format, contains value in TxOut[0])
+	PrevHash      []byte                 `protobuf:"bytes,6,opt,name=prev_hash,json=prevHash,proto3,oneof" json:"prev_hash,omitempty"`                 // Previous block hash reference
+	SignatureTime *uint64                `protobuf:"varint,7,opt,name=signature_time,json=signatureTime,proto3,oneof" json:"signature_time,omitempty"` // Timestamp when signature was created
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -840,6 +842,20 @@ func (x *ProtoAuxPow) GetTransaction() []byte {
 		return x.Transaction
 	}
 	return nil
+}
+
+func (x *ProtoAuxPow) GetPrevHash() []byte {
+	if x != nil {
+		return x.PrevHash
+	}
+	return nil
+}
+
+func (x *ProtoAuxPow) GetSignatureTime() uint64 {
+	if x != nil && x.SignatureTime != nil {
+		return *x.SignatureTime
+	}
+	return 0
 }
 
 type ProtoSignerEnvelope struct {
@@ -3476,18 +3492,23 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\rProtoManifest\x12-\n" +
 	"\bmanifest\x18\x01 \x03(\v2\x11.common.ProtoHashR\bmanifest\"O\n" +
 	"\x0fProtoAccessList\x12<\n" +
-	"\raccess_tuples\x18\x01 \x03(\v2\x17.block.ProtoAccessTupleR\faccessTuples\"\xef\x01\n" +
+	"\raccess_tuples\x18\x01 \x03(\v2\x17.block.ProtoAccessTupleR\faccessTuples\"\xde\x02\n" +
 	"\vProtoAuxPow\x12\x1e\n" +
 	"\bchain_id\x18\x01 \x01(\rH\x00R\achainId\x88\x01\x01\x12\x1b\n" +
 	"\x06header\x18\x02 \x01(\fH\x01R\x06header\x88\x01\x01\x12!\n" +
 	"\tsignature\x18\x03 \x01(\fH\x02R\tsignature\x88\x01\x01\x12#\n" +
 	"\rmerkle_branch\x18\x04 \x03(\fR\fmerkleBranch\x12%\n" +
-	"\vtransaction\x18\x05 \x01(\fH\x03R\vtransaction\x88\x01\x01B\v\n" +
+	"\vtransaction\x18\x05 \x01(\fH\x03R\vtransaction\x88\x01\x01\x12 \n" +
+	"\tprev_hash\x18\x06 \x01(\fH\x04R\bprevHash\x88\x01\x01\x12*\n" +
+	"\x0esignature_time\x18\a \x01(\x04H\x05R\rsignatureTime\x88\x01\x01B\v\n" +
 	"\t_chain_idB\t\n" +
 	"\a_headerB\f\n" +
 	"\n" +
 	"_signatureB\x0e\n" +
-	"\f_transaction\"v\n" +
+	"\f_transactionB\f\n" +
+	"\n" +
+	"_prev_hashB\x11\n" +
+	"\x0f_signature_time\"v\n" +
 	"\x13ProtoSignerEnvelope\x12 \n" +
 	"\tsigner_id\x18\x01 \x01(\tH\x00R\bsignerId\x88\x01\x01\x12!\n" +
 	"\tsignature\x18\x02 \x01(\fH\x01R\tsignature\x88\x01\x01B\f\n" +
