@@ -52,20 +52,6 @@ func EmptyRavencoinKAWPOWInput() *RavencoinKAWPOWInput {
 	}
 }
 
-// KAWPOW activation time constants (matching Ravencoin)
-const (
-	MainnetKAWPOWActivationTime = 1588788000 // May 6, 2020
-	TestnetKAWPOWActivationTime = 1585683600 // March 31, 2020
-	RegtestKAWPOWActivationTime = 1588731600 // May 5, 2020
-)
-
-// X16RV2 activation time constants
-const (
-	MainnetX16RV2ActivationTime = 1569945600
-	TestnetX16RV2ActivationTime = 1567533600
-	RegtestX16RV2ActivationTime = 1569931200
-)
-
 // NewRavencoinBlockHeader creates a new Ravencoin block header
 func NewRavencoinBlockHeader() *RavencoinBlockHeader {
 	return &RavencoinBlockHeader{}
@@ -87,38 +73,6 @@ func (h *RavencoinBlockHeader) SetNull() {
 // IsNull returns true if the header is in null state
 func (h *RavencoinBlockHeader) IsNull() bool {
 	return h.Bits == 0
-}
-
-// IsKAWPOWActive returns true if KAWPOW is active for this block time
-func (h *RavencoinBlockHeader) IsKAWPOWActive(network string) bool {
-	var activationTime uint32
-	switch network {
-	case "mainnet":
-		activationTime = MainnetKAWPOWActivationTime
-	case "testnet":
-		activationTime = TestnetKAWPOWActivationTime
-	case "regtest":
-		activationTime = RegtestKAWPOWActivationTime
-	default:
-		activationTime = MainnetKAWPOWActivationTime
-	}
-	return h.Time >= activationTime
-}
-
-// IsX16RV2Active returns true if X16RV2 is active for this block time
-func (h *RavencoinBlockHeader) IsX16RV2Active(network string) bool {
-	var activationTime uint32
-	switch network {
-	case "mainnet":
-		activationTime = MainnetX16RV2ActivationTime
-	case "testnet":
-		activationTime = TestnetX16RV2ActivationTime
-	case "regtest":
-		activationTime = RegtestX16RV2ActivationTime
-	default:
-		activationTime = MainnetX16RV2ActivationTime
-	}
-	return h.Time >= activationTime && !h.IsKAWPOWActive(network)
 }
 
 // GetKAWPOWHeaderHash returns the header hash for KAWPOW input
@@ -185,21 +139,14 @@ func (h *RavencoinBlockHeader) EncodeBinaryRavencoinHeader() []byte {
 	// Write bits (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Bits)
 
-	// For KAWPOW blocks, write height, nonce64, and mixHash
-	// For pre-KAWPOW blocks, write nonce
-	if h.IsKAWPOWActive("mainnet") { // Default to mainnet for now
-		// Write height (4 bytes, little endian)
-		binary.Write(&buf, binary.LittleEndian, h.Height)
+	// Write height (4 bytes, little endian)
+	binary.Write(&buf, binary.LittleEndian, h.Height)
 
-		// Write nonce64 (8 bytes, little endian)
-		binary.Write(&buf, binary.LittleEndian, h.Nonce64)
+	// Write nonce64 (8 bytes, little endian)
+	binary.Write(&buf, binary.LittleEndian, h.Nonce64)
 
-		// Write mixHash (32 bytes)
-		buf.Write(h.MixHash.Bytes())
-	} else {
-		// Write nonce (4 bytes, little endian)
-		binary.Write(&buf, binary.LittleEndian, h.Nonce)
-	}
+	// Write mixHash (32 bytes)
+	buf.Write(h.MixHash.Bytes())
 
 	return buf.Bytes()
 }
@@ -238,36 +185,24 @@ func DecodeRavencoinHeader(data []byte) (*RavencoinBlockHeader, error) {
 		return nil, err
 	}
 
-	// Check if this is a KAWPOW block based on time
-	// First check with the time we just read to determine header size
-	tempHeader := &RavencoinBlockHeader{Time: h.Time}
-	isKawpow := tempHeader.IsKAWPOWActive("mainnet")
+	// Ensure we have enough data for KAWPOW header
+	if len(data) < 120 {
+		return nil, fmt.Errorf("KAWPOW header data too short: %d bytes (expected 120)", len(data))
+	}
 
-	if isKawpow {
-		// Ensure we have enough data for KAWPOW header
-		if len(data) < 120 {
-			return nil, fmt.Errorf("KAWPOW header data too short: %d bytes (expected 120)", len(data))
-		}
+	// Read height
+	if err := binary.Read(buf, binary.LittleEndian, &h.Height); err != nil {
+		return nil, err
+	}
 
-		// Read height
-		if err := binary.Read(buf, binary.LittleEndian, &h.Height); err != nil {
-			return nil, err
-		}
+	// Read nonce64
+	if err := binary.Read(buf, binary.LittleEndian, &h.Nonce64); err != nil {
+		return nil, err
+	}
 
-		// Read nonce64
-		if err := binary.Read(buf, binary.LittleEndian, &h.Nonce64); err != nil {
-			return nil, err
-		}
-
-		// Read mixHash
-		if _, err := io.ReadFull(buf, h.MixHash[:]); err != nil {
-			return nil, err
-		}
-	} else {
-		// Read nonce
-		if err := binary.Read(buf, binary.LittleEndian, &h.Nonce); err != nil {
-			return nil, err
-		}
+	// Read mixHash
+	if _, err := io.ReadFull(buf, h.MixHash[:]); err != nil {
+		return nil, err
 	}
 
 	return h, nil
@@ -318,11 +253,6 @@ func (h *RavencoinBlockHeader) Size() int {
 	// Base size: version(4) + hashPrevBlock(32) + hashMerkleRoot(32) + time(4) + bits(4)
 	baseSize := 4 + 32 + 32 + 4 + 4
 
-	if h.IsKAWPOWActive("mainnet") {
-		// KAWPOW: height(4) + nonce64(8) + mixHash(32) = 44 bytes
-		return baseSize + 44 // 76 + 44 = 120 bytes
-	} else {
-		// Pre-KAWPOW: nonce(4)
-		return baseSize + 4 // 76 + 4 = 80 bytes
-	}
+	// KAWPOW: height(4) + nonce64(8) + mixHash(32) = 44 bytes
+	return baseSize + 44 // 76 + 44 = 120 bytes
 }

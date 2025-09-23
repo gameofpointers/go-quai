@@ -83,6 +83,10 @@ func (wo *WorkObject) Hash() common.Hash {
 	return wo.WorkObjectHeader().Hash()
 }
 
+func (wo *WorkObject) WorkObjectHeaderHash() common.Hash {
+	return wo.WorkObjectHeader().Hash()
+}
+
 func (wo *WorkObject) SealHash() common.Hash {
 	return wo.WorkObjectHeader().SealHash()
 }
@@ -526,7 +530,15 @@ func (wo *WorkObject) SetNumber(val *big.Int, nodeCtx int) {
 // KawpowActivationHappened checks if the AuxPow field is non-nil, indicating
 // that Kawpow activation has occurred.
 func (wh *WorkObjectHeader) IsKawPowBlock() bool {
-	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock
+	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock &&
+		wh.auxPow != nil
+}
+
+// IsTransitionProgPowBlock checks if the block is within the transition period
+func (wh *WorkObjectHeader) IsTransitionProgPowBlock() bool {
+	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock &&
+		wh.primeTerminusNumber.Uint64() < params.KawPowForkBlock+params.KawPowTransitionPeriod &&
+		wh.auxPow == nil
 }
 
 func (wh *WorkObjectHeader) HeaderHash() common.Hash {
@@ -1103,7 +1115,22 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 	return result
 }
 
-func (wh *WorkObjectHeader) Hash() (hash common.Hash) {
+func (wh *WorkObjectHeader) Hash() common.Hash {
+	// If the prime terminus number is below the KawPow fork block, then use the
+	// normal hashing
+	if !wh.IsKawPowBlock() || wh.IsTransitionProgPowBlock() {
+		return wh.WoProgpowHash()
+	} else {
+		if wh.IsKawPowBlock() {
+			return wh.WoCustomPowHash()
+		} else {
+			log.Global.Error("Non KawPow block after kawpow transition")
+			return common.Hash{}
+		}
+	}
+}
+
+func (wh *WorkObjectHeader) WoProgpowHash() (hash common.Hash) {
 	sealHash := wh.SealHash().Bytes()
 	mixHash := wh.MixHash().Bytes()
 	nonce := wh.Nonce().Bytes()
@@ -1115,6 +1142,17 @@ func (wh *WorkObjectHeader) Hash() (hash common.Hash) {
 	copy(hData[common.HashLength:], sealHash)
 	copy(hData[common.HashLength+common.HashLength:], nonce)
 	sum := blake3.Sum256(hData[:])
+	hash.SetBytes(sum[:])
+	return hash
+}
+
+func (wh *WorkObjectHeader) WoCustomPowHash() (hash common.Hash) {
+	hasherMu.Lock()
+	defer hasherMu.Unlock()
+	hasher.Reset()
+	protoAuxPow := wh.AuxPow().ProtoEncode()
+	data, _ := proto.Marshal(protoAuxPow)
+	sum := blake3.Sum256(data[:])
 	hash.SetBytes(sum[:])
 	return hash
 }

@@ -23,13 +23,6 @@ func TestRavencoinKAWPOWBlockHeader(t *testing.T) {
 	}
 
 	// This represents block #3000000 from Ravencoin mainnet
-
-	t.Run("KAWPOW Detection", func(t *testing.T) {
-		if !kawpowHeader.IsKAWPOWActive("mainnet") {
-			t.Error("Block should be detected as KAWPOW active")
-		}
-	})
-
 	t.Run("Encoding Size", func(t *testing.T) {
 		encoded := kawpowHeader.EncodeBinaryRavencoinHeader()
 		expectedSize := 120 // KAWPOW header size
