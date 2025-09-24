@@ -57,6 +57,20 @@ func NewRavencoinBlockHeader() *RavencoinBlockHeader {
 	return &RavencoinBlockHeader{}
 }
 
+func EmptyRavencoinHeader() *RavencoinBlockHeader {
+	return &RavencoinBlockHeader{
+		Version:        0,
+		HashPrevBlock:  common.Hash{},
+		HashMerkleRoot: common.Hash{},
+		Time:           0,
+		Bits:           0,
+		Nonce:          0,
+		Height:         0,
+		Nonce64:        0,
+		MixHash:        common.Hash{},
+	}
+}
+
 // SetNull initializes the header with zero values
 func (h *RavencoinBlockHeader) SetNull() {
 	h.Version = 0
@@ -124,29 +138,27 @@ func (h *RavencoinBlockHeader) GetDifficulty() *big.Int {
 func (h *RavencoinBlockHeader) EncodeBinaryRavencoinHeader() []byte {
 	var buf bytes.Buffer
 
-	// Write version (4 bytes, little endian)
+	// Standard Bitcoin/Ravencoin 80-byte block header format
+	// Version (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Version)
 
-	// Write hashPrevBlock (32 bytes)
+	// HashPrevBlock (32 bytes)
 	buf.Write(h.HashPrevBlock.Bytes())
 
-	// Write hashMerkleRoot (32 bytes)
+	// HashMerkleRoot (32 bytes)
 	buf.Write(h.HashMerkleRoot.Bytes())
 
-	// Write time (4 bytes, little endian)
+	// Time (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Time)
 
-	// Write bits (4 bytes, little endian)
+	// Bits (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Bits)
 
-	// Write height (4 bytes, little endian)
-	binary.Write(&buf, binary.LittleEndian, h.Height)
+	// Nonce (4 bytes, little endian) - standard nonce, not the KAWPOW nonce64
+	binary.Write(&buf, binary.LittleEndian, h.Nonce)
 
-	// Write nonce64 (8 bytes, little endian)
-	binary.Write(&buf, binary.LittleEndian, h.Nonce64)
-
-	// Write mixHash (32 bytes)
-	buf.Write(h.MixHash.Bytes())
+	// Note: Height, Nonce64, and MixHash are KAWPOW-specific and stored
+	// in the coinbase transaction, not in the block header itself
 
 	return buf.Bytes()
 }
@@ -158,52 +170,40 @@ func DecodeRavencoinHeader(data []byte) (*RavencoinBlockHeader, error) {
 	}
 
 	h := &RavencoinBlockHeader{}
-	buf := bytes.NewReader(data)
+	buf := bytes.NewReader(data[:80]) // Only read first 80 bytes for standard header
 
-	// Read version
+	// Read version (4 bytes)
 	if err := binary.Read(buf, binary.LittleEndian, &h.Version); err != nil {
 		return nil, err
 	}
 
-	// Read hashPrevBlock
+	// Read hashPrevBlock (32 bytes)
 	if _, err := io.ReadFull(buf, h.HashPrevBlock[:]); err != nil {
 		return nil, err
 	}
 
-	// Read hashMerkleRoot
+	// Read hashMerkleRoot (32 bytes)
 	if _, err := io.ReadFull(buf, h.HashMerkleRoot[:]); err != nil {
 		return nil, err
 	}
 
-	// Read time
+	// Read time (4 bytes)
 	if err := binary.Read(buf, binary.LittleEndian, &h.Time); err != nil {
 		return nil, err
 	}
 
-	// Read bits
+	// Read bits (4 bytes)
 	if err := binary.Read(buf, binary.LittleEndian, &h.Bits); err != nil {
 		return nil, err
 	}
 
-	// Ensure we have enough data for KAWPOW header
-	if len(data) < 120 {
-		return nil, fmt.Errorf("KAWPOW header data too short: %d bytes (expected 120)", len(data))
-	}
-
-	// Read height
-	if err := binary.Read(buf, binary.LittleEndian, &h.Height); err != nil {
+	// Read standard nonce (4 bytes) - not the KAWPOW nonce64
+	if err := binary.Read(buf, binary.LittleEndian, &h.Nonce); err != nil {
 		return nil, err
 	}
 
-	// Read nonce64
-	if err := binary.Read(buf, binary.LittleEndian, &h.Nonce64); err != nil {
-		return nil, err
-	}
-
-	// Read mixHash
-	if _, err := io.ReadFull(buf, h.MixHash[:]); err != nil {
-		return nil, err
-	}
+	// Note: Height, Nonce64, and MixHash should be extracted from the coinbase
+	// transaction, not from the block header. They are populated separately.
 
 	return h, nil
 }

@@ -866,10 +866,12 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 	bestPhKawPow := types.CopyWorkObject(bestPh)
 	// TODO: fill the header with actual information from template
 	auxPowTemplate := types.EmptyAuxTemplate()
-	ravencoinHeader := types.NewRavencoinBlockHeader()
+	ravencoinHeader := types.EmptyRavencoinHeader()
 	// Commiting the hash of the workobject header to the auxpow template
 	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, bestPh.Hash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
-	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeader.GetKAWPOWHeaderHash().Bytes(), []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
+	// Use the full 80-byte encoded header, not just the 32-byte hash
+	ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
+	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
 	// write the hash of the work object header into the auxpow extra data field
 	bestPhKawPow.WorkObjectHeader().SetAuxPow(auxPow)
 

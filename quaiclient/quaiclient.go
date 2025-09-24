@@ -135,6 +135,25 @@ func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, erro
 	return wo, nil
 }
 
+func (ec *Client) GetKawPowPendingHeader(ctx context.Context) (*types.WorkObject, error) {
+	var raw hexutil.Bytes
+	err := ec.c.CallContext(ctx, &raw, "quai_getKawPowPendingHeader")
+	if err != nil {
+		return nil, err
+	}
+	protoWo := &types.ProtoWorkObject{}
+	err = proto.Unmarshal(raw, protoWo)
+	if err != nil {
+		return nil, err
+	}
+	wo := &types.WorkObject{}
+	err = wo.ProtoDecode(protoWo, protoWo.GetWoHeader().GetLocation().Value, types.PEtxObject)
+	if err != nil {
+		return nil, err
+	}
+	return wo, nil
+}
+
 func (ec *Client) GetWorkShareThreshold(ctx context.Context) (int, error) {
 	var raw json.RawMessage
 	err := ec.c.CallContext(ctx, &raw, "workshare_getWorkShareThreshold")
