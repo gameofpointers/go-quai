@@ -583,43 +583,6 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 		return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
 	}
 
-	// Use the kawpow algorithm from powkit
-	powLight := func(blockNumber uint64, headerHash common.Hash, nonce uint64) ([]byte, []byte) {
-		// Initialize kawpow seed
-		seed, seedHead := kawpowInitialize(headerHash.Bytes(), nonce)
-
-		// Get cache for this block
-		ethashCache := kawpow.cache(blockNumber)
-		if ethashCache.cDag == nil {
-			cDag := make([]uint32, kawpowCacheWords)
-			generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
-			ethashCache.cDag = cDag
-		}
-
-		// Use kawpow-specific config
-		cfg := &kawpowConfig{
-			PeriodLength:        kawpowPeriodLength,
-			DagLoads:            kawpowDagLoads,
-			CacheBytes:          kawpowCacheBytes,
-			LaneCount:           kawpowLaneCount,
-			RegisterCount:       kawpowRegisterCount,
-			RoundCount:          kawpowRoundCount,
-			RoundCacheAccesses:  kawpowRoundCacheAccesses,
-			RoundMathOperations: kawpowRoundMathOps,
-		}
-
-		// Compute kawpow mix hash
-		size := datasetSize(blockNumber)
-		mixHash := kawpowHash(cfg, blockNumber, seedHead, size,
-			func(index uint32) []uint32 { return calculateDatasetItem(ethashCache.cache, index) },
-			ethashCache.cDag)
-
-		// Finalize with kawpow
-		digest := kawpowFinalize(seed, mixHash)
-
-		return mixHash, digest
-	}
-
 	// For quai blocks to rely on pow done on the raven coin donor header
 	if header.AuxPow() == nil {
 		kawpow.logger.Error("AuxPow is nil in ComputePowLight")
@@ -632,28 +595,24 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 		return common.Hash{}, common.Hash{}
 	}
 
-	// Extract the nonce from the coinbase transaction
-	if header.AuxPow().Transaction() == nil || len(header.AuxPow().Transaction().TxIn) == 0 {
-		kawpow.logger.Error("Invalid coinbase transaction in AuxPow")
-		return common.Hash{}, common.Hash{}
-	}
-
-	scriptSig := header.AuxPow().Transaction().TxIn[0].SignatureScript
-	_, _, extraNonce2, _ := types.ExtractNoncesFromCoinbase(scriptSig)
-
-	// The actual nonce64 for KAWPOW is typically the extraNonce2
-	nonce64 := extraNonce2
-	if nonce64 == 0 {
-		// If extraNonce2 is not set, try using the Nonce64 from the header
-		nonce64 = ravencoinHeader.Nonce64
-	}
+	// For KAWPOW, the nonce is stored directly in the Ravencoin header
+	nonce64 := ravencoinHeader.Nonce64
 
 	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
 	kawpowHeaderHash := ravencoinHeader.GetKAWPOWHeaderHash()
 	blockNumber := uint64(ravencoinHeader.Height)
 
-	// Compute the KAWPOW hash using the correct inputs
-	digest, result := powLight(blockNumber, kawpowHeaderHash, nonce64)
+	// Get cache for this block (same as sealer)
+	ethashCache := kawpow.cache(blockNumber)
+	if ethashCache.cDag == nil {
+		cDag := make([]uint32, kawpowCacheWords)
+		generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
+		ethashCache.cDag = cDag
+	}
+
+	// Use the same kawpowLight function as the sealer
+	size := datasetSize(blockNumber)
+	digest, result := kawpowLight(size, ethashCache.cache, kawpowHeaderHash.Bytes(), nonce64, blockNumber, ethashCache.cDag)
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
 	header.PowDigest.Store(mixHash)
@@ -708,8 +667,19 @@ func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Has
 	if powHash == nil || mixHash == nil {
 		mixHash, powHash = kawpow.ComputePowLight(header)
 	}
-	// Verify the calculated values against the ones provided in the header
-	if !bytes.Equal(header.MixHash().Bytes(), mixHash.(common.Hash).Bytes()) {
+	// For KAWPOW, get the mix hash from the Ravencoin header in AuxPow
+	auxPow := header.AuxPow()
+	if auxPow == nil {
+		return common.Hash{}, fmt.Errorf("AuxPow is nil for KAWPOW")
+	}
+
+	ravencoinHeader, err := types.DecodeRavencoinHeader(auxPow.Header())
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to decode Ravencoin header: %v", err)
+	}
+
+	// Verify the calculated values against the ones provided in the Ravencoin header
+	if !bytes.Equal(ravencoinHeader.MixHash.Bytes(), mixHash.(common.Hash).Bytes()) {
 		return common.Hash{}, consensus.ErrInvalidMixHash
 	}
 	return powHash.(common.Hash), nil

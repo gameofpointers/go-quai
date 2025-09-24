@@ -275,33 +275,9 @@ func kawpowFinalize(seed [25]uint32, mixHash []byte) []byte {
 
 // keccakF800 is the Keccak-f[800] permutation used in kawpow
 func keccakF800(state *[25]uint32) {
-	// This is a placeholder - you'd need to implement the full Keccak-f[800]
-	// permutation as used in kawpow. For now, we'll use a simplified version.
-
-	// Convert to 64-bit state for standard keccak
-	state64 := make([]uint64, 12) // 800 bits = 25*32 bits = 12.5*64 bits
-	for i := 0; i < 12; i++ {
-		if i*2+1 < 25 {
-			state64[i] = uint64((*state)[i*2]) | (uint64((*state)[i*2+1]) << 32)
-		} else {
-			state64[i] = uint64((*state)[i*2])
-		}
-	}
-
-	// Apply a simplified permutation (not the full Keccak-f[800])
-	for i := 0; i < len(state64); i++ {
-		state64[i] ^= state64[(i+1)%len(state64)]
-		state64[i] = ((state64[i] << 1) | (state64[i] >> 63))
-	}
-
-	// Convert back to 32-bit state
-	for i := 0; i < 12; i++ {
-		if i*2 < 25 {
-			(*state)[i*2] = uint32(state64[i])
-		}
-		if i*2+1 < 25 {
-			(*state)[i*2+1] = uint32(state64[i] >> 32)
-		}
+	// Proper Keccak-f[800] implementation using 22 rounds (same as other kawpow functions)
+	for r := 0; r < 22; r++ {
+		keccakF800Round(state, r)
 	}
 }
 

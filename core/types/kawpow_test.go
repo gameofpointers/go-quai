@@ -150,7 +150,7 @@ func TestKAWPOWRavencoinHeader(t *testing.T) {
 	rvnHeader.Height = 1219736    // First KAWPOW block
 	rvnHeader.Time = 1588788000   // KAWPOW activation time
 	rvnHeader.Bits = 0x1d00ffff   // Difficulty
-	rvnHeader.Nonce = 0x12345678  // 32-bit nonce (for pre-KAWPOW compatibility)
+	// 32-bit nonce field removed - KAWPOW only uses Nonce64
 
 	// For KAWPOW, we also have Nonce64 and MixHash
 	rvnHeader.Nonce64 = 0x1234567890ABCDEF // 64-bit nonce for KAWPOW

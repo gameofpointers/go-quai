@@ -14,7 +14,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 )
 
-// RavencoinBlockHeader represents the Ravencoin block header structure
+// RavencoinBlockHeader represents the Ravencoin KAWPOW block header structure
 type RavencoinBlockHeader struct {
 	// Standard Bitcoin-derived fields
 	Version        int32       `json:"version"        gencodec:"required"`
@@ -22,9 +22,8 @@ type RavencoinBlockHeader struct {
 	HashMerkleRoot common.Hash `json:"hashMerkleRoot" gencodec:"required"`
 	Time           uint32      `json:"time"           gencodec:"required"`
 	Bits           uint32      `json:"bits"           gencodec:"required"`
-	Nonce          uint32      `json:"nonce"          gencodec:"required"`
 
-	// KAWPOW-specific fields (post-activation)
+	// KAWPOW-specific fields
 	Height  uint32      `json:"height"   gencodec:"required"`
 	Nonce64 uint64      `json:"nonce64"  gencodec:"required"`
 	MixHash common.Hash `json:"mixHash"  gencodec:"required"`
@@ -64,7 +63,6 @@ func EmptyRavencoinHeader() *RavencoinBlockHeader {
 		HashMerkleRoot: common.Hash{},
 		Time:           0,
 		Bits:           0,
-		Nonce:          0,
 		Height:         0,
 		Nonce64:        0,
 		MixHash:        common.Hash{},
@@ -78,7 +76,6 @@ func (h *RavencoinBlockHeader) SetNull() {
 	h.HashMerkleRoot = common.Hash{}
 	h.Time = 0
 	h.Bits = 0
-	h.Nonce = 0
 	h.Height = 0
 	h.Nonce64 = 0
 	h.MixHash = common.Hash{}
@@ -138,7 +135,7 @@ func (h *RavencoinBlockHeader) GetDifficulty() *big.Int {
 func (h *RavencoinBlockHeader) EncodeBinaryRavencoinHeader() []byte {
 	var buf bytes.Buffer
 
-	// Standard Bitcoin/Ravencoin 80-byte block header format
+	// KAWPOW block header format (120 bytes total)
 	// Version (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Version)
 
@@ -154,23 +151,27 @@ func (h *RavencoinBlockHeader) EncodeBinaryRavencoinHeader() []byte {
 	// Bits (4 bytes, little endian)
 	binary.Write(&buf, binary.LittleEndian, h.Bits)
 
-	// Nonce (4 bytes, little endian) - standard nonce, not the KAWPOW nonce64
-	binary.Write(&buf, binary.LittleEndian, h.Nonce)
+	// KAWPOW-specific fields
+	// Height (4 bytes, little endian)
+	binary.Write(&buf, binary.LittleEndian, h.Height)
 
-	// Note: Height, Nonce64, and MixHash are KAWPOW-specific and stored
-	// in the coinbase transaction, not in the block header itself
+	// Nonce64 (8 bytes, little endian)
+	binary.Write(&buf, binary.LittleEndian, h.Nonce64)
+
+	// MixHash (32 bytes)
+	buf.Write(h.MixHash.Bytes())
 
 	return buf.Bytes()
 }
 
 // DecodeRavencoinHeader decodes bytes into a RavencoinBlockHeader
 func DecodeRavencoinHeader(data []byte) (*RavencoinBlockHeader, error) {
-	if len(data) < 80 {
-		return nil, fmt.Errorf("header data too short: %d bytes (minimum 80)", len(data))
+	if len(data) < 120 {
+		return nil, fmt.Errorf("header data too short: %d bytes (minimum 120 for KAWPOW)", len(data))
 	}
 
 	h := &RavencoinBlockHeader{}
-	buf := bytes.NewReader(data[:80]) // Only read first 80 bytes for standard header
+	buf := bytes.NewReader(data[:120]) // Read 120 bytes for KAWPOW header
 
 	// Read version (4 bytes)
 	if err := binary.Read(buf, binary.LittleEndian, &h.Version); err != nil {
@@ -197,13 +198,21 @@ func DecodeRavencoinHeader(data []byte) (*RavencoinBlockHeader, error) {
 		return nil, err
 	}
 
-	// Read standard nonce (4 bytes) - not the KAWPOW nonce64
-	if err := binary.Read(buf, binary.LittleEndian, &h.Nonce); err != nil {
+	// Read KAWPOW-specific fields
+	// Read height (4 bytes)
+	if err := binary.Read(buf, binary.LittleEndian, &h.Height); err != nil {
 		return nil, err
 	}
 
-	// Note: Height, Nonce64, and MixHash should be extracted from the coinbase
-	// transaction, not from the block header. They are populated separately.
+	// Read nonce64 (8 bytes)
+	if err := binary.Read(buf, binary.LittleEndian, &h.Nonce64); err != nil {
+		return nil, err
+	}
+
+	// Read mixHash (32 bytes)
+	if _, err := io.ReadFull(buf, h.MixHash[:]); err != nil {
+		return nil, err
+	}
 
 	return h, nil
 }
@@ -235,13 +244,12 @@ func (input *RavencoinKAWPOWInput) EncodeBinaryRavencoinKAWPOW() []byte {
 
 // String returns a string representation of the header
 func (h *RavencoinBlockHeader) String() string {
-	return fmt.Sprintf("RavencoinBlockHeader{Version: 0x%08x, HashPrevBlock: %s, HashMerkleRoot: %s, Time: %d, Bits: 0x%08x, Nonce: %d, Height: %d, Nonce64: %d, MixHash: %s}",
+	return fmt.Sprintf("RavencoinBlockHeader{Version: 0x%08x, HashPrevBlock: %s, HashMerkleRoot: %s, Time: %d, Bits: 0x%08x, Height: %d, Nonce64: 0x%016x, MixHash: %s}",
 		h.Version,
 		h.HashPrevBlock.Hex(),
 		h.HashMerkleRoot.Hex(),
 		h.Time,
 		h.Bits,
-		h.Nonce,
 		h.Height,
 		h.Nonce64,
 		h.MixHash.Hex(),

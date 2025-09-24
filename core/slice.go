@@ -866,7 +866,21 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 	bestPhKawPow := types.CopyWorkObject(bestPh)
 	// TODO: fill the header with actual information from template
 	auxPowTemplate := types.EmptyAuxTemplate()
+
+	// Set the PowID to KAWPOW
+	auxPowTemplate.SetPowID(types.Kawpow)
+	// Create a properly configured Ravencoin header for KAWPOW mining
 	ravencoinHeader := types.EmptyRavencoinHeader()
+	// Use a reasonable height (KAWPOW activation or current block number)
+	// For now, use KAWPOW activation height as minimum
+	ravencoinHeader.Height = 1219736 // KAWPOW activation height
+	// Set reasonable difficulty bits (0x1d00ffff = difficulty 1)
+	ravencoinHeader.Bits = 0x1d00ffff
+	// Set version to KAWPOW version
+	ravencoinHeader.Version = 0x20000000
+	// Set timestamp
+	ravencoinHeader.Time = uint32(bestPh.Time())
+
 	// Commiting the hash of the workobject header to the auxpow template
 	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, bestPh.Hash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
 	// Use the full 80-byte encoded header, not just the 32-byte hash

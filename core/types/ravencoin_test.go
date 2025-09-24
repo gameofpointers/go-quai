@@ -16,7 +16,6 @@ func TestRavencoinKAWPOWBlockHeader(t *testing.T) {
 		HashMerkleRoot: common.HexToHash("6309d2619ba4ca63f3fa175883c9fcb97ab911f858fddcf4a72cab1f6265dd27"),
 		Time:           1696258085, // 2023-10-02 (well after KAWPOW activation)
 		Bits:           0x1b00a281,
-		Nonce:          0, // KAWPOW uses nonce64 instead
 		Height:         3000000,
 		Nonce64:        0x1234567890abcdef, // Example nonce64
 		MixHash:        common.HexToHash("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
@@ -25,7 +24,7 @@ func TestRavencoinKAWPOWBlockHeader(t *testing.T) {
 	// This represents block #3000000 from Ravencoin mainnet
 	t.Run("Encoding Size", func(t *testing.T) {
 		encoded := kawpowHeader.EncodeBinaryRavencoinHeader()
-		expectedSize := 80 // Standard Ravencoin/Bitcoin block header size
+		expectedSize := 120 // KAWPOW header size: 76 + 44 bytes (Height + Nonce64 + MixHash)
 		if len(encoded) != expectedSize {
 			t.Errorf("Ravencoin header encoded size: got %d, want %d", len(encoded), expectedSize)
 		}
@@ -103,17 +102,17 @@ func TestRavencoinKAWPOWBlockHeader(t *testing.T) {
 			t.Errorf("KAWPOW input size: got %d, want %d", len(inputEncoded), expectedInputSize)
 		}
 
-		// Standard header encoding is also 80 bytes, but with Nonce instead of Height
+		// Full KAWPOW header encoding is 120 bytes with Height, Nonce64, MixHash
 		fullEncoded := kawpowHeader.EncodeBinaryRavencoinHeader()
-		if len(fullEncoded) != 80 {
-			t.Errorf("Standard header should be 80 bytes, got %d", len(fullEncoded))
+		if len(fullEncoded) != 120 {
+			t.Errorf("KAWPOW header should be 120 bytes, got %d", len(fullEncoded))
 		}
 
 		t.Logf("KAWPOW input (with Height): %s", hex.EncodeToString(inputEncoded))
-		t.Logf("Standard header (with Nonce): %s", hex.EncodeToString(fullEncoded))
-		t.Logf("Both are 80 bytes but serve different purposes:")
+		t.Logf("KAWPOW header (with Height+Nonce64+MixHash): %s", hex.EncodeToString(fullEncoded))
+		t.Logf("Sizes: KAWPOW input=%d bytes, KAWPOW header=%d bytes", len(inputEncoded), len(fullEncoded))
 		t.Logf("  - KAWPOW input: used as input to KAWPOW hashing algorithm")
-		t.Logf("  - Standard header: actual blockchain block header (Height stored in coinbase)")
+		t.Logf("  - KAWPOW header: actual blockchain block header with mining data")
 	})
 
 	t.Run("Difficulty Calculation", func(t *testing.T) {

@@ -28,6 +28,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/blake3pow"
+	"github.com/dominant-strategies/go-quai/consensus/kawpow"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -207,8 +208,7 @@ func CreateKawPowConsensusEngine(stack *node.Node, nodeLocation common.Location,
 	case progpow.ModeShared:
 		logger.Warn("KawPow used in shared mode")
 	}
-	engine := progpow.New(progpow.Config{
-		PowMode:            config.PowMode,
+	engine := kawpow.New(kawpow.Config{
 		NotifyFull:         config.NotifyFull,
 		DurationLimit:      config.DurationLimit,
 		NodeLocation:       nodeLocation,

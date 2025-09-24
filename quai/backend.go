@@ -204,6 +204,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		quai.engine = make([]consensus.Engine, params.TotalPowEngines)
 		quai.engine[0] = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
 
+		// KawPow is exclusively used after the transition
 		quai.engine[1] = quaiconfig.CreateKawPowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
 
 	}
