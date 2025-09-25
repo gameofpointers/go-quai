@@ -3,7 +3,6 @@ package kawpow
 import (
 	crand "crypto/rand"
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"math/rand"
@@ -137,13 +136,6 @@ func (kawpow *Kawpow) MineToThreshold(workObject *types.WorkObject, workShareThr
 		return
 	}
 
-	// Log mining parameters for debugging
-	kawpow.logger.WithFields(log.Fields{
-		"target":        target.Text(16),
-		"difficulty":    workObject.WorkObjectHeader().Difficulty().String(),
-		"threshold":     workShareThreshold,
-	}).Info("Starting KAWPOW mining")
-
 	// Extract the height and setup once before mining loop (expensive operations)
 	auxPow := workObject.WorkObjectHeader().AuxPow()
 	if auxPow == nil {
@@ -163,19 +155,9 @@ func (kawpow *Kawpow) MineToThreshold(workObject *types.WorkObject, workShareThr
 	// Get the KAWPOW header hash (this is the input to the KAWPOW algorithm)
 	kawpowHeaderHash := header.GetKAWPOWHeaderHash()
 
-	// Log header info for debugging
-	kawpow.logger.WithFields(log.Fields{
-		"height":     blockHeight,
-		"bits":       fmt.Sprintf("0x%08x", header.Bits),
-		"headerHash": kawpowHeaderHash.Hex(),
-	}).Info("KAWPOW header info")
-
 	// Pre-initialize cache and dataset (expensive operations)
-	kawpow.logger.WithField("blockHeight", blockHeight).Info("Getting KAWPOW cache")
 	cache := kawpow.cache(blockHeight)
-	kawpow.logger.WithField("cacheSize", len(cache.cache)).Info("Cache loaded, getting dataset size")
 	size := datasetSize(blockHeight)
-	kawpow.logger.WithField("datasetSize", size).Info("Starting KAWPOW computation")
 
 	// Pre-initialize cDag if needed
 	if cache.cDag == nil {
@@ -193,17 +175,12 @@ func (kawpow *Kawpow) MineToThreshold(workObject *types.WorkObject, workShareThr
 		nonce    = seed
 	)
 
-	kawpow.logger.WithFields(log.Fields{
-		"startingNonce": nonce,
-		"target":        target.Text(16),
-	}).Info("Starting KAWPOW mining loop")
-
 search:
 	for {
 		select {
 		case <-abort:
 			// Mining terminated, update stats and abort
-			kawpow.logger.WithField("attempts", attempts).Info("KAWPOW mining aborted")
+			kawpow.logger.WithField("attempts", attempts).Debug("KAWPOW mining aborted")
 			break search
 
 		default:
@@ -220,14 +197,13 @@ search:
 			digest, result := kawpowLight(size, cache.cache, kawpowHeaderHash.Bytes(), nonce, blockHeight, cache.cDag)
 			resultBig := new(big.Int).SetBytes(result)
 
-
 			if resultBig.Cmp(target) <= 0 {
 				// Correct nonce found, update the AuxPow with the new nonce and mix hash
 				kawpow.logger.WithFields(log.Fields{
 					"nonce":  nonce,
 					"result": resultBig.Text(16),
 					"target": target.Text(16),
-				}).Info("KAWPOW solution found!")
+				}).Debug("KAWPOW solution found!")
 				workObject = types.CopyWorkObject(workObject)
 
 				// Update the Ravencoin header with the found nonce and mix hash

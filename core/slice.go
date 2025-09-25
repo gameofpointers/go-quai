@@ -98,8 +98,7 @@ type Slice struct {
 	badHashesCache map[common.Hash]bool
 	logger         *log.Logger
 
-	bestPh       atomic.Value
-	bestPhKawPow atomic.Value
+	bestPh atomic.Value
 
 	appendTimeCache *lru.Cache[common.Hash, time.Duration]
 
@@ -842,7 +841,7 @@ func (sl *Slice) asyncPendingHeaderLoop() {
 		select {
 		case asyncPh := <-sl.asyncPhCh:
 			sl.hc.headermu.Lock()
-			bestPh := sl.ReadBestPh(types.Progpow)
+			bestPh := sl.ReadBestPh()
 			if asyncPh != nil && bestPh != nil && bestPh.ParentHash(common.ZONE_CTX) == asyncPh.ParentHash(common.ZONE_CTX) {
 				combinedPendingHeader := sl.combinePendingHeader(asyncPh, bestPh, common.ZONE_CTX, true)
 				sl.SetBestPh(combinedPendingHeader)
@@ -862,48 +861,11 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 	}
 	bestPhCopy := types.CopyWorkObject(bestPh)
 	sl.bestPh.Store(bestPhCopy)
-
-	bestPhKawPow := types.CopyWorkObject(bestPh)
-	// TODO: fill the header with actual information from template
-	auxPowTemplate := types.EmptyAuxTemplate()
-
-	// Set the PowID to KAWPOW
-	auxPowTemplate.SetPowID(types.Kawpow)
-	// Create a properly configured Ravencoin header for KAWPOW mining
-	ravencoinHeader := types.EmptyRavencoinHeader()
-	// Use a reasonable height (KAWPOW activation or current block number)
-	// For now, use KAWPOW activation height as minimum
-	ravencoinHeader.Height = 1219736 // KAWPOW activation height
-	// Set reasonable difficulty bits (0x1d00ffff = difficulty 1)
-	ravencoinHeader.Bits = 0x1d00ffff
-	// Set version to KAWPOW version
-	ravencoinHeader.Version = 0x20000000
-	// Set timestamp
-	ravencoinHeader.Time = uint32(bestPh.Time())
-
-	// Commiting the hash of the workobject header to the auxpow template
-	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, bestPh.Hash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
-	// Use the full 80-byte encoded header, not just the 32-byte hash
-	ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
-	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
-	// write the hash of the work object header into the auxpow extra data field
-	bestPhKawPow.WorkObjectHeader().SetAuxPow(auxPow)
-
-	sl.bestPhKawPow.Store(types.CopyWorkObject(bestPhKawPow))
 }
 
-func (sl *Slice) ReadBestPh(powType types.PowID) *types.WorkObject {
-	switch powType {
-	case types.Progpow:
-		phCopy := types.CopyWorkObject(sl.bestPh.Load().(*types.WorkObject))
-		return phCopy
-	case types.Kawpow:
-		phCopy := types.CopyWorkObject(sl.bestPhKawPow.Load().(*types.WorkObject))
-		return phCopy
-	default:
-		phCopy := types.CopyWorkObject(sl.bestPh.Load().(*types.WorkObject))
-		return phCopy
-	}
+func (sl *Slice) ReadBestPh() *types.WorkObject {
+	phCopy := types.CopyWorkObject(sl.bestPh.Load().(*types.WorkObject))
+	return phCopy
 }
 
 // CollectNewlyConfirmedEtxs collects all newly confirmed ETXs since the last coincident with the given location
@@ -1052,8 +1014,8 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.WorkObject, domTerminus c
 }
 
 // GetPendingHeader is used by the miner to request the current pending header
-func (sl *Slice) GetPendingHeader(powType types.PowID) (*types.WorkObject, error) {
-	phCopy := types.CopyWorkObject(sl.ReadBestPh(powType))
+func (sl *Slice) GetPendingHeader() (*types.WorkObject, error) {
+	phCopy := types.CopyWorkObject(sl.ReadBestPh())
 	return phCopy, nil
 }
 
@@ -1863,11 +1825,11 @@ func (sl *Slice) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 		return nil, err
 	}
 	stateProcessTime := time.Since(start)
-	if sl.ReadBestPh(types.Progpow) == nil {
+	if sl.ReadBestPh() == nil {
 		sl.hc.headermu.Unlock()
 		return nil, errors.New("best ph is nil")
 	}
-	bestPhCopy := types.CopyWorkObject(sl.ReadBestPh(types.Progpow))
+	bestPhCopy := types.CopyWorkObject(sl.ReadBestPh())
 	// If we are trying to recompute the pending header on the same parent block
 	// we can return what we already have
 	if !sl.recomputeRequired && bestPhCopy != nil && bestPhCopy.ParentHash(sl.NodeCtx()) == block.Hash() {
@@ -1944,7 +1906,7 @@ func (sl *Slice) Stop() {
 	rawdb.WriteBadHashesList(sl.sliceDb, badHashes)
 	sl.miner.worker.StorePendingBlockBody()
 
-	rawdb.WriteBestPendingHeader(sl.sliceDb, sl.ReadBestPh(types.Progpow))
+	rawdb.WriteBestPendingHeader(sl.sliceDb, sl.ReadBestPh())
 
 	sl.scope.Close()
 	close(sl.quit)
@@ -2217,7 +2179,7 @@ func (sl *Slice) asyncWorkShareUpdateLoop() {
 					}
 				}
 				hash := types.DeriveSha(txs, trie.NewStackTrie(nil))
-				bestPh := types.CopyWorkObject(sl.ReadBestPh(types.Progpow))
+				bestPh := types.CopyWorkObject(sl.ReadBestPh())
 				// Update the tx hash
 				bestPh.WorkObjectHeader().SetTxHash(hash)
 				sl.SetBestPh(bestPh)

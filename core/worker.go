@@ -131,7 +131,7 @@ type transactionOrderingInfo struct {
 type worker struct {
 	config       *Config
 	chainConfig  *params.ChainConfig
-	engine       consensus.Engine
+	engine       []consensus.Engine
 	hc           *HeaderChain
 	txPool       *TxPool
 	ephemeralKey *secp256k1.PrivateKey
@@ -221,7 +221,7 @@ func (ra *RollingAverage) Average() time.Duration {
 	return ra.sum / time.Duration(len(ra.durations))
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Database, engine consensus.Engine, headerchain *HeaderChain, txPool *TxPool, isLocalBlock func(header *types.WorkObject) bool, init bool, processingState bool, logger *log.Logger) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Database, engine []consensus.Engine, headerchain *HeaderChain, txPool *TxPool, isLocalBlock func(header *types.WorkObject) bool, init bool, processingState bool, logger *log.Logger) *worker {
 	worker := &worker{
 		config:                         config,
 		chainConfig:                    chainConfig,
@@ -642,11 +642,12 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				return nil, fmt.Errorf("target block number %v does not match the target block number %v", targetBlock.NumberU64(common.ZONE_CTX), targetBlockNumber)
 			}
 			totalEntropy := big.NewInt(0)
-			powHash, err := w.engine.ComputePowHash(targetBlock.WorkObjectHeader())
+			engine := w.hc.GetEngineForHeader(targetBlock.WorkObjectHeader())
+			powHash, err := engine.ComputePowHash(targetBlock.WorkObjectHeader())
 			if err != nil {
 				return nil, err
 			}
-			zoneThresholdEntropy := w.engine.IntrinsicLogEntropy(powHash)
+			zoneThresholdEntropy := engine.IntrinsicLogEntropy(powHash)
 			totalEntropy = new(big.Int).Add(totalEntropy, zoneThresholdEntropy)
 
 			// First step is to collect all the workshares and uncles at this targetBlockNumber depth, then
@@ -669,19 +670,20 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				for _, uncle := range uncles {
 					var uncleEntropy *big.Int
 					if uncle.NumberU64() == targetBlockNumber {
-						_, err := w.engine.VerifySeal(uncle)
+						engine := w.hc.GetEngineForHeader(uncle)
+						_, err := engine.VerifySeal(uncle)
 						if err != nil {
 							// uncle is a workshare
-							powHash, err := w.engine.ComputePowHash(uncle)
+							powHash, err := engine.ComputePowHash(uncle)
 							if err != nil {
 								return nil, err
 							}
-							uncleEntropy = new(big.Int).Set(w.engine.IntrinsicLogEntropy(powHash))
+							uncleEntropy = new(big.Int).Set(engine.IntrinsicLogEntropy(powHash))
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						} else {
 							// Add the target weight into the uncles
 							target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-							uncleEntropy = w.engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+							uncleEntropy = engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						}
 						sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)
@@ -740,6 +742,32 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 		work.batch.Reset()
 	}
 
+	// TODO: fill the header with actual information from template
+	auxPowTemplate := types.EmptyAuxTemplate()
+
+	// Set the PowID to KAWPOW
+	auxPowTemplate.SetPowID(types.Kawpow)
+	// Create a properly configured Ravencoin header for KAWPOW mining
+	ravencoinHeader := types.EmptyRavencoinHeader()
+	// Use a reasonable height (KAWPOW activation or current block number)
+	// For now, use KAWPOW activation height as minimum
+	ravencoinHeader.Height = 1219736 // KAWPOW activation height
+	// Set reasonable difficulty bits (0x1d00ffff = difficulty 1)
+	ravencoinHeader.Bits = 0x1d00ffff
+	// Set version to KAWPOW version
+	ravencoinHeader.Version = 0x20000000
+	// Set timestamp
+	ravencoinHeader.Time = uint32(work.wo.Time())
+
+	// Use the full 80-byte encoded header, not just the 32-byte hash
+	ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
+
+	// Dont have the actual hash of the block yet
+	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), nil)
+
+	// write the hash of the work object header into the auxpow extra data field
+	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
+
 	// Create a local environment copy, avoid the data race with snapshot state.
 	newWo, err := w.FinalizeAssemble(w.hc, work.wo, block, work.state, work.txs, uncles, work.etxs, work.subManifest, work.receipts, work.utxoSetSize, work.utxosCreate, work.utxosDelete)
 	if err != nil {
@@ -747,6 +775,12 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	}
 
 	work.wo = newWo
+
+	// Commiting the hash of the workobject header to the auxpow template
+	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, newWo.Hash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
+	// Dont have the actual hash of the block yet
+	auxPow = types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
+	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
 
 	w.printPendingHeaderInfo(work, newWo, start)
 	work.utxosCreate = nil
@@ -873,7 +907,8 @@ func (w *worker) commitUncle(env *environment, uncle *types.WorkObjectHeader) er
 	}
 	var workShare bool
 	// If the uncle is a workshare, we should allow siblings
-	_, err := w.engine.VerifySeal(uncle)
+	engine := w.hc.GetEngineForHeader(uncle)
+	_, err := engine.VerifySeal(uncle)
 	if err != nil {
 		workShare = true
 	}
@@ -1681,15 +1716,16 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		return nil, err
 	}
 	if !w.hc.IsGenesisHash(parent.Hash()) {
+		engine := w.hc.GetEngineForHeader(parent.WorkObjectHeader())
 		// Set the parent delta entropy prior to sending to sub
 		if nodeCtx != common.PRIME_CTX {
 			if order < nodeCtx {
 				newWo.Header().SetParentDeltaEntropy(big.NewInt(0), nodeCtx)
 			} else {
-				newWo.Header().SetParentDeltaEntropy(w.engine.DeltaLogEntropy(w.hc, parent), nodeCtx)
+				newWo.Header().SetParentDeltaEntropy(engine.DeltaLogEntropy(w.hc, parent), nodeCtx)
 			}
 		}
-		newWo.Header().SetParentEntropy(w.engine.TotalLogEntropy(w.hc, parent), nodeCtx)
+		newWo.Header().SetParentEntropy(engine.TotalLogEntropy(w.hc, parent), nodeCtx)
 	} else {
 		newWo.Header().SetParentEntropy(big.NewInt(0), nodeCtx)
 		newWo.Header().SetParentDeltaEntropy(big.NewInt(0), nodeCtx)
@@ -1697,12 +1733,13 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 	// Only calculate entropy if the parent is not the genesis block
 	if !w.hc.IsGenesisHash(parent.Hash()) {
+		engine := w.hc.GetEngineForHeader(parent.WorkObjectHeader())
 		// Set the parent delta entropy prior to sending to sub
 		if nodeCtx != common.PRIME_CTX {
 			if order < nodeCtx {
 				newWo.Header().SetParentUncledDeltaEntropy(big.NewInt(0), nodeCtx)
 			} else {
-				newWo.Header().SetParentUncledDeltaEntropy(w.engine.UncledDeltaLogEntropy(w.hc, parent), nodeCtx)
+				newWo.Header().SetParentUncledDeltaEntropy(engine.UncledDeltaLogEntropy(w.hc, parent), nodeCtx)
 			}
 		}
 	} else {
@@ -2132,7 +2169,8 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 
 		// Run the consensus preparation with the default or customized consensus engine.
-		if err := w.engine.Prepare(w.hc, newWo, wo); err != nil {
+		engine := w.hc.GetEngineForHeader(newWo.WorkObjectHeader())
+		if err := engine.Prepare(w.hc, newWo, wo); err != nil {
 			w.logger.WithField("err", err).Error("Failed to prepare header for sealing")
 			return nil, err
 		}
@@ -2167,8 +2205,10 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			}
 			// sort the uncles in the decreasing order of entropy
 			sort.Slice(uncles, func(i, j int) bool {
-				powHash1, _ := w.engine.ComputePowHash(uncles[i])
-				powHash2, _ := w.engine.ComputePowHash(uncles[j])
+				engine1 := w.hc.GetEngineForHeader(uncles[i])
+				engine2 := w.hc.GetEngineForHeader(uncles[j])
+				powHash1, _ := engine1.ComputePowHash(uncles[i])
+				powHash2, _ := engine2.ComputePowHash(uncles[j])
 				return new(big.Int).SetBytes(powHash1.Bytes()).Cmp(new(big.Int).SetBytes(powHash2.Bytes())) < 0
 			})
 			for _, uncle := range uncles {
@@ -2296,14 +2336,18 @@ func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 
 func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *types.WorkObject, parent *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt, parentUtxoSetSize uint64, utxosCreate, utxosDelete []common.Hash) (*types.WorkObject, error) {
 	nodeCtx := w.hc.NodeCtx()
-	wo, err := w.engine.FinalizeAndAssemble(chain, newWo, state, txs, uncles, etxs, subManifest, receipts, parentUtxoSetSize, utxosCreate, utxosDelete)
+	engine := w.hc.GetEngineForHeader(newWo.WorkObjectHeader())
+	wo, err := engine.FinalizeAndAssemble(chain, newWo, state, txs, uncles, etxs, subManifest, receipts, parentUtxoSetSize, utxosCreate, utxosDelete)
 	if err != nil {
 		return nil, err
 	}
 
 	// Once the uncles list is assembled in the block
 	if nodeCtx == common.ZONE_CTX {
-		wo.Header().SetUncledEntropy(w.engine.UncledLogEntropy(wo))
+		// TODO: uncled entropy should be part of something else now because,
+		// consensus doesnt have access to other pow engines, since we can have
+		// many different kinds of workshares
+		wo.Header().SetUncledEntropy(engine.UncledLogEntropy(wo))
 	}
 
 	manifestHash := w.ComputeManifestHash(parent)
@@ -2313,7 +2357,7 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 		if nodeCtx == common.ZONE_CTX {
 			// Compute and set etx rollup hash
 			var etxRollup types.Transactions
-			if w.engine.IsDomCoincident(w.hc, parent) {
+			if engine.IsDomCoincident(w.hc, parent) {
 				etxRollup = parent.OutboundEtxs()
 			} else {
 				etxRollup, err = w.hc.CollectEtxRollup(parent)
@@ -2398,8 +2442,9 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 		return nil
 	}
 
+	engine := w.hc.GetEngineForHeader(workShare)
 	// Dont add the workshare if its not valid
-	if valid := w.engine.CheckIfValidWorkShare(workShare); valid != types.Valid {
+	if valid := engine.CheckIfValidWorkShare(workShare); valid != types.Valid {
 		return errors.New("work share received from peer is not valid")
 	}
 
@@ -2664,5 +2709,6 @@ func (w *worker) processQiTx(tx *types.Transaction, env *environment, primeTermi
 }
 
 func (w *worker) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	return w.engine.CalcOrder(w.hc, header)
+	engine := w.hc.GetEngineForHeader(header.WorkObjectHeader())
+	return engine.CalcOrder(w.hc, header)
 }

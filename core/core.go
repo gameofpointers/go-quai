@@ -731,8 +731,8 @@ func (c *Core) WriteGenesisBlock(block *types.WorkObject, location common.Locati
 	c.sl.WriteGenesisBlock(block, location)
 }
 
-func (c *Core) GetPendingHeader(powType types.PowID) (*types.WorkObject, error) {
-	return c.sl.GetPendingHeader(powType)
+func (c *Core) GetPendingHeader() (*types.WorkObject, error) {
+	return c.sl.GetPendingHeader()
 }
 
 func (c *Core) GetManifest(blockHash common.Hash) (types.BlockManifest, error) {
