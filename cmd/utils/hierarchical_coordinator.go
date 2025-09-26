@@ -415,6 +415,12 @@ func (hc *HierarchicalCoordinator) startNode(logPath string, quaiBackend quai.Co
 		hc.p2p.Subscribe(location, &types.WorkObjectBlockView{})
 	}
 
+	// After the transition period has passed, or maybe slightly before that, we
+	// have to pass the aux templates??
+	if location.Context() == common.ZONE_CTX {
+		hc.p2p.Subscribe(location, &types.AuxTemplate{})
+	}
+
 	StartNode(stack)
 
 	go func() {

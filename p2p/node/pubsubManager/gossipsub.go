@@ -329,7 +329,6 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			return backend.ApplyPoWFilter(block.WorkObject)
 
 		case *types.WorkObjectShareView:
-
 			protoWo := new(types.ProtoWorkObjectShareView)
 			err := proto.Unmarshal(protoData, protoWo)
 			if err != nil {
@@ -425,6 +424,8 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			if backend.NodeCtx() == common.ZONE_CTX && workShareIntrinsicEntropy.Cmp(new(big.Int).Div(currentHeaderIntrinsic, big.NewInt(2))) < 0 {
 				return pubsub.ValidationIgnore
 			}
+		case *types.AuxTemplate:
+			// TODO: Aux template, signature checks go here, once that is pulled in
 		}
 		return pubsub.ValidationAccept
 	}

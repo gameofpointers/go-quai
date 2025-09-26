@@ -338,6 +338,22 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 	return etxRollup, nil
 }
 
+func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObject) error {
+	if wo == nil {
+		return fmt.Errorf("wo is nil")
+	}
+	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock && wo.WorkObjectHeader().AuxPow() == nil {
+		return fmt.Errorf("wo auxpow is nil for kawpow block")
+	}
+	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
+		wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod &&
+		wo.WorkObjectHeader().AuxPow().PowID() != types.Kawpow {
+		return fmt.Errorf("wo auxpow is not kawpow after the transition")
+	}
+	// TODO: Maybe we can also add check based on the max pow id
+	return nil
+}
+
 // Append
 func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 	nodeCtx := hc.NodeCtx()
@@ -348,7 +364,15 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		"Parent":   header.ParentHash(nodeCtx),
 	}).Debug("Headerchain Append")
 
+	// Validate the pow id is valid for this block
+	if err := hc.CheckPowIdValidity(header); err != nil {
+		return err
+	}
+
+	// TODO: Also check that the values used in the kawpow header are signed
+
 	engine := hc.GetEngineForHeader(header.WorkObjectHeader())
+
 	err := engine.VerifyHeader(hc, header)
 	if err != nil {
 		return err
