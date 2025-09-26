@@ -319,6 +319,16 @@ func (ec *Client) SubmitSubWorkshare(ctx context.Context, wo *types.WorkObject) 
 	return ec.c.CallContext(ctx, nil, "workshare_receiveSubWorkshare", hexutil.Bytes(bytesWo))
 }
 
+// Submits an AuxTemplate from a subsidy chain
+func (ec *Client) SubmitAuxTemplate(ctx context.Context, chainID string, auxTemplate *types.AuxTemplate) error {
+	protoTemplate := auxTemplate.ProtoEncode()
+	bytesTemplate, err := proto.Marshal(protoTemplate)
+	if err != nil {
+		return fmt.Errorf("unable to marshal AuxTemplate: %w", err)
+	}
+	return ec.c.CallContext(ctx, nil, "workshare_receiveAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
+}
+
 func (ec *Client) CalcOrder(ctx context.Context, header *types.WorkObject) (int, error) {
 	protoWo, err := header.ProtoEncode(types.PEtxObject)
 	if err != nil {

@@ -461,5 +461,18 @@ func (g *PubsubManager) Broadcast(location common.Location, data interface{}) er
 	if value, ok := g.topics.Load(topicName.String()); ok {
 		return value.(*pubsub.Topic).Publish(g.ctx, protoData)
 	}
+
+	// Auto-subscribe for AuxTemplate broadcasts
+	if _, ok := data.(*types.AuxTemplate); ok {
+		// Join the topic for AuxTemplate
+		topic, err := g.Join(topicName.String())
+		if err != nil {
+			return err
+		}
+		g.topics.Store(topicName.String(), topic)
+		// Now publish
+		return topic.Publish(g.ctx, protoData)
+	}
+
 	return ErrNoTopic
 }
