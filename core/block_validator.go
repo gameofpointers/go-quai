@@ -37,8 +37,8 @@ import (
 //
 // BlockValidator implements Validator.
 type BlockValidator struct {
-	config *params.ChainConfig  // Chain configuration options
-	hc     *HeaderChain         // HeaderChain
+	config  *params.ChainConfig // Chain configuration options
+	hc      *HeaderChain        // HeaderChain
 	engines []consensus.Engine  // Consensus engines used for validating
 }
 
@@ -124,6 +124,22 @@ func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 	return nil
 }
 
+func (v *BlockValidator) CheckPowIdValidity(wo *types.WorkObject) error {
+	if wo == nil {
+		return fmt.Errorf("wo is nil")
+	}
+	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock && wo.WorkObjectHeader().AuxPow() == nil {
+		return fmt.Errorf("wo auxpow is nil for kawpow block")
+	}
+	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
+		wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod &&
+		wo.WorkObjectHeader().AuxPow().PowID() != types.Kawpow {
+		return fmt.Errorf("wo auxpow is not kawpow after the transition")
+	}
+	// TODO: Maybe we can also add check based on the max pow id
+	return nil
+}
+
 // SanityCheckWorkObjectBlockViewBody is used in the case of gossipsub validation, it quickly checks if any of the fields
 // that are supposed to be empty are not for the work object block view
 func (v *BlockValidator) SanityCheckWorkObjectBlockViewBody(wo *types.WorkObject) error {
@@ -133,6 +149,13 @@ func (v *BlockValidator) SanityCheckWorkObjectBlockViewBody(wo *types.WorkObject
 	if wo.Header() == nil {
 		return fmt.Errorf("wo header is nil")
 	}
+	if wo.WorkObjectHeader() == nil {
+		return fmt.Errorf("wo work object header is nil")
+	}
+	if err := v.CheckPowIdValidity(wo); err != nil {
+		return err
+	}
+
 	nodeCtx := v.config.Location.Context()
 	header := wo.Header()
 	// Subordinate manifest must match ManifestHash in subordinate context, _iff_
@@ -260,6 +283,12 @@ func (v *BlockValidator) SanityCheckWorkObjectHeaderViewBody(wo *types.WorkObjec
 	if wo.Header() == nil {
 		return fmt.Errorf("wo header is nil")
 	}
+	if wo.WorkObjectHeader() == nil {
+		return fmt.Errorf("wo work object header is nil")
+	}
+	if err := v.CheckPowIdValidity(wo); err != nil {
+		return err
+	}
 	header := wo.Header()
 	nodeCtx := v.config.Location.Context()
 	// Subordinate manifest must match ManifestHash in subordinate context, _iff_
@@ -321,6 +350,9 @@ func (v *BlockValidator) SanityCheckWorkObjectShareViewBody(wo *types.WorkObject
 	}
 	if wo.WorkObjectHeader() == nil {
 		return fmt.Errorf("work object header is nil")
+	}
+	if err := v.CheckPowIdValidity(wo); err != nil {
+		return err
 	}
 	// Lockup byte for the first two months has to be zero
 	if wo.WorkObjectHeader().NumberU64() < 2*params.BlocksPerMonth && wo.WorkObjectHeader().Lock() != 0 {
