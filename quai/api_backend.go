@@ -760,10 +760,15 @@ func (b *QuaiAPIBackend) BroadcastHeader(header *types.WorkObject, location comm
 	return b.quai.p2p.Broadcast(location, header.ConvertToHeaderView())
 }
 
-func (b *QuaiAPIBackend) BroadcastWorkShare(workShare *types.WorkObjectShareView, location common.Location) error {
-	return b.quai.p2p.Broadcast(location, workShare)
+func (b *QuaiAPIBackend) BroadcastAuxTemplate(auxTemplate *types.AuxTemplate, location common.Location) error {
+	b.quai.logger.WithFields(map[string]interface{}{
+		"powID":  auxTemplate.PowID(),
+		"height": auxTemplate.Height(),
+	}).Info("Broadcasting AuxTemplate to network")
+
+	return b.quai.p2p.Broadcast(location, auxTemplate)
 }
 
-func (b *QuaiAPIBackend) BroadcastAuxTemplate(auxTemplate *types.AuxTemplate, location common.Location) error {
-	return b.quai.p2p.Broadcast(location, auxTemplate)
+func (b *QuaiAPIBackend) BroadcastWorkShare(workShare *types.WorkObjectShareView, location common.Location) error {
+	return b.quai.p2p.Broadcast(location, workShare)
 }

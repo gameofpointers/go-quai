@@ -1774,3 +1774,54 @@ func (s *PublicWorkSharesAPI) ReceiveSubWorkshare(ctx context.Context, input hex
 		return errors.New("work share is invalid")
 	}
 }
+
+// ReceiveAuxTemplate receives an AuxTemplate from a subsidy chain
+func (s *PublicWorkSharesAPI) ReceiveAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes) error {
+	s.b.Logger().WithFields(log.Fields{
+		"chain":    chainID,
+		"dataSize": len(templateData),
+	}).Debug("API: ReceiveAuxTemplate called")
+
+	// Decode the protobuf encoded AuxTemplate
+	protoTemplate := &types.ProtoAuxTemplate{}
+	err := proto.Unmarshal(templateData, protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to unmarshal protobuf")
+		return fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
+	}
+
+	// Create AuxTemplate from proto
+	auxTemplate := &types.AuxTemplate{}
+	err = auxTemplate.ProtoDecode(protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to decode AuxTemplate")
+		return fmt.Errorf("failed to decode AuxTemplate: %w", err)
+	}
+
+	// Log the received template for debugging
+	s.b.Logger().WithFields(log.Fields{
+		"chain":         chainID,
+		"powID":         auxTemplate.PowID(),
+		"height":        auxTemplate.Height(),
+		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
+		"coinbaseValue": auxTemplate.CoinbaseValue(),
+	}).Info("Received AuxTemplate from subsidy chain")
+
+	// Broadcast the template to the network
+	err = s.b.BroadcastAuxTemplate(auxTemplate, s.b.NodeLocation())
+	if err != nil {
+		s.b.Logger().WithFields(log.Fields{
+			"chain": chainID,
+			"error": err,
+		}).Error("Failed to broadcast AuxTemplate")
+		return fmt.Errorf("failed to broadcast AuxTemplate: %w", err)
+	}
+
+	s.b.Logger().WithFields(log.Fields{
+		"chain": chainID,
+		"powID": auxTemplate.PowID(),
+	}).Info("Successfully broadcast AuxTemplate")
+
+	return nil
+}
