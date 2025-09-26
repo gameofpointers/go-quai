@@ -190,36 +190,28 @@ func ExtractMerkleBranch(merkleTree []*chainhash.Hash, txCount int) [][]byte {
 
 	var branch [][]byte
 
-	// Calculate tree structure
-	treeHeight := 0
-	for size := txCount; size > 1; size = (size + 1) / 2 {
-		treeHeight++
+	// blockchain.BuildMerkleTreeStore lays out the tree level-by-level using a
+	// power-of-two leaf width. Determine that width so we can walk the levels.
+	width := 1
+	for width < txCount {
+		width <<= 1
 	}
 
-	// For coinbase (index 0), collect right siblings at each level
 	index := 0
-	levelSize := txCount
-	offset := 0
+	levelOffset := 0
+	levelWidth := width
 
-	for h := 0; h < treeHeight; h++ {
-		// Get sibling index
-		siblingIndex := index ^ 1 // XOR with 1 to get sibling
-
-		// If sibling exists at this level
-		if siblingIndex < levelSize {
-			// Get the sibling hash from the tree
-			if offset+siblingIndex < len(merkleTree) && merkleTree[offset+siblingIndex] != nil {
-				branch = append(branch, merkleTree[offset+siblingIndex][:])
-			} else if offset+index < len(merkleTree) && merkleTree[offset+index] != nil {
-				// If no sibling, duplicate self (Bitcoin merkle tree rule)
-				branch = append(branch, merkleTree[offset+index][:])
-			}
+	for levelWidth > 1 {
+		siblingIndex := index ^ 1
+		siblingPos := levelOffset + siblingIndex
+		if siblingIndex >= levelWidth || siblingPos >= len(merkleTree) || merkleTree[siblingPos] == nil {
+			siblingPos = levelOffset + index
 		}
+		branch = append(branch, merkleTree[siblingPos][:])
 
-		// Move to parent level
-		offset += levelSize
-		levelSize = (levelSize + 1) / 2
-		index = index / 2
+		levelOffset += levelWidth
+		index >>= 1
+		levelWidth >>= 1
 	}
 
 	return branch

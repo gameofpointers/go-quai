@@ -216,7 +216,7 @@ func (hc *HeaderChain) GetEngineForPowID(powID types.PowID) consensus.Engine {
 // GetEngineForHeader returns the consensus engine for the given header
 func (hc *HeaderChain) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
 	// Check if header has AuxPow to determine which engine to use
-	if header.AuxPow() != nil {
+	if header.AuxPow() != nil && header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 		return hc.GetEngineForPowID(header.AuxPow().PowID())
 	}
 	// Default to Progpow if no AuxPow
