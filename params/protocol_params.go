@@ -252,6 +252,15 @@ var (
 	KawPowForkBlock        uint64 = 0  // Block at which KawPow activates
 	KawPowTransitionPeriod uint64 = 10 // Number of blocks over which the transition happens
 	TotalPowEngines        uint64 = 2  // Total number of PoW engines supported
+
+	// MuSig2 2-of-3 public keys for AuxTemplate signing
+	// These are the 3 public keys that can participate in signing
+	// Any 2 of these can cooperatively sign an AuxTemplate
+	MuSig2PublicKeys = []string{
+		"0325f78ada1d0ef80bc17dbf53665b2645a3422881147897b16fb1d4f6f44e3b91", // Key 1
+		"02f6884b696e4eeb46a9ed2c259204a98d083eff72312e2ce145f055b52b55f068", // Key 2
+		"02afc5977973d21ab4d0f682f7d872c35d347699be69910444d61a0bfe42b31c7a", // Key 3
+	}
 )
 
 const (

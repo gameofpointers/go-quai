@@ -320,13 +320,20 @@ func (ec *Client) SubmitSubWorkshare(ctx context.Context, wo *types.WorkObject) 
 }
 
 // Submits an AuxTemplate from a subsidy chain
+// SignAuxTemplate requests MuSig2 partial signature from go-quai
+func (ec *Client) SignAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes, subsidyParticipantIndex int, subsidyNonce hexutil.Bytes) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := ec.c.CallContext(ctx, &result, "workshare_signAuxTemplate", chainID, templateData, subsidyParticipantIndex, subsidyNonce)
+	return result, err
+}
+
 func (ec *Client) SubmitAuxTemplate(ctx context.Context, chainID string, auxTemplate *types.AuxTemplate) error {
 	protoTemplate := auxTemplate.ProtoEncode()
 	bytesTemplate, err := proto.Marshal(protoTemplate)
 	if err != nil {
 		return fmt.Errorf("unable to marshal AuxTemplate: %w", err)
 	}
-	return ec.c.CallContext(ctx, nil, "quai_receiveAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
+	return ec.c.CallContext(ctx, nil, "workshare_submitAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
 }
 
 func (ec *Client) CalcOrder(ctx context.Context, header *types.WorkObject) (int, error) {
