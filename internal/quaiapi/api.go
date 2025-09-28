@@ -18,6 +18,7 @@ package quaiapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
@@ -25,6 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr/musig2"
 	"github.com/davecgh/go-spew/spew"
 	"google.golang.org/protobuf/proto"
 
@@ -1773,4 +1777,230 @@ func (s *PublicWorkSharesAPI) ReceiveSubWorkshare(ctx context.Context, input hex
 	} else {
 		return errors.New("work share is invalid")
 	}
+}
+
+// SignAuxTemplate initiates MuSig2 signing for an AuxTemplate
+// Returns the composite nonce and partial signature from go-quai
+// subsidyParticipantIndex indicates which of the 3 keys the subsidy chain is using (0, 1, or 2)
+func (s *PublicWorkSharesAPI) SignAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes, subsidyParticipantIndex int, subsidyNonce hexutil.Bytes) (map[string]interface{}, error) {
+	s.b.Logger().WithFields(log.Fields{
+		"chain":    chainID,
+		"dataSize": len(templateData),
+	}).Debug("API: SignAuxTemplate called")
+
+	// Decode the protobuf encoded AuxTemplate
+	protoTemplate := &types.ProtoAuxTemplate{}
+	err := proto.Unmarshal(templateData, protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to unmarshal protobuf")
+		return nil, fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
+	}
+
+	// Create AuxTemplate from proto
+	auxTemplate := &types.AuxTemplate{}
+	err = auxTemplate.ProtoDecode(protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to decode AuxTemplate")
+		return nil, fmt.Errorf("failed to decode AuxTemplate: %w", err)
+	}
+
+	// Get the MuSig2 key manager
+	keyManager, err := GetMuSig2Keys()
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to get MuSig2 keys")
+		return nil, fmt.Errorf("failed to get MuSig2 keys: %w", err)
+	}
+	if keyManager == nil {
+		return nil, fmt.Errorf("MuSig2 keys not configured - set MUSIG2_PRIVKEY and MUSIG2_PUBKEY_* environment variables")
+	}
+
+	// Get the signing set (2 of the 3 keys)
+	signSet, err := keyManager.GetSigningSet(subsidyParticipantIndex)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to get signing set")
+		return nil, fmt.Errorf("failed to get signing set: %w", err)
+	}
+
+	// Create MuSig2 context for go-quai
+	musigCtx, err := musig2.NewContext(
+		keyManager.PrivateKey,
+		false, // don't sort keys to maintain deterministic ordering
+		musig2.WithKnownSigners(signSet),
+	)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to create MuSig2 context")
+		return nil, fmt.Errorf("failed to create MuSig2 context: %w", err)
+	}
+
+	// Create the message to sign (hash of the template)
+	msgHash := sha256.Sum256(templateData)
+	s.b.Logger().WithFields(log.Fields{
+		"templateDataLen": len(templateData),
+		"templateDataHex": fmt.Sprintf("%x", templateData[:32]), // First 32 bytes
+		"msgHash":         fmt.Sprintf("%x", msgHash),
+	}).Debug("API: Hashing template data for signing")
+
+	// Create a signing session
+	session, err := musigCtx.NewSession()
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to create session")
+		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+
+	// Get our public nonce
+	quaiPubNonce := session.PublicNonce()
+
+	// Parse subsidy's public nonce
+	var subsidyPubNonce [66]byte
+	if len(subsidyNonce) != 66 {
+		return nil, fmt.Errorf("invalid subsidy nonce length: got %d, want 66", len(subsidyNonce))
+	}
+	copy(subsidyPubNonce[:], subsidyNonce)
+
+	// Register the other party's nonce
+	haveAllNonces, err := session.RegisterPubNonce(subsidyPubNonce)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to register subsidy nonce")
+		return nil, fmt.Errorf("failed to register subsidy nonce: %w", err)
+	}
+
+	if !haveAllNonces {
+		return nil, fmt.Errorf("missing nonces from other signers")
+	}
+
+	// Create partial signature
+	partialSig, err := session.Sign([32]byte(msgHash))
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to create partial signature")
+		return nil, fmt.Errorf("failed to create partial signature: %w", err)
+	}
+
+	// Serialize the partial signature (S value only for musig2)
+	partialSigBytes := partialSig.S.Bytes()
+
+	response := map[string]interface{}{
+		"partialSignature":      hexutil.Bytes(partialSigBytes[:]),
+		"quaiParticipantIndex":  keyManager.ParticipantIndex,
+		"quaiNonce":             hexutil.Bytes(quaiPubNonce[:]),
+		"messageHash":           hexutil.Bytes(msgHash[:]), // Add hash for debugging
+	}
+
+	s.b.Logger().WithFields(log.Fields{
+		"chain": chainID,
+		"powID": auxTemplate.PowID(),
+	}).Info("Generated MuSig2 partial signature for AuxTemplate")
+
+	return response, nil
+}
+
+// SubmitAuxTemplate receives a signed AuxTemplate from a subsidy chain and broadcasts it
+// The template should contain the signature in its sigs field
+func (s *PublicWorkSharesAPI) SubmitAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes) error {
+	s.b.Logger().WithFields(log.Fields{
+		"chain":    chainID,
+		"dataSize": len(templateData),
+	}).Debug("API: SubmitAuxTemplate called")
+
+	// Decode the protobuf encoded AuxTemplate
+	protoTemplate := &types.ProtoAuxTemplate{}
+	err := proto.Unmarshal(templateData, protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to unmarshal protobuf")
+		return fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
+	}
+
+	// Create AuxTemplate from proto
+	auxTemplate := &types.AuxTemplate{}
+	err = auxTemplate.ProtoDecode(protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to decode AuxTemplate")
+		return fmt.Errorf("failed to decode AuxTemplate: %w", err)
+	}
+
+	// Verify the MuSig2 signature if keys are configured and template has signatures
+	keyManager, _ := GetMuSig2Keys()
+	if keyManager != nil && len(auxTemplate.Sigs()) > 0 {
+		// Get the first signature (we expect one MuSig2 composite signature)
+		sigEnvelope := auxTemplate.Sigs()[0]
+
+		// Parse signer ID to extract indices (format: "musig2_idx1_idx2")
+		var signerIndices []int
+		if signerID := sigEnvelope.SignerID(); signerID != "" {
+			// Parse the signer ID to get indices
+			var idx1, idx2 int
+			if _, err := fmt.Sscanf(signerID, "musig2_%d_%d", &idx1, &idx2); err == nil {
+				signerIndices = []int{idx1, idx2}
+			}
+		}
+
+		if len(signerIndices) == 2 {
+			// Get the public keys of the signers
+			var signerKeys []*btcec.PublicKey
+			for _, idx := range signerIndices {
+				if idx < 0 || idx > 2 {
+					return fmt.Errorf("invalid signer index: %d", idx)
+				}
+				signerKeys = append(signerKeys, keyManager.AllPublicKeys[idx])
+			}
+
+			// Aggregate the public keys
+			aggKey, _, _, err := musig2.AggregateKeys(signerKeys, false)
+			if err != nil {
+				s.b.Logger().WithField("error", err).Error("API: Failed to aggregate signer keys")
+				return fmt.Errorf("failed to aggregate signer keys: %w", err)
+			}
+
+			// Create template data for verification (template without signatures)
+			protoTemplateCopy := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
+			protoTemplateCopy.Sigs = nil
+			templateDataForSigning, err := proto.Marshal(protoTemplateCopy)
+			if err != nil {
+				return fmt.Errorf("failed to marshal template for verification: %w", err)
+			}
+
+			// Verify the Schnorr signature
+			msgHash := sha256.Sum256(templateDataForSigning)
+			sig, err := schnorr.ParseSignature(sigEnvelope.Signature())
+			if err != nil {
+				s.b.Logger().WithField("error", err).Error("API: Failed to parse signature")
+				return fmt.Errorf("failed to parse signature: %w", err)
+			}
+
+			if !sig.Verify(msgHash[:], aggKey.FinalKey) {
+				s.b.Logger().Error("API: Invalid signature on AuxTemplate")
+				return fmt.Errorf("invalid signature on AuxTemplate")
+			}
+
+			s.b.Logger().WithFields(log.Fields{
+				"signerIndices": signerIndices,
+			}).Info("Successfully verified MuSig2 signature")
+		}
+	}
+
+	// Log the received template for debugging
+	s.b.Logger().WithFields(log.Fields{
+		"chain":         chainID,
+		"powID":         auxTemplate.PowID(),
+		"height":        auxTemplate.Height(),
+		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
+		"coinbaseValue": auxTemplate.CoinbaseValue(),
+	}).Info("Received AuxTemplate from subsidy chain")
+
+	// Broadcast the template to the network
+	err = s.b.BroadcastAuxTemplate(auxTemplate, s.b.NodeLocation())
+	if err != nil {
+		s.b.Logger().WithFields(log.Fields{
+			"chain": chainID,
+			"error": err,
+		}).Error("Failed to broadcast AuxTemplate")
+		return fmt.Errorf("failed to broadcast AuxTemplate: %w", err)
+	}
+
+	s.b.Logger().WithFields(log.Fields{
+		"chain": chainID,
+		"powID": auxTemplate.PowID(),
+	}).Info("Successfully broadcast AuxTemplate")
+
+	return nil
 }
