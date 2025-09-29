@@ -753,6 +753,14 @@ func (b *QuaiAPIBackend) GetWork() *types.AuxTemplate {
 	return b.quai.core.GetWork()
 }
 
+func (b *QuaiAPIBackend) CheckPowIdValidity(header *types.WorkObjectHeader) error {
+	return b.quai.core.CheckPowIdValidity(header)
+}
+
+func (b *QuaiAPIBackend) CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) error {
+	return b.quai.core.CheckPowIdValidityForWorkshare(header)
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////
