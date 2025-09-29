@@ -1019,6 +1019,15 @@ func (sl *Slice) GetPendingHeader() (*types.WorkObject, error) {
 	return phCopy, nil
 }
 
+func (sl *Slice) GetWork() *types.AuxTemplate {
+	phCopy := types.CopyWorkObject(sl.ReadBestPh())
+	// use the sealhash of the bestph in the auxtemplate
+	sealHash := phCopy.SealHash()
+	sl.logger.WithFields(log.Fields{"Number": phCopy.NumberArray(), "ParentHash": phCopy.ParentHashArray(), "SealHash": sealHash}).Info("GetWork request")
+	// TODO: set the sealhash in the template before sending it out
+	return sl.miner.worker.GetBestAuxTemplate()
+}
+
 func (sl *Slice) SetBestPh(pendingHeader *types.WorkObject) {
 	pendingHeader.WorkObjectHeader().SetLocation(sl.NodeLocation())
 	pendingHeader.WorkObjectHeader().SetTime(uint64(time.Now().Unix()))

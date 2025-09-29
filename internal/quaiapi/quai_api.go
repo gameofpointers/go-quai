@@ -1173,6 +1173,15 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw he
 	return nil
 }
 
+// GetWork retrieves a new work item to mine
+func (s *PublicBlockChainQuaiAPI) GetWork(ctx context.Context) (map[string]interface{}, error) {
+	auxTemplate := s.b.GetWork()
+	return types.RPCMarshalAuxTemplate(auxTemplate), nil
+}
+
+// TODO: Have to implement the current proxies that the stratums already use, to
+// receive a work when its done
+
 // ReceiveAuxTemplate receives an AuxTemplate from a subsidy chain
 func (s *PublicBlockChainQuaiAPI) ReceiveAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes) error {
 	s.b.Logger().WithFields(log.Fields{
