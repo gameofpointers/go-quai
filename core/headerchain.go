@@ -338,19 +338,47 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 	return etxRollup, nil
 }
 
-func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObject) error {
+func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 	if wo == nil {
 		return fmt.Errorf("wo is nil")
 	}
-	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock && wo.WorkObjectHeader().AuxPow() == nil {
+	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock && wo.AuxPow() == nil {
 		return fmt.Errorf("wo auxpow is nil for kawpow block")
 	}
-	if wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
-		wo.WorkObjectHeader().PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod &&
-		wo.WorkObjectHeader().AuxPow().PowID() != types.Kawpow {
-		return fmt.Errorf("wo auxpow is not kawpow after the transition")
+	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
+		wo.PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod &&
+		(wo.AuxPow().PowID() != types.Progpow || wo.AuxPow().PowID() != types.Kawpow) {
+		return fmt.Errorf("wo auxpow is neither progpow nor kawpow after the transition")
 	}
-	// TODO: Maybe we can also add check based on the max pow id
+	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod &&
+		(wo.AuxPow().PowID() != types.Kawpow) {
+		return fmt.Errorf("wo auxpow is not kawpow after the transition period")
+	}
+	return nil
+}
+
+// Workshare can only be of
+// 1) progpow pow before the kawpow fork
+// 2) progpow, kawpow, btc, bch, litecoin in the transition period
+// 3) kawpow, btc, bch, litecoin after the transition period
+func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader) error {
+	if wo == nil {
+		return fmt.Errorf("wo is nil")
+	}
+	if wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+		if wo.AuxPow() != nil && wo.AuxPow().PowID() != types.Progpow {
+			return fmt.Errorf("workshare auxpow powid is not progpow before kawpow fork")
+		}
+	} else if wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock &&
+		wo.PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod {
+		if wo.AuxPow() != nil && wo.AuxPow().PowID() > types.Scrypt {
+			return fmt.Errorf("workshare auxpow powid is not valid during kawpow transition")
+		}
+	} else if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod {
+		if wo.AuxPow() != nil && wo.AuxPow().PowID() == types.Progpow {
+			return fmt.Errorf("workshare auxpow powid is progpow after kawpow transition")
+		}
+	}
 	return nil
 }
 
@@ -365,7 +393,7 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 	}).Debug("Headerchain Append")
 
 	// Validate the pow id is valid for this block
-	if err := hc.CheckPowIdValidity(header); err != nil {
+	if err := hc.CheckPowIdValidity(header.WorkObjectHeader()); err != nil {
 		return err
 	}
 

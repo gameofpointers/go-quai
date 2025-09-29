@@ -219,6 +219,19 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		if err != nil {
 			workShare = true
 		}
+
+		if workShare {
+			err = chain.CheckPowIdValidityForWorkshare(uncle)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = chain.CheckPowIdValidity(uncle)
+			if err != nil {
+				return err
+			}
+		}
+
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}

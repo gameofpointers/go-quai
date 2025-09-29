@@ -935,6 +935,16 @@ func (c *Core) TotalLogEntropy(header *types.WorkObject) *big.Int {
 	return engine.TotalLogEntropy(c, header)
 }
 
+// CheckPowIdValidity checks whether the pow id specified in auxpow is valid
+func (c *Core) CheckPowIdValidity(header *types.WorkObjectHeader) error {
+	return c.sl.hc.CheckPowIdValidity(header)
+}
+
+// CheckPowIdValidityForWorkshare checks whether the pow id specified in auxpow is valid for workshares
+func (c *Core) CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) error {
+	return c.sl.hc.CheckPowIdValidityForWorkshare(header)
+}
+
 // CalcOrder returns the order of the block within the hierarchy of chains
 func (c *Core) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
 	engine := c.GetEngineForHeader(header.WorkObjectHeader())

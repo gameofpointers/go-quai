@@ -14,6 +14,8 @@ type PowID uint32
 const (
 	Progpow PowID = iota
 	Kawpow
+	SHA
+	Scrypt
 )
 
 // NTimeMask represents a time mask for mining operations

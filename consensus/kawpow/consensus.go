@@ -218,6 +218,20 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		if err != nil {
 			workShare = true
 		}
+
+		if workShare {
+			err = chain.CheckPowIdValidityForWorkshare(uncle)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = chain.CheckPowIdValidity(uncle)
+			if err != nil {
+				return err
+			}
+		}
+
+		// If its a workshare, verify the pow id
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}
