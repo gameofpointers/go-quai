@@ -99,6 +99,10 @@ type ChainHeaderReader interface {
 
 	ComputeMinerDifficulty(parent *types.WorkObject) *big.Int
 
+	CheckPowIdValidity(header *types.WorkObjectHeader) error
+
+	CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) error
+
 	BlockReader
 }
 

@@ -136,7 +136,7 @@ func (v *BlockValidator) SanityCheckWorkObjectBlockViewBody(wo *types.WorkObject
 	if wo.WorkObjectHeader() == nil {
 		return fmt.Errorf("wo work object header is nil")
 	}
-	if err := v.hc.CheckPowIdValidity(wo); err != nil {
+	if err := v.hc.CheckPowIdValidity(wo.WorkObjectHeader()); err != nil {
 		return err
 	}
 
@@ -270,7 +270,7 @@ func (v *BlockValidator) SanityCheckWorkObjectHeaderViewBody(wo *types.WorkObjec
 	if wo.WorkObjectHeader() == nil {
 		return fmt.Errorf("wo work object header is nil")
 	}
-	if err := v.hc.CheckPowIdValidity(wo); err != nil {
+	if err := v.hc.CheckPowIdValidity(wo.WorkObjectHeader()); err != nil {
 		return err
 	}
 
@@ -336,7 +336,7 @@ func (v *BlockValidator) SanityCheckWorkObjectShareViewBody(wo *types.WorkObject
 	if wo.WorkObjectHeader() == nil {
 		return fmt.Errorf("work object header is nil")
 	}
-	if err := v.hc.CheckPowIdValidity(wo); err != nil {
+	if err := v.hc.CheckPowIdValidity(wo.WorkObjectHeader()); err != nil {
 		return err
 	}
 	// Lockup byte for the first two months has to be zero
