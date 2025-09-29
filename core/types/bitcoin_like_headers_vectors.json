@@ -1,0 +1,308 @@
+{
+  "bitcoin": [
+    {
+      "height": 1,
+      "version": 1,
+      "hash_prev_block": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+      "hash_merkle_root": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098",
+      "time": 1231469665,
+      "bits": 486604799,
+      "nonce": 2573394689,
+      "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"
+    },
+    {
+      "height": 50000,
+      "version": 1,
+      "hash_prev_block": "000000000845517b31c6820d83f25cff46429bf136a7515fe504116427e60f8e",
+      "hash_merkle_root": "27f1d66f8a1ee5280f4e92508dcb647e954d53004905d08a75574daee4988360",
+      "time": 1270916538,
+      "bits": 472518933,
+      "nonce": 58489010,
+      "hash": "000000001aeae195809d120b5d66a39c83eb48792e068f8ea1fea19d84a4278a"
+    },
+    {
+      "height": 100000,
+      "version": 1,
+      "hash_prev_block": "000000000002d01c1fccc21636b607dfd930d31d01c3a62104612a1719011250",
+      "hash_merkle_root": "f3e94742aca4b5ef85488dc37c06c3282295ffec960994b2c0d5ac2a25a95766",
+      "time": 1293623863,
+      "bits": 453281356,
+      "nonce": 274148111,
+      "hash": "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"
+    },
+    {
+      "height": 200000,
+      "version": 2,
+      "hash_prev_block": "00000000000003a20def7a05a77361b9657ff954b2f2080e135ea6f5970da215",
+      "hash_merkle_root": "a08f8101f50fd9c9b3e5252aff4c1c1bd668f878fffaf3d0dbddeb029c307e88",
+      "time": 1348310759,
+      "bits": 436591499,
+      "nonce": 4158183488,
+      "hash": "000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf"
+    },
+    {
+      "height": 300000,
+      "version": 2,
+      "hash_prev_block": "000000000000000067ecc744b5ae34eebbde14d21ca4db51652e4d67e155f07e",
+      "hash_merkle_root": "915c887a2d9ec3f566a648bedcf4ed30d0988e22268cfe43ab5b0cf8638999d3",
+      "time": 1399703554,
+      "bits": 419465580,
+      "nonce": 222771801,
+      "hash": "000000000000000082ccf8f1557c5d40b21edabb18d2d691cfbf87118bac7254"
+    },
+    {
+      "height": 400000,
+      "version": 4,
+      "hash_prev_block": "0000000000000000030034b661aed920a9bdf6bbfa6d2e7a021f78481882fa39",
+      "hash_merkle_root": "b0e8f88d4fb7cbc49ab49a3a43c368550e22a8e9e3e04b15e34240306a53aeec",
+      "time": 1456417484,
+      "bits": 403093919,
+      "nonce": 657220870,
+      "hash": "000000000000000004ec466ce4732fe6f1ed1cddc2ed4b328fff5224276e3f6f"
+    },
+    {
+      "height": 500000,
+      "version": 536870912,
+      "hash_prev_block": "0000000000000000007962066dcd6675830883516bcf40047d42740a85eb2919",
+      "hash_merkle_root": "31951c69428a95a46b517ffb0de12fec1bd0b2392aec07b64573e03ded31621f",
+      "time": 1513622125,
+      "bits": 402691653,
+      "nonce": 1560058197,
+      "hash": "00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04"
+    },
+    {
+      "height": 600000,
+      "version": 536870912,
+      "hash_prev_block": "00000000000000000003ecd827f336c6971f6f77a0b9fba362398dd867975645",
+      "hash_merkle_root": "66b7c4a1926b41ceb2e617ddae0067e7bfea42db502017fde5b695a50384ed26",
+      "time": 1571443461,
+      "bits": 387294044,
+      "nonce": 1066642855,
+      "hash": "00000000000000000007316856900e76b4f7a9139cfbfba89842c8d196cd5f91"
+    },
+    {
+      "height": 700000,
+      "version": 1073733636,
+      "hash_prev_block": "0000000000000000000aa3ce000eb559f4143be419108134e0ce71042fc636eb",
+      "hash_merkle_root": "1f8d213c864bfe9fb0098cecc3165cce407de88413741b0300d56ea0f4ec9c65",
+      "time": 1631333672,
+      "bits": 386877668,
+      "nonce": 2881644503,
+      "hash": "0000000000000000000590fc0f3eba193a278534220b2b37e9849e1a770ca959"
+    },
+    {
+      "height": 900000,
+      "version": 548118528,
+      "hash_prev_block": "0000000000000000000196400396be46d0816dc462df4c3450972f589f4d7d24",
+      "hash_merkle_root": "0cfb54e522b07bd1a381adc774ec1851590ef4c3add83958135106534569f970",
+      "time": 1749188499,
+      "bits": 386021236,
+      "nonce": 2455752826,
+      "hash": "000000000000000000010538edbfd2d5b809a33dd83f284aeea41c6d0d96968a"
+    }
+  ],
+  "litecoin": [
+    {
+      "height": 1,
+      "version": 1,
+      "hash_prev_block": "12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2",
+      "hash_merkle_root": "fa3906a4219078364372d0e2715f93e822edd0b47ce146c71ba7ba57179b50f6",
+      "time": 1318055359,
+      "bits": 504365040,
+      "nonce": 272255,
+      "hash": "80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f"
+    },
+    {
+      "height": 50000,
+      "version": 1,
+      "hash_prev_block": "69c6a7f78b98bb400eed29d12e607e968879bbb64248e41b2136eb89d4f05883",
+      "hash_merkle_root": "173e2cc53472d7f3c02801111f71871b78c33d3d00854686b724788810e8163f",
+      "time": 1323958352,
+      "bits": 486610850,
+      "nonce": 4201146240,
+      "hash": "69dc37eb029b68f075a5012dcc0419c127672adb4f3a32882b2b3e71d07a20a6"
+    },
+    {
+      "height": 100000,
+      "version": 1,
+      "hash_prev_block": "e29b694e070915c380466c4b101e64f3dffd4bfca3b6cc830efa1b85348917ae",
+      "hash_merkle_root": "a959ab3b821f375917c7458befed853b3e084324f97896a537ef99218d2d67bd",
+      "time": 1331766897,
+      "bits": 486593860,
+      "nonce": 2147586629,
+      "hash": "e11049dfa5858be3809f285685e12a5d6f84b936b0f8e8272b5363bf3946ce60"
+    },
+    {
+      "height": 200000,
+      "version": 1,
+      "hash_prev_block": "248b276d859c4f52cecb093d58c8ae2278d1accb15f61f36a33131429e7b6bdb",
+      "hash_merkle_root": "1ed78a065f65e69e127264988fe515eed4bc20806a033f9964ac4603076c46ac",
+      "time": 1346335719,
+      "bits": 471720111,
+      "nonce": 3876553473,
+      "hash": "68af2beaee235e08c986a34c305fc7e4545528385e327f0f8686738048ff511b"
+    },
+    {
+      "height": 300000,
+      "version": 1,
+      "hash_prev_block": "a3555c74b6269afd702fbac12774c7bf45e02be50cf3d05adda8cc7e4851a666",
+      "hash_merkle_root": "062a09d38847de3090abbfb081c6f3e8332c89058eaae18bcfc8be7dd337218a",
+      "time": 1361532545,
+      "bits": 470660378,
+      "nonce": 2887188480,
+      "hash": "704be274468b2bfc5787e9a5faf9d08b0da4203b45b891d6347ee128e8049abb"
+    },
+    {
+      "height": 400000,
+      "version": 2,
+      "hash_prev_block": "3672a585dc99845f251809cc8ae9093771945c9b17b4e95a1fa02e7962eb1291",
+      "hash_merkle_root": "38e03d36215a36a53ea984ace8e4e6c6066a0a3fad9abf82dad23ae8f1280a15",
+      "time": 1375552535,
+      "bits": 458210247,
+      "nonce": 2048359168,
+      "hash": "1950dad9ef32cf5635202ccd9edd78b58a4cb3a945aa0a88e1960f9f9b7616d8"
+    },
+    {
+      "height": 500000,
+      "version": 2,
+      "hash_prev_block": "10eace66f33e4648a202c88a9a3296a01737e9d3f5bfa1a2b90df57efde5498f",
+      "hash_merkle_root": "2a5a10a1fdfb8f1d4278fb15a04d5b0b1d0859f711172528478fceb40dfdb199",
+      "time": 1390125501,
+      "bits": 454059035,
+      "nonce": 3490506240,
+      "hash": "65858117fadcff3b591ad4cbd320ecd3b0a63ffda1db9609822cf09ade790aa9"
+    },
+    {
+      "height": 1000000,
+      "version": 4,
+      "hash_prev_block": "a08b044b936d9e6bdf496a562eb1325fc131fce3cc13a270417d96551054bc30",
+      "hash_merkle_root": "8473ff4c3ae380d9d1bf0f1f0b5c389676d3a3877923c0a23e9b21388624c5ab",
+      "time": 1464536851,
+      "bits": 453071640,
+      "nonce": 282613863,
+      "hash": "8ceae698f0a2d338e39b213eb9c253a91a270ca6451a4d9bba7bf2c9e637dfda"
+    },
+    {
+      "height": 1500000,
+      "version": 536870912,
+      "hash_prev_block": "48ae2cecd54c4f310532a44cfd9dfe5fe77c4e2cb0973a8ea153981c82a3143b",
+      "hash_merkle_root": "9d43ec9fb1f10ad68f7884602493511d523de2107d14a8694c9c61b7e72d3b4f",
+      "time": 1538150727,
+      "bits": 436331015,
+      "nonce": 118249800,
+      "hash": "3eb72e473ce35c3b88c0a3c96ffa4a7ab01f40e476034c9caf82fba8e0270cb0"
+    },
+    {
+      "height": 2000000,
+      "version": 536870912,
+      "hash_prev_block": "17ffe3fc57db0dbb599c15f14024074ad705d14b29ff99587474f1439decfbc4",
+      "hash_merkle_root": "d5df7ed3506345ab3ca4544ea92bf21a8bf73f0bd96df5ba2ba8bace89ac2e3d",
+      "time": 1613205643,
+      "bits": 436315296,
+      "nonce": 191081737,
+      "hash": "3a4d8e7c77a85554fc8bd30d4e42d56eb71010e769ea9737f16241ba79bed9c5"
+    }
+  ],
+  "bitcoin_cash": [
+    {
+      "height": 478559,
+      "version": 536870912,
+      "hash_prev_block": "0000000000000000011865af4122fe3b144e2cbeea86142e8ff2fb4107352d43",
+      "hash_merkle_root": "c896c91a0be4d3eed5568bab4c3084945e5e06669be38ec06b1c8ca4d84baaab",
+      "time": 1501611161,
+      "bits": 402736949,
+      "nonce": 3897215522,
+      "hash": "000000000000000000651ef99cb9fcbe0dadde1d424bd9f15ff20136191a5eec"
+    },
+    {
+      "height": 500000,
+      "version": 536870912,
+      "hash_prev_block": "0000000000000000043831d6ebb013716f0580287ee5e5687e27d0ed72e6e523",
+      "hash_merkle_root": "4af279645e1b337e655ae3286fc2ca09f58eb01efa6ab27adedd1e9e6ec19091",
+      "time": 1509343584,
+      "bits": 403290394,
+      "nonce": 3604508752,
+      "hash": "000000000000000005e14d3f9fdfb70745308706615cfa9edca4f4558332b201"
+    },
+    {
+      "height": 550000,
+      "version": 536870912,
+      "hash_prev_block": "00000000000000000161dbb34b162f3e1ccde067dd69a7ff86ad86dd3b0c41c5",
+      "hash_merkle_root": "861b589ee8dee3368fa26137eb8bb199b880df35c7e3678ed5a1d37a3c6dc444",
+      "time": 1538234623,
+      "bits": 402780921,
+      "nonce": 3215242983,
+      "hash": "0000000000000000007965cc5602c50d0ace7d4ba12b44fb14256bf36baad67d"
+    },
+    {
+      "height": 600000,
+      "version": 1073733632,
+      "hash_prev_block": "000000000000000000b32e1e2c1725e31ff01cf50ec0a17c71f26cc6379330b2",
+      "hash_merkle_root": "011327a0236feeadbbfdb2c18bf7c3fdb13ae142f1386ad25e4e9a07afed8569",
+      "time": 1568338904,
+      "bits": 402881827,
+      "nonce": 3635791357,
+      "hash": "0000000000000000008e8d83cba6d45a9314bc2ef4538d4e0577c6bed8593536"
+    },
+    {
+      "height": 650000,
+      "version": 536870912,
+      "hash_prev_block": "0000000000000000006ad94cb1e49aaf789773a10f144fb3069d333bfe96e887",
+      "hash_merkle_root": "09a90addfe68d5e594c8d21f844f4e3b9d67e45f25945b01981817b006b58eb9",
+      "time": 1598414083,
+      "bits": 402836823,
+      "nonce": 2174259144,
+      "hash": "000000000000000001e5a8e11a9a523e15ad985b8123df0f7b364ad8f83d82b0"
+    },
+    {
+      "height": 700000,
+      "version": 536879104,
+      "hash_prev_block": "000000000000000003f1ebb280263a9609bdaec7106ee72476308b2b4fce592c",
+      "hash_merkle_root": "19afe95e3e2c00b0586542b2057da5c2b7ac0c9a4e204e6c9ab8fc16ff5f72fa",
+      "time": 1628514169,
+      "bits": 403048110,
+      "nonce": 783598027,
+      "hash": "000000000000000003d908ba7463fd154902eda89ac015a2e2630f4130674e77"
+    },
+    {
+      "height": 750000,
+      "version": 538968064,
+      "hash_prev_block": "000000000000000000dc75f69fbbc75748557d0e3e472566b20c9138943e970d",
+      "hash_merkle_root": "86ab1ed4f59f347fa5bc300c097412468d5b4aaefa8ee069c6c34c1d6be5e852",
+      "time": 1658560374,
+      "bits": 403129046,
+      "nonce": 523580984,
+      "hash": "00000000000000000621b8f668b02530bcf77446e85e56cb0257a51b4ec980ba"
+    },
+    {
+      "height": 800000,
+      "version": 543162368,
+      "hash_prev_block": "00000000000000000187e432f75afc24582887d31b9885db69efae94b270ea93",
+      "hash_merkle_root": "0bb68dcc462d6112cb64b28deeb5352f61669ebb4f0bd60955ae9cbae1765513",
+      "time": 1688286302,
+      "bits": 402811860,
+      "nonce": 498838372,
+      "hash": "000000000000000001012aaf4b6aa033ddda9d9bbf832b7be597705be5635311"
+    },
+    {
+      "height": 850000,
+      "version": 699744256,
+      "hash_prev_block": "000000000000000000c5af491ac0cee2c8902b06c14ac583a08ef46e0f9c0557",
+      "hash_merkle_root": "0399d7b7a6124dacbf3923a19847b84fec5c46b038eb3ff4bfa31214116302a6",
+      "time": 1718261713,
+      "bits": 402796828,
+      "nonce": 3111244686,
+      "hash": "000000000000000000d3efae5f8652243331d4b72870363bdc659eefa7360974"
+    },
+    {
+      "height": 900000,
+      "version": 738197504,
+      "hash_prev_block": "00000000000000000115cfebd02ad9c3c05939d99b9224cce814a130ccd1446a",
+      "hash_merkle_root": "dbd1de97121e7fd032aee94f7ba4a2e4788c25b3ba9289ab15fde462b964e984",
+      "time": 1748287704,
+      "bits": 402812740,
+      "nonce": 2744032024,
+      "hash": "000000000000000000ff9445c5039fd67d02e901b3cefe8bd55c1d6afb5fe1cf"
+    }
+  ]
+}
