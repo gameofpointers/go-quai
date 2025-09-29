@@ -326,7 +326,7 @@ func (ec *Client) SubmitAuxTemplate(ctx context.Context, chainID string, auxTemp
 	if err != nil {
 		return fmt.Errorf("unable to marshal AuxTemplate: %w", err)
 	}
-	return ec.c.CallContext(ctx, nil, "workshare_receiveAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
+	return ec.c.CallContext(ctx, nil, "quai_receiveAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
 }
 
 func (ec *Client) CalcOrder(ctx context.Context, header *types.WorkObject) (int, error) {
