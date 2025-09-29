@@ -128,6 +128,10 @@ func (c *Core) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engi
 	return c.sl.GetEngineForHeader(header)
 }
 
+func (c *Core) GetWork() *types.AuxTemplate {
+	return c.sl.GetWork()
+}
+
 // InsertChain attempts to append a list of blocks to the slice, optionally
 // caching any pending blocks which cannot yet be appended. InsertChain return
 // the number of blocks which were successfully consumed (either appended, or

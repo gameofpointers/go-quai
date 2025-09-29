@@ -749,6 +749,10 @@ func (b *QuaiAPIBackend) ComputeMinerDifficulty(parent *types.WorkObject) *big.I
 	return b.quai.core.ComputeMinerDifficulty(parent)
 }
 
+func (b *QuaiAPIBackend) GetWork() *types.AuxTemplate {
+	return b.quai.core.GetWork()
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////

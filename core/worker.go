@@ -189,6 +189,8 @@ type worker struct {
 	isLocalBlock func(header *types.WorkObject) bool // Function used to determine whether the specified block is mined by local miner.
 
 	logger *log.Logger
+
+	auxTemplate *types.AuxTemplate
 }
 
 type RollingAverage struct {
@@ -241,6 +243,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		logger:                         logger,
 		coinbaseLockup:                 config.CoinbaseLockup,
 		minerPreference:                config.MinerPreference,
+		auxTemplate:                    types.NewAuxTemplate(),
 	}
 	if worker.coinbaseLockup > uint8(len(params.LockupByteToBlockDepth))-1 {
 		logger.Errorf("Invalid coinbase lockup value %d, using default value %d", worker.coinbaseLockup, params.DefaultCoinbaseLockup)
@@ -421,6 +424,10 @@ func (w *worker) close() {
 	close(w.exitCh)
 	w.scope.Close()
 	w.wg.Wait()
+}
+
+func (w *worker) GetBestAuxTemplate() *types.AuxTemplate {
+	return w.auxTemplate
 }
 
 func (w *worker) LoadPendingBlockBody() {

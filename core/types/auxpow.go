@@ -99,6 +99,10 @@ type AuxTemplate struct {
 	sigs []SignerEnvelope
 }
 
+func NewAuxTemplate() *AuxTemplate {
+	return &AuxTemplate{}
+}
+
 func EmptyAuxTemplate() *AuxTemplate {
 	return &AuxTemplate{
 		powID:           0,
@@ -115,6 +119,45 @@ func EmptyAuxTemplate() *AuxTemplate {
 		merkleBranch:    nil,
 		extranonce2Size: 4,
 		sigs:            nil,
+	}
+}
+
+// RPCMarshalAuxTemplate converts AuxTemplate to a map for RPC serialization
+func RPCMarshalAuxTemplate(at *AuxTemplate) map[string]interface{} {
+	if at == nil {
+		return nil
+	}
+
+	// Convert merkle branch to hex strings
+	merkleBranch := make([]string, len(at.merkleBranch))
+	for i, hash := range at.merkleBranch {
+		merkleBranch[i] = hexutil.Encode(hash)
+	}
+
+	// Convert signer envelopes to maps
+	sigs := make([]map[string]interface{}, len(at.sigs))
+	for i, sig := range at.sigs {
+		sigs[i] = map[string]interface{}{
+			"signerId":  sig.SignerID(),
+			"signature": hexutil.Encode(sig.Signature()),
+		}
+	}
+
+	return map[string]interface{}{
+		"powId":           uint32(at.powID),
+		"prevHash":        hexutil.Encode(at.prevHash[:]),
+		"payoutScript":    hexutil.Encode(at.payoutScript),
+		"scriptSigMaxLen": at.scriptSigMaxLen,
+		"version":         at.version,
+		"nBits":           at.nBits,
+		"nTimeMask":       uint32(at.nTimeMask),
+		"height":          at.height,
+		"coinbaseValue":   at.coinbaseValue,
+		"coinbaseOnly":    at.coinbaseOnly,
+		"txCount":         at.txCount,
+		"merkleBranch":    merkleBranch,
+		"extranonce2Size": at.extranonce2Size,
+		"sigs":            sigs,
 	}
 }
 
