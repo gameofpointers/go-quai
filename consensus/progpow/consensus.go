@@ -2,6 +2,7 @@ package progpow
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
@@ -215,18 +216,21 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		// Siblings are not allowed to be included in the workshares list if its an
 		// uncle but can be if its a workshare
 		var workShare bool
-		_, err := progpow.VerifySeal(uncle)
-		if err != nil {
+		validity := chain.UncleWorkShareClassification(uncle)
+		if validity == types.Valid {
 			workShare = true
+		}
+		if validity == types.Invalid {
+			return errors.New("uncle in the block has invalid proof of work")
 		}
 
 		if workShare {
-			err = chain.CheckPowIdValidityForWorkshare(uncle)
+			err := chain.CheckPowIdValidityForWorkshare(uncle)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = chain.CheckPowIdValidity(uncle)
+			err := chain.CheckPowIdValidity(uncle)
 			if err != nil {
 				return err
 			}
@@ -235,12 +239,8 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}
-		_, err = progpow.ComputePowHash(uncle)
-		if err != nil {
-			return err
-		}
 
-		_, err = chain.WorkShareDistance(block, uncle)
+		_, err := chain.WorkShareDistance(block, uncle)
 		if err != nil {
 			return err
 		}

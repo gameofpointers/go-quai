@@ -1,6 +1,7 @@
 package blake3pow
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
@@ -209,10 +210,14 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		// Siblings are not allowed to be included in the workshares list if its an
 		// uncle but can be if its a workshare
 		var workShare bool
-		_, err := blake3pow.VerifySeal(uncle)
-		if err != nil {
+		validity := chain.UncleWorkShareClassification(uncle)
+		if validity == types.Valid {
 			workShare = true
 		}
+		if validity == types.Invalid {
+			return errors.New("uncle in the block has invalid proof of work")
+		}
+
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}
@@ -220,13 +225,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 			return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
 		}
 
-		// make sure that the work can be computed
-		_, err = blake3pow.ComputePowHash(uncle)
-		if err != nil {
-			return err
-		}
-
-		_, err = chain.WorkShareDistance(block, uncle)
+		_, err := chain.WorkShareDistance(block, uncle)
 		if err != nil {
 			return err
 		}
