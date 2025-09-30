@@ -117,6 +117,9 @@ type ChainReader interface {
 	// GetWorkObjectWithWorkShares retrieves a block from the database by hash
 	// but only has header and workshares populated in the body
 	GetWorkObjectWithWorkShares(hash common.Hash) *types.WorkObject
+
+	// BlockWorkShareClassification classifies the workshare in the block as valid, sub or invalid
+	UncleWorkShareClassification(wo *types.WorkObjectHeader) types.WorkShareValidity
 }
 
 // Engine is an algorithm agnostic consensus engine.

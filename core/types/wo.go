@@ -77,6 +77,7 @@ const (
 	Valid WorkShareValidity = iota
 	Sub
 	Invalid
+	Block
 )
 
 func (wo *WorkObject) Hash() common.Hash {
@@ -529,9 +530,14 @@ func (wo *WorkObject) SetNumber(val *big.Int, nodeCtx int) {
 
 // KawpowActivationHappened checks if the AuxPow field is non-nil, indicating
 // that Kawpow activation has occurred.
+func (wh *WorkObjectHeader) KawpowActivationHappened() bool {
+	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock
+}
+
 func (wh *WorkObjectHeader) IsKawPowBlock() bool {
 	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock &&
-		wh.auxPow != nil
+		wh.auxPow != nil &&
+		wh.AuxPow().PowID() == Kawpow
 }
 
 // IsTransitionProgPowBlock checks if the block is within the transition period

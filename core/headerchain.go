@@ -788,6 +788,51 @@ func (hc *HeaderChain) findCommonAncestor(header *types.WorkObject) *types.WorkO
 	}
 
 }
+
+// UncleWorkShareClassification checks if the workobject header is a workshare
+// or uncle(block) or invalid and returns the appropriate validity
+func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) types.WorkShareValidity {
+	// If the kawpow activation hasnt happened, then if the pow is valid
+	if !wo.KawpowActivationHappened() || wo.IsTransitionProgPowBlock() {
+		// everything has to be progpow, also verify seal checks if the proof of
+		// work meets the block difficulty target
+		progpowEngine := hc.engine[types.Progpow]
+		_, err := progpowEngine.VerifySeal(wo)
+		if err != nil {
+			wsType := progpowEngine.CheckIfValidWorkShare(wo)
+			if wsType == types.Valid {
+				return types.Valid
+			}
+			return types.Invalid
+		} else {
+			// Valid progpow block
+			return types.Block
+		}
+	} else {
+		powId := wo.AuxPow().PowID()
+		switch powId {
+		case types.Kawpow:
+			kawpowEngine := hc.engine[types.Kawpow]
+			_, err := kawpowEngine.VerifySeal(wo)
+			if err != nil {
+				wsType := kawpowEngine.CheckIfValidWorkShare(wo)
+				if wsType == types.Valid {
+					return types.Valid
+				}
+				return types.Invalid
+			} else {
+				// Valid kawpow block
+				return types.Block
+			}
+			// TODO: Need to write logic for SHA and Scrypt workshares
+		case types.SHA:
+		case types.Scrypt:
+		default:
+		}
+	}
+	return types.Invalid
+}
+
 func (hc *HeaderChain) WorkShareDistance(wo *types.WorkObject, ws *types.WorkObjectHeader) (*big.Int, error) {
 	current := wo
 	// Create a list of ancestor blocks to the work object
