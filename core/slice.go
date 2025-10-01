@@ -1025,7 +1025,8 @@ func (sl *Slice) GetWork() *types.AuxTemplate {
 	sealHash := phCopy.SealHash()
 	sl.logger.WithFields(log.Fields{"Number": phCopy.NumberArray(), "ParentHash": phCopy.ParentHashArray(), "SealHash": sealHash}).Info("GetWork request")
 	// TODO: set the sealhash in the template before sending it out
-	return sl.miner.worker.GetBestAuxTemplate()
+	// getting the best template based on the pow id requested
+	return sl.miner.worker.GetBestAuxTemplate(types.Progpow)
 }
 
 func (sl *Slice) SetBestPh(pendingHeader *types.WorkObject) {

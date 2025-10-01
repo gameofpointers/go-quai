@@ -143,6 +143,10 @@ type worker struct {
 	chainSideCh  chan ChainSideEvent
 	chainSideSub event.Subscription
 
+	// AuxPow Storage
+	auxpowCache map[types.PowID]*types.AuxTemplate
+	auxpowMu    sync.RWMutex
+
 	// Channels
 	resultCh                       chan *types.WorkObject
 	exitCh                         chan struct{}
@@ -189,8 +193,6 @@ type worker struct {
 	isLocalBlock func(header *types.WorkObject) bool // Function used to determine whether the specified block is mined by local miner.
 
 	logger *log.Logger
-
-	auxTemplate *types.AuxTemplate
 }
 
 type RollingAverage struct {
@@ -243,7 +245,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		logger:                         logger,
 		coinbaseLockup:                 config.CoinbaseLockup,
 		minerPreference:                config.MinerPreference,
-		auxTemplate:                    types.NewAuxTemplate(),
+		auxpowCache:                    make(map[types.PowID]*types.AuxTemplate),
 	}
 	if worker.coinbaseLockup > uint8(len(params.LockupByteToBlockDepth))-1 {
 		logger.Errorf("Invalid coinbase lockup value %d, using default value %d", worker.coinbaseLockup, params.DefaultCoinbaseLockup)
@@ -426,8 +428,10 @@ func (w *worker) close() {
 	w.wg.Wait()
 }
 
-func (w *worker) GetBestAuxTemplate() *types.AuxTemplate {
-	return w.auxTemplate
+func (w *worker) GetBestAuxTemplate(powID types.PowID) *types.AuxTemplate {
+	w.auxpowMu.RLock()
+	defer w.auxpowMu.RUnlock()
+	return w.auxpowCache[powID]
 }
 
 func (w *worker) LoadPendingBlockBody() {
@@ -2441,6 +2445,14 @@ func totalFees(block *types.WorkObject, receipts []*types.Receipt) *big.Float {
 		feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), minerFee))
 	}
 	return new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
+}
+
+func (w *worker) AddAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
+	w.auxpowMu.Lock()
+	// TODO: Have criterias on picking the aux template
+	w.auxpowCache[auxTemplate.PowID()] = auxTemplate
+	w.auxpowMu.Unlock()
+	return nil
 }
 
 func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
