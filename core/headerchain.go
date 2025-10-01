@@ -347,7 +347,7 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 	}
 	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
 		wo.PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock+params.KawPowTransitionPeriod &&
-		(wo.AuxPow().PowID() != types.Progpow || wo.AuxPow().PowID() != types.Kawpow) {
+		(wo.AuxPow().PowID() != types.Progpow && wo.AuxPow().PowID() != types.Kawpow) {
 		return fmt.Errorf("wo auxpow is neither progpow nor kawpow after the transition")
 	}
 	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod &&
