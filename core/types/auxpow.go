@@ -2,10 +2,13 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 
 	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
+	"github.com/dominant-strategies/go-quai/crypto/musig2"
+	"google.golang.org/protobuf/proto"
 )
 
 // PowID represents a unique identifier for a proof-of-work algorithm
@@ -279,6 +282,72 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 	}
 
 	return nil
+}
+
+// Hash returns the SHA256 hash of the AuxTemplate with signature fields set to nil
+// This is the same hash used for signing and verification
+func (at *AuxTemplate) Hash() [32]byte {
+	// Create a copy of the template without signatures for message hash calculation
+	// We need to work with the protobuf representation to properly exclude signature fields
+	protoTemplate := at.ProtoEncode()
+	tempTemplate := proto.Clone(protoTemplate).(*ProtoAuxTemplate)
+	tempTemplate.Sigs = nil
+
+	// Marshal the template without signatures to get the message hash
+	templateData, err := proto.Marshal(tempTemplate)
+	if err != nil {
+		// Return zero hash on error - this should be handled by the caller
+		return [32]byte{}
+	}
+
+	// Calculate and return the message hash
+	return sha256.Sum256(templateData)
+}
+
+// VerifySignature verifies the signature on this AuxTemplate by trying all possible 2-of-3 key combinations
+// Returns true if any valid 2-of-3 signature is found, false otherwise
+func (at *AuxTemplate) VerifySignature() bool {
+	// Check if we have any signatures
+	if len(at.sigs) == 0 {
+		return false
+	}
+
+	// Get the first signature (assuming single signature for now)
+	if len(at.sigs[0].Signature()) == 0 {
+		return false
+	}
+
+	// Get the message hash using the new Hash() method
+	messageHash := at.Hash()
+	message := messageHash[:]
+
+	// Get the signature
+	signature := at.sigs[0].Signature()
+
+	// Try all possible 2-of-3 key combinations (including order variations)
+	// We have 3 keys (indices 0, 1, 2) and need to try all combinations of 2
+	// MuSig2 signatures are order-dependent, so we need to try both orders
+	combinations := [][]int{
+		{0, 1}, // Keys 0 and 1
+		{1, 0}, // Keys 1 and 0 (reverse order)
+		{0, 2}, // Keys 0 and 2
+		{2, 0}, // Keys 2 and 0 (reverse order)
+		{1, 2}, // Keys 1 and 2
+		{2, 1}, // Keys 2 and 1 (reverse order)
+	}
+
+	// Import the musig2 package for verification
+	// We'll use the existing VerifyCompositeSignature function
+	for _, signerIndices := range combinations {
+		err := musig2.VerifyCompositeSignature(message, signature, signerIndices)
+		if err == nil {
+			// Found a valid signature with this combination
+			return true
+		}
+	}
+
+	// No valid signature found with any combination
+	return false
 }
 
 // AuxPow represents auxiliary proof-of-work data

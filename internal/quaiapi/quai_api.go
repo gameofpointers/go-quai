@@ -18,7 +18,6 @@ package quaiapi
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -1658,15 +1657,14 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 		return nil, fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
 	}
 
-	// Create signing message from AuxTemplate
-	// Hash the template without signatures for signing (same as verification)
-	tempTemplate := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
-	tempTemplate.Sigs = nil
-	tempData, err := proto.Marshal(tempTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal template for signing: %w", err)
+	// Create signing message from AuxTemplate using the new Hash() method
+	// Convert ProtoAuxTemplate to AuxTemplate to use the Hash() method
+	auxTemplate := &types.AuxTemplate{}
+	if err := auxTemplate.ProtoDecode(protoTemplate); err != nil {
+		return nil, fmt.Errorf("failed to decode AuxTemplate: %w", err)
 	}
-	message := sha256.Sum256(tempData)
+	messageHash := auxTemplate.Hash()
+	message := messageHash[:]
 
 	s.b.Logger().WithFields(log.Fields{
 		"messageHash":   hex.EncodeToString(message[:]),
@@ -1776,48 +1774,35 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 		return fmt.Errorf("AuxTemplate has no signatures")
 	}
 
-	// Create hash of the template without signatures for verification
-	tempTemplate := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
-	tempTemplate.Sigs = nil
-	tempData, err := proto.Marshal(tempTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to marshal template for verification: %w", err)
-	}
-	message := sha256.Sum256(tempData)
-	messageHashHex := hex.EncodeToString(message[:])
-	
-	s.b.Logger().WithFields(log.Fields{
-		"messageHash": messageHashHex,
-		"templateSize": len(templateData),
-	}).Info("SubmitAuxTemplate - Message hash for verification")
-
-	// Verify the signature (assuming 2-of-3 MuSig2 with participants 0 and 1)
-	// In production, we should determine the actual signers from the envelope
-	if len(protoTemplate.Sigs) > 0 && len(protoTemplate.Sigs[0].Signature) > 0 {
-		err = musig2.VerifyCompositeSignature(message[:], protoTemplate.Sigs[0].Signature, []int{0, 1})
-		if err != nil {
-			s.b.Logger().WithFields(log.Fields{
-				"error": err,
-				"messageHash": messageHashHex,
-			}).Error("Signature verification failed")
-			return fmt.Errorf("signature verification failed: %w", err)
-		}
-		
-		s.b.Logger().WithFields(log.Fields{
-			"messageHash": messageHashHex,
-			"signatureLen": len(protoTemplate.Sigs[0].Signature),
-		}).Info("✅ Signature verification successful")
-	} else {
-		s.b.Logger().WithField("messageHash", messageHashHex).Warn("No signature found for verification")
-	}
-
-	// Create AuxTemplate from proto
+	// Create AuxTemplate from proto to use the new methods
 	auxTemplate := &types.AuxTemplate{}
 	err = auxTemplate.ProtoDecode(protoTemplate)
 	if err != nil {
 		s.b.Logger().WithField("error", err).Error("Failed to decode AuxTemplate")
 		return fmt.Errorf("failed to decode AuxTemplate: %w", err)
 	}
+
+	// Get message hash using the new Hash() method
+	messageHash := auxTemplate.Hash()
+	messageHashHex := hex.EncodeToString(messageHash[:])
+
+	s.b.Logger().WithFields(log.Fields{
+		"messageHash": messageHashHex,
+		"templateSize": len(templateData),
+	}).Info("SubmitAuxTemplate - Message hash for verification")
+
+	// Verify the signature using the new VerifySignature() method
+	if !auxTemplate.VerifySignature() {
+		s.b.Logger().WithFields(log.Fields{
+			"messageHash": messageHashHex,
+		}).Error("Signature verification failed")
+		return fmt.Errorf("signature verification failed")
+	}
+	
+	s.b.Logger().WithFields(log.Fields{
+		"messageHash": messageHashHex,
+		"signatureCount": len(auxTemplate.Sigs()),
+	}).Info("✅ Signature verification successful")
 
 	// Log the received template
 	s.b.Logger().WithFields(log.Fields{
