@@ -24,6 +24,14 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 )
 
+// max returns the maximum of two uint64 values
+func max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 const (
 	GasLimitBoundDivisor    uint64 = 1024     // The bound divisor of the gas limit, used in update calculations.
 	PercentGasUsedThreshold uint64 = 90       // Percent Gas used threshold at which the gas limit adjusts
@@ -254,12 +262,11 @@ var (
 	TotalPowEngines        uint64 = 2  // Total number of PoW engines supported
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
-	// These are the 3 public keys that can participate in signing
-	// Any 2 of these can cooperatively sign an AuxTemplate
+	// Add this to go-quai/params/protocol_params.go
 	MuSig2PublicKeys = []string{
-		"0325f78ada1d0ef80bc17dbf53665b2645a3422881147897b16fb1d4f6f44e3b91", // Key 1
-		"02f6884b696e4eeb46a9ed2c259204a98d083eff72312e2ce145f055b52b55f068", // Key 2
-		"02afc5977973d21ab4d0f682f7d872c35d347699be69910444d61a0bfe42b31c7a", // Key 3
+		"033bc370eaac5156e829f671b7c5655135db359d58a3a5c3cdf37be5750597a97d", // Key 1
+		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
+		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
 	}
 )
 

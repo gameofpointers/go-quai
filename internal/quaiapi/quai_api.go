@@ -18,13 +18,17 @@ package quaiapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
@@ -33,6 +37,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/crypto"
+	"github.com/dominant-strategies/go-quai/crypto/musig2"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/metrics_config"
 	"github.com/dominant-strategies/go-quai/params"
@@ -45,7 +50,19 @@ var (
 	txPropagationMetrics = metrics_config.NewCounterVec("TxPropagation", "Transaction propagation counter")
 	txEgressCounter      = txPropagationMetrics.WithLabelValues("egress")
 	maxOutpointsRange    = uint32(1000)
+
+	// MuSig2 session management
+	musig2Sessions     = make(map[string]*MuSig2Session)
+	musig2SessionsLock sync.RWMutex
+	musig2Manager      musig2.MuSig2Manager
 )
+
+// MuSig2Session stores an active signing session
+type MuSig2Session struct {
+	Session     musig2.MuSig2SigningSession
+	AuxTemplate *types.ProtoAuxTemplate
+	CreatedAt   time.Time
+}
 
 // PublicQuaiAPI provides an API to access Quai related information.
 // It offers only methods that operate on public data that is freely available to anyone.
@@ -1182,57 +1199,6 @@ func (s *PublicBlockChainQuaiAPI) GetWork(ctx context.Context) (map[string]inter
 // TODO: Have to implement the current proxies that the stratums already use, to
 // receive a work when its done
 
-// ReceiveAuxTemplate receives an AuxTemplate from a subsidy chain
-func (s *PublicBlockChainQuaiAPI) ReceiveAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes) error {
-	s.b.Logger().WithFields(log.Fields{
-		"chain":    chainID,
-		"dataSize": len(templateData),
-	}).Debug("API: ReceiveAuxTemplate called")
-
-	// Decode the protobuf encoded AuxTemplate
-	protoTemplate := &types.ProtoAuxTemplate{}
-	err := proto.Unmarshal(templateData, protoTemplate)
-	if err != nil {
-		s.b.Logger().WithField("error", err).Error("API: Failed to unmarshal protobuf")
-		return fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
-	}
-
-	// Create AuxTemplate from proto
-	auxTemplate := &types.AuxTemplate{}
-	err = auxTemplate.ProtoDecode(protoTemplate)
-	if err != nil {
-		s.b.Logger().WithField("error", err).Error("API: Failed to decode AuxTemplate")
-		return fmt.Errorf("failed to decode AuxTemplate: %w", err)
-	}
-
-	// Log the received template for debugging
-	s.b.Logger().WithFields(log.Fields{
-		"chain":         chainID,
-		"powID":         auxTemplate.PowID(),
-		"height":        auxTemplate.Height(),
-		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
-		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
-		"coinbaseValue": auxTemplate.CoinbaseValue(),
-	}).Info("Received AuxTemplate from subsidy chain")
-
-	// Broadcast the template to the network
-	err = s.b.BroadcastAuxTemplate(auxTemplate, s.b.NodeLocation())
-	if err != nil {
-		s.b.Logger().WithFields(log.Fields{
-			"chain": chainID,
-			"error": err,
-		}).Error("Failed to broadcast AuxTemplate")
-		return fmt.Errorf("failed to broadcast AuxTemplate: %w", err)
-	}
-
-	s.b.Logger().WithFields(log.Fields{
-		"chain": chainID,
-		"powID": auxTemplate.PowID(),
-	}).Info("Successfully broadcast AuxTemplate")
-
-	return nil
-}
-
 func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw hexutil.Bytes) error {
 	nodeCtx := s.b.NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
@@ -1644,4 +1610,245 @@ func (s *PublicBlockChainQuaiAPI) GetTransactionReceipt(ctx context.Context, has
 		fields["contractAddress"] = receipt.ContractAddress.Hex()
 	}
 	return fields, nil
+}
+
+// InitializeMuSig2Manager initializes the global MuSig2 manager
+func InitializeMuSig2Manager(privKey *btcec.PrivateKey) error {
+	var err error
+	musig2Manager, err = musig2.NewManager(privKey)
+	if err != nil {
+		return fmt.Errorf("failed to initialize MuSig2 manager: %w", err)
+	}
+	return nil
+}
+
+// SignAuxTemplateResponse represents the response from signing an AuxTemplate
+type SignAuxTemplateResponse struct {
+	PublicNonce      string `json:"publicNonce"`
+	PartialSignature string `json:"partialSignature"`
+	MessageHash      string `json:"messageHash"`
+}
+
+// SignAuxTemplate initiates MuSig2 signing for an AuxTemplate
+func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateData hexutil.Bytes, otherParticipantIndex int, otherNonce hexutil.Bytes) (*SignAuxTemplateResponse, error) {
+	// Try direct fmt.Println to ensure we're hitting this method
+	fmt.Println("DEBUG: SignAuxTemplate called with dataSize:", len(templateData), "otherIndex:", otherParticipantIndex, "nonceSize:", len(otherNonce))
+
+	s.b.Logger().WithFields(log.Fields{
+		"dataSize":    len(templateData),
+		"otherIndex":  otherParticipantIndex,
+		"nonceSize":   len(otherNonce),
+	}).Info("API: SignAuxTemplate called - START")
+
+	// Get the MuSig2 key manager
+	keyManager, err := GetMuSig2Keys()
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to get MuSig2 keys")
+		return nil, fmt.Errorf("failed to get MuSig2 keys: %w", err)
+	}
+	if keyManager == nil {
+		return nil, fmt.Errorf("MuSig2 keys not configured - set MUSIG2_PRIVKEY environment variable")
+	}
+
+	// Decode the protobuf encoded AuxTemplate
+	protoTemplate := &types.ProtoAuxTemplate{}
+	err = proto.Unmarshal(templateData, protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to unmarshal AuxTemplate")
+		return nil, fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
+	}
+
+	// Create signing message from AuxTemplate
+	// Hash the template without signatures for signing (same as verification)
+	tempTemplate := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
+	tempTemplate.Sigs = nil
+	tempData, err := proto.Marshal(tempTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal template for signing: %w", err)
+	}
+	message := sha256.Sum256(tempData)
+
+	s.b.Logger().WithFields(log.Fields{
+		"messageHash":   hex.EncodeToString(message[:]),
+		"templateSize":  len(templateData),
+	}).Info("Creating signing message from AuxTemplate")
+
+	// Create a musig2.Manager from the key manager's private key
+	signingManager, err := musig2.NewManager(keyManager.PrivateKey)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to create signing manager")
+		return nil, fmt.Errorf("failed to create signing manager: %w", err)
+	}
+
+	// Log the participant index to verify it's correct
+	s.b.Logger().WithFields(log.Fields{
+		"participantIndex": signingManager.GetParticipantIndex(),
+		"expectedIndex":    keyManager.ParticipantIndex,
+	}).Info("Created MuSig2 signing manager")
+
+	// Create signing session
+	session, err := signingManager.NewSigningSession(message[:], otherParticipantIndex)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to create signing session")
+		return nil, fmt.Errorf("failed to create signing session: %w", err)
+	}
+
+	// Get our public nonce
+	ourNonce := session.GetPublicNonce()
+
+	s.b.Logger().WithFields(log.Fields{
+		"ourNonce":   hex.EncodeToString(ourNonce),
+	}).Info("Generated our nonce")
+
+	// If other nonce is provided, complete the partial signature
+	var partialSig []byte
+	if len(otherNonce) > 0 {
+		s.b.Logger().WithFields(log.Fields{
+			"otherNonce": hex.EncodeToString(otherNonce),
+		}).Info("Registering other party's nonce")
+
+		// Register the other party's nonce
+		err = session.RegisterOtherNonce(otherNonce)
+		if err != nil {
+			s.b.Logger().WithField("error", err).Error("Failed to register other nonce")
+			return nil, fmt.Errorf("failed to register other nonce: %w", err)
+		}
+
+		// Create our partial signature
+		partialSig, err = session.CreatePartialSignature()
+		if err != nil {
+			s.b.Logger().WithField("error", err).Error("Failed to create partial signature")
+			return nil, fmt.Errorf("failed to create partial signature: %w", err)
+		}
+
+		s.b.Logger().WithFields(log.Fields{
+			"partialSig": hex.EncodeToString(partialSig),
+			"sigLen": len(partialSig),
+		}).Info("Created partial signature")
+	}
+
+	// Store session for potential future use
+	sessionID := hex.EncodeToString(message[:])
+	musig2SessionsLock.Lock()
+	musig2Sessions[sessionID] = &MuSig2Session{
+		Session:     session,
+		AuxTemplate: protoTemplate,
+		CreatedAt:   time.Now(),
+	}
+	musig2SessionsLock.Unlock()
+
+	// Clean up old sessions (older than 5 minutes)
+	go cleanupOldSessions()
+
+	response := &SignAuxTemplateResponse{
+		PublicNonce: hex.EncodeToString(ourNonce),
+		MessageHash: hex.EncodeToString(message[:]),
+	}
+
+	if len(partialSig) > 0 {
+		response.PartialSignature = hex.EncodeToString(partialSig)
+	}
+
+	s.b.Logger().WithFields(log.Fields{
+		"nonceLen":      len(ourNonce),
+		"hasPartialSig": len(partialSig) > 0,
+	}).Info("SignAuxTemplate completed")
+
+	return response, nil
+}
+
+// SubmitAuxTemplate receives and processes a fully signed AuxTemplate
+func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templateData hexutil.Bytes) error {
+	s.b.Logger().WithFields(log.Fields{
+		"dataSize": len(templateData),
+	}).Debug("API: SubmitAuxTemplate called")
+
+	// Decode the protobuf encoded AuxTemplate
+	protoTemplate := &types.ProtoAuxTemplate{}
+	err := proto.Unmarshal(templateData, protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to unmarshal AuxTemplate")
+		return fmt.Errorf("failed to unmarshal AuxTemplate: %w", err)
+	}
+
+	// Verify the template has signatures
+	if len(protoTemplate.Sigs) == 0 {
+		return fmt.Errorf("AuxTemplate has no signatures")
+	}
+
+	// Create hash of the template without signatures for verification
+	tempTemplate := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
+	tempTemplate.Sigs = nil
+	tempData, err := proto.Marshal(tempTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to marshal template for verification: %w", err)
+	}
+	message := sha256.Sum256(tempData)
+	messageHashHex := hex.EncodeToString(message[:])
+	
+	s.b.Logger().WithFields(log.Fields{
+		"messageHash": messageHashHex,
+		"templateSize": len(templateData),
+	}).Info("SubmitAuxTemplate - Message hash for verification")
+
+	// Verify the signature (assuming 2-of-3 MuSig2 with participants 0 and 1)
+	// In production, we should determine the actual signers from the envelope
+	if len(protoTemplate.Sigs) > 0 && len(protoTemplate.Sigs[0].Signature) > 0 {
+		err = musig2.VerifyCompositeSignature(message[:], protoTemplate.Sigs[0].Signature, []int{0, 1})
+		if err != nil {
+			s.b.Logger().WithFields(log.Fields{
+				"error": err,
+				"messageHash": messageHashHex,
+			}).Error("Signature verification failed")
+			return fmt.Errorf("signature verification failed: %w", err)
+		}
+		
+		s.b.Logger().WithFields(log.Fields{
+			"messageHash": messageHashHex,
+			"signatureLen": len(protoTemplate.Sigs[0].Signature),
+		}).Info("✅ Signature verification successful")
+	} else {
+		s.b.Logger().WithField("messageHash", messageHashHex).Warn("No signature found for verification")
+	}
+
+	// Create AuxTemplate from proto
+	auxTemplate := &types.AuxTemplate{}
+	err = auxTemplate.ProtoDecode(protoTemplate)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to decode AuxTemplate")
+		return fmt.Errorf("failed to decode AuxTemplate: %w", err)
+	}
+
+	// Log the received template
+	s.b.Logger().WithFields(log.Fields{
+		"powID":         auxTemplate.PowID(),
+		"height":        auxTemplate.Height(),
+		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
+		"coinbaseValue": auxTemplate.CoinbaseValue(),
+		"hasSigs":       len(protoTemplate.Sigs) > 0,
+	}).Info("Received signed AuxTemplate")
+
+	// Broadcast the template to the network
+	err = s.b.BroadcastAuxTemplate(auxTemplate, s.b.NodeLocation())
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("Failed to broadcast AuxTemplate")
+		return fmt.Errorf("failed to broadcast AuxTemplate: %w", err)
+	}
+
+	s.b.Logger().Info("Successfully submitted and broadcast signed AuxTemplate")
+	return nil
+}
+
+// cleanupOldSessions removes sessions older than 5 minutes
+func cleanupOldSessions() {
+	musig2SessionsLock.Lock()
+	defer musig2SessionsLock.Unlock()
+
+	cutoff := time.Now().Add(-5 * time.Minute)
+	for id, session := range musig2Sessions {
+		if session.CreatedAt.Before(cutoff) {
+			delete(musig2Sessions, id)
+		}
+	}
 }
