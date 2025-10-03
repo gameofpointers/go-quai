@@ -1349,6 +1349,10 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.WorkObjectHeader().SetLock(header.Lock())
 		combinedPendingHeader.WorkObjectHeader().SetPrimaryCoinbase(header.PrimaryCoinbase())
 		combinedPendingHeader.WorkObjectHeader().SetData(header.Data())
+		// TODO: Add a warning here if after the fork the aux pow is not found
+		if header.AuxPow() != nil {
+			combinedPendingHeader.WorkObjectHeader().SetAuxPow(header.AuxPow())
+		}
 
 		combinedPendingHeader.Header().SetEtxRollupHash(header.EtxRollupHash())
 		combinedPendingHeader.Header().SetUncledEntropy(header.Header().UncledEntropy())
