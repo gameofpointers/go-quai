@@ -763,8 +763,22 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	// Use a reasonable height (KAWPOW activation or current block number)
 	// For now, use KAWPOW activation height as minimum
 	ravencoinHeader.Height = 1219736 // KAWPOW activation height
-	// Set reasonable difficulty bits (0x1d00ffff = difficulty 1)
-	ravencoinHeader.Bits = 0x1d00ffff
+
+	// Convert the difficulty to bits
+	if work.wo.Difficulty().Cmp(big.NewInt(0)) > 0 {
+		log.Global.WithFields(log.Fields{
+			"difficulty": work.wo.Difficulty().String(),
+		}).Info("Converting difficulty to nBits")
+		ravencoinHeader.Bits, err = common.DifficultyToBits(work.wo.Difficulty())
+		if err != nil {
+			return nil, err
+		}
+		log.Global.WithFields(log.Fields{
+			"nBits": fmt.Sprintf("0x%08x", ravencoinHeader.Bits),
+		}).Info("Converted difficulty to nBits")
+	} else {
+		log.Global.Warn("Difficulty is zero or negative, not setting nBits")
+	}
 
 	// Set version to KAWPOW version
 	ravencoinHeader.Version = 0x20000000
@@ -777,7 +791,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	// Dont have the actual hash of the block yet
 	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), nil)
 
-	// write the hash of the work object header into the auxpow extra data field
+	// Setting the auxpow so that pow id is registered properly
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
 
 	// Create a local environment copy, avoid the data race with snapshot state.
@@ -792,7 +806,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, newWo.SealHash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
 	// Dont have the actual hash of the block yet
 	auxPow = types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
-	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
+	newWo.WorkObjectHeader().SetAuxPow(auxPow)
 
 	w.printPendingHeaderInfo(work, newWo, start)
 	work.utxosCreate = nil

@@ -201,9 +201,9 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 		// Latest submission from logs
 		blockHeight := uint64(1219736)
-		nonce64 := uint64(281475604189234)
-		headerHashStr := "822ddeefeda535c00d1099710e1dd279618d5728260e6a5529ad63f467a89529"
-		expectedMixHash := "86aa9dd58f1383bf2c913ba40cf02fdba116a8295f7b39fe8bd1e25e27ecedf7"
+		nonce64 := uint64(281475175521209)
+		headerHashStr := "89daddb9eef83fcef74d272e64a407b33280f5b2d2f057eb8cde6760672f7b4e"
+		expectedMixHash := "77148b2f3534d9706d667cd30b16bda0d4d037476ca17f5360622124f6439eb5"
 
 		cache := kawpow.cache(blockHeight)
 		size := datasetSize(blockHeight)

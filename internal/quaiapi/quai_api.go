@@ -1240,6 +1240,8 @@ func (s *PublicBlockChainQuaiAPI) SubmitBlock(ctx context.Context, raw hexutil.B
 		"seal":       sealHash.Hex(),
 	}).Info("Received mined KawPow block")
 
+	// get the pending block body
+
 	return sealHash, nil
 }
 
