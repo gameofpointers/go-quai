@@ -224,7 +224,6 @@ search:
 					auxPow.Signature(),
 					auxPow.MerkleBranch(),
 					updatedCoinbaseTx,
-					auxPow.PrevHash(),
 					auxPow.SignatureTime(),
 				)
 

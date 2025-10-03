@@ -1096,7 +1096,6 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 			append([]byte(nil), wh.auxPow.Signature()...),
 			merkleBranch,
 			wh.auxPow.Transaction(),
-			append([]byte(nil), wh.auxPow.PrevHash()...),
 			wh.auxPow.SignatureTime(),
 		)
 	}

@@ -131,13 +131,11 @@ func RPCMarshalAuxTemplate(at *AuxTemplate) map[string]interface{} {
 		return nil
 	}
 
-	// Convert merkle branch to hex strings
 	merkleBranch := make([]string, len(at.merkleBranch))
 	for i, hash := range at.merkleBranch {
 		merkleBranch[i] = hexutil.Encode(hash)
 	}
 
-	// Convert signer envelopes to maps
 	sigs := make([]map[string]interface{}, len(at.sigs))
 	for i, sig := range at.sigs {
 		sigs[i] = map[string]interface{}{
@@ -161,6 +159,48 @@ func RPCMarshalAuxTemplate(at *AuxTemplate) map[string]interface{} {
 		"merkleBranch":    merkleBranch,
 		"extranonce2Size": at.extranonce2Size,
 		"sigs":            sigs,
+	}
+}
+
+// RPCMarshalAuxPowForKawPow converts AuxPow to a map for RPC serialization
+func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
+	if ap == nil {
+		return nil
+	}
+
+	merkleBranch := make([]string, len(ap.merkleBranch))
+	for i, hash := range ap.merkleBranch {
+		merkleBranch[i] = hexutil.Encode(hash)
+	}
+
+	ravencoinHeader, err := DecodeRavencoinHeader(ap.header)
+	if err != nil {
+		return nil
+	}
+
+	var (
+		coinbaseValue uint64
+		coinbaseAux   []byte
+	)
+
+	if tx := ap.transaction; tx != nil {
+		if len(tx.TxOut) > 0 && tx.TxOut[0].Value >= 0 {
+			coinbaseValue = uint64(tx.TxOut[0].Value)
+		}
+		if len(tx.TxIn) > 0 {
+			coinbaseAux = tx.TxIn[0].SignatureScript
+		}
+	}
+
+	return map[string]interface{}{
+		"version":           ravencoinHeader.Version,
+		"height":            hexutil.EncodeUint64(uint64(ravencoinHeader.Height)),
+		"bits":              hexutil.EncodeUint64(uint64(ravencoinHeader.Bits)),
+		"previousblockhash": hexutil.Encode(ravencoinHeader.HashPrevBlock.Bytes()),
+		"coinbasevalue":     coinbaseValue,
+		"target":            GetTargetInHex(ravencoinHeader.Bits),
+		"coinbaseaux":       hexutil.Encode(coinbaseAux),
+		"merkleBranch":      merkleBranch,
 	}
 }
 
@@ -357,7 +397,6 @@ type AuxPow struct {
 	signature     []byte      // Signature proving the work
 	merkleBranch  [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
 	transaction   *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
-	prevHash      []byte      // Previous block hash reference
 	signatureTime uint64      // Timestamp when signature was created
 }
 
@@ -368,20 +407,18 @@ func NewAuxPow(powID PowID, header []byte, signature []byte, merkleBranch [][]by
 		signature:     signature,
 		merkleBranch:  merkleBranch,
 		transaction:   transaction,
-		prevHash:      []byte{},
 		signatureTime: 0,
 	}
 }
 
 // NewAuxPowWithFields creates a new AuxPow with all fields specified
-func NewAuxPowWithFields(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx, prevHash []byte, signatureTime uint64) *AuxPow {
+func NewAuxPowWithFields(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx, signatureTime uint64) *AuxPow {
 	return &AuxPow{
 		powID:         powID,
 		header:        header,
 		signature:     signature,
 		merkleBranch:  merkleBranch,
 		transaction:   transaction,
-		prevHash:      prevHash,
 		signatureTime: signatureTime,
 	}
 }
@@ -396,8 +433,6 @@ func (ap *AuxPow) MerkleBranch() [][]byte { return ap.merkleBranch }
 
 func (ap *AuxPow) Transaction() *wire.MsgTx { return ap.transaction }
 
-func (ap *AuxPow) PrevHash() []byte { return ap.prevHash }
-
 func (ap *AuxPow) SignatureTime() uint64 { return ap.signatureTime }
 
 func (ap *AuxPow) SetPowID(id PowID) { ap.powID = id }
@@ -409,8 +444,6 @@ func (ap *AuxPow) SetSignature(sig []byte) { ap.signature = sig }
 func (ap *AuxPow) SetMerkleBranch(branch [][]byte) { ap.merkleBranch = branch }
 
 func (ap *AuxPow) SetTransaction(tx *wire.MsgTx) { ap.transaction = tx }
-
-func (ap *AuxPow) SetPrevHash(hash []byte) { ap.prevHash = hash }
 
 func (ap *AuxPow) SetSignatureTime(time uint64) { ap.signatureTime = time }
 
@@ -441,7 +474,6 @@ func (ap *AuxPow) RPCMarshal() map[string]interface{} {
 		"signature":     hexutil.Encode(ap.signature),
 		"merkleBranch":  merkleBranch,
 		"transaction":   txHex,
-		"prevHash":      hexutil.Encode(ap.prevHash),
 		"signatureTime": ap.signatureTime,
 	}
 }
@@ -454,7 +486,6 @@ func (ap *AuxPow) UnmarshalJSON(data []byte) error {
 		Signature     string   `json:"signature"`
 		MerkleBranch  []string `json:"merkleBranch"`
 		Transaction   string   `json:"transaction"`
-		PrevHash      string   `json:"prevHash"`
 		SignatureTime uint64   `json:"signatureTime"`
 	}
 
@@ -497,19 +528,12 @@ func (ap *AuxPow) UnmarshalJSON(data []byte) error {
 		}
 	}
 
-	// Decode prevHash
-	prevHash, err := hexutil.Decode(dec.PrevHash)
-	if err != nil {
-		return err
-	}
-
 	// Set fields
 	ap.powID = PowID(dec.PowID)
 	ap.header = header
 	ap.signature = signature
 	ap.merkleBranch = merkleBranch
 	ap.transaction = tx
-	ap.prevHash = prevHash
 	ap.signatureTime = dec.SignatureTime
 
 	return nil
@@ -542,7 +566,6 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 		Signature:     ap.Signature(),
 		MerkleBranch:  merkleBranch,
 		Transaction:   txBytes,
-		PrevHash:      ap.PrevHash(),
 		SignatureTime: &ap.signatureTime,
 	}
 }
@@ -573,7 +596,6 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 	}
 
 	// Decode new fields
-	ap.SetPrevHash(data.GetPrevHash())
 	ap.SetSignatureTime(data.GetSignatureTime())
 
 	return nil

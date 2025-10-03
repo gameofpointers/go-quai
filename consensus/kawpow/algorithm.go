@@ -193,28 +193,37 @@ func generateCDag(cDag []uint32, cache []uint32, epoch uint64, logger *log.Logge
 		}
 	}()
 
-	// For kawpow, we need to generate a light cache for each epoch
-	// This is a simplified version - in a full implementation you'd want
-	// to follow the exact kawpow specification
-	for i := 0; i < len(cDag); i++ {
-		cDag[i] = cache[i%len(cache)]
+	keccak512 := makeHasher(sha3.NewLegacyKeccak512())
+	swapped := !isLittleEndian()
+
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&cDag))
+	header.Len *= 4
+	header.Cap *= 4
+	l1 := *(*[]byte)(unsafe.Pointer(&header))
+
+	rows := len(l1) / hashBytes
+	for i := 0; i < rows; i++ {
+		item := generateDatasetItem(cache, uint32(i), keccak512, datasetParents)
+		if swapped {
+			swapBytes(item)
+		}
+		copy(l1[i*hashBytes:], item)
 	}
 }
 
-// calculateDatasetItem calculates a single item in the kawpow dataset
-func calculateDatasetItem(cache []uint32, index uint32) []uint32 {
-	// This is a placeholder implementation
-	// In a full kawpow implementation, this would follow the exact dataset generation
-	// algorithm as specified in the kawpow documentation
-	item := make([]uint32, 64) // 256 bytes = 64 uint32s
-
-	// Use the cache to generate the item
-	for i := 0; i < len(item); i++ {
-		cacheIndex := (index*uint32(len(item)) + uint32(i)) % uint32(len(cache))
-		item[i] = cache[cacheIndex]
+func fillDatasetItem2048Words(dest []uint32, cache []uint32, index uint32, keccak512 hasher) {
+	for i := uint32(0); i < kawpowDagLoads; i++ {
+		item := generateDatasetItem(cache, index*4+i, keccak512, datasetParents)
+		for j := 0; j < hashWords; j++ {
+			dest[int(i)*hashWords+j] = binary.LittleEndian.Uint32(item[j*4:])
+		}
 	}
+}
 
-	return item
+func generateDatasetItem2048(cache []uint32, index uint32, keccak512 hasher) []uint32 {
+	words := make([]uint32, hashWords*kawpowDagLoads)
+	fillDatasetItem2048Words(words, cache, index, keccak512)
+	return words
 }
 
 // kawpowConfig holds kawpow-specific configuration
@@ -230,7 +239,7 @@ type kawpowConfig struct {
 }
 
 // kawpowInitialize performs kawpow initialization with ravencoin constants
-func kawpowInitialize(hash []byte, nonce uint64) ([25]uint32, uint64) {
+func kawpowInitialize(hash []byte, nonce uint64) ([25]uint32, [2]uint32) {
 	var seed [25]uint32
 	for i := 0; i < 8; i++ {
 		seed[i] = binary.LittleEndian.Uint32(hash[i*4 : i*4+4])
@@ -246,9 +255,11 @@ func kawpowInitialize(hash []byte, nonce uint64) ([25]uint32, uint64) {
 
 	keccakF800(&seed)
 
-	seedHead := uint64(seed[0]) + (uint64(seed[1]) << 32)
+	var hashSeed [2]uint32
+	hashSeed[0] = seed[0]
+	hashSeed[1] = seed[1]
 
-	return seed, seedHead
+	return seed, hashSeed
 }
 
 // kawpowFinalize performs kawpow finalization with ravencoin constants
@@ -287,20 +298,7 @@ func kawpowHash(cfg *kawpowConfig, height, seed, datasetSize uint64, lookup func
 	hash := make([]byte, 32)
 	binary.LittleEndian.PutUint64(hash[0:8], seed)
 	binary.LittleEndian.PutUint64(hash[8:16], height)
-
-	// For kawpow, we need to provide a lookup function that returns []byte
-	// Convert the provided lookup function
-	byteLookup := func(index uint32) []byte {
-		data := lookup(index)
-		result := make([]byte, len(data)*4)
-		for i, val := range data {
-			binary.LittleEndian.PutUint32(result[i*4:], val)
-		}
-		return result
-	}
-
-	// Call the main kawpow function from algorithm_core.go
-	_, digest := kawpow(hash, seed, datasetSize, height, l1, byteLookup)
+	_, digest := kawpow(hash, seed, datasetSize, height, l1, lookup)
 
 	return digest
 }
@@ -334,19 +332,25 @@ func makeHasher(h hash.Hash) hasher {
 // the full 32-bit input, in contrast with the FNV-1 spec which multiplies the
 // prime with one byte (octet) in turn.
 func fnv(a, b uint32) uint32 {
-	return a*0x01000193 ^ b
+	return a*fnvPrime ^ b
 }
 
 // fnvHash mixes in data into mix using the ethash fnv method.
 func fnvHash(mix []uint32, data []uint32) {
 	for i := 0; i < len(mix); i++ {
-		mix[i] = mix[i]*0x01000193 ^ data[i]
+		mix[i] = mix[i]*fnvPrime ^ data[i]
+	}
+}
+
+func swapBytes(buffer []byte) {
+	for i := 0; i < len(buffer); i += 4 {
+		binary.BigEndian.PutUint32(buffer[i:], binary.LittleEndian.Uint32(buffer[i:]))
 	}
 }
 
 // generateDatasetItem combines data from 256 pseudorandomly selected cache nodes,
 // and hashes that to compute a single dataset node.
-func generateDatasetItem(cache []uint32, index uint32, keccak512 hasher) []byte {
+func generateDatasetItem(cache []uint32, index uint32, keccak512 hasher, parents uint32) []byte {
 	// Calculate the number of theoretical rows (we use one buffer nonetheless)
 	rows := uint32(len(cache) / hashWords)
 
@@ -365,7 +369,7 @@ func generateDatasetItem(cache []uint32, index uint32, keccak512 hasher) []byte 
 		intMix[i] = binary.LittleEndian.Uint32(mix[i*4:])
 	}
 	// fnv it with a lot of random cache nodes based on index
-	for i := uint32(0); i < datasetParents; i++ {
+	for i := uint32(0); i < parents; i++ {
 		parent := fnv(index^i, intMix[i%16]) % rows
 		fnvHash(intMix, cache[parent*hashWords:])
 	}

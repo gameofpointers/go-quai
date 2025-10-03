@@ -25,12 +25,17 @@ import (
 
 const (
 	// KAWPOW specific constants (different from ProgPoW)
-	kawpowLanes        = 16 // The number of parallel lanes
-	kawpowRegs         = 32 // The register file usage size
-	kawpowCntCache     = 11 // Cache accesses per round
-	kawpowCntMath      = 18 // Math operations per round
-	kawpowCntDag       = 64 // Number of DAG accesses
-	kawpowMixBytes     = 256
+	kawpowLanes    = 16 // The number of parallel lanes
+	kawpowRegs     = 32 // The register file usage size
+	kawpowCntCache = 11 // Cache accesses per round
+	kawpowCntMath  = 18 // Math operations per round
+	kawpowCntDag   = 64 // Number of DAG accesses
+	kawpowMixBytes = 256
+)
+
+const (
+	fnvOffsetBasis = 0x811c9dc5
+	fnvPrime       = 0x01000193
 )
 
 // Core algorithm functions (identical to ProgPoW but with KAWPOW parameters)
@@ -168,8 +173,62 @@ func keccakF800Long(headerHash []byte, nonce uint64, result []uint32) []byte {
 }
 
 func fnv1a(h *uint32, d uint32) uint32 {
-	*h = (*h ^ d) * uint32(0x1000193)
+	*h = (*h ^ d) * fnvPrime
 	return *h
+}
+
+func fnv1aInline(hash, data uint32) uint32 {
+	return (hash ^ data) * fnvPrime
+}
+
+type mixRNGState struct {
+	rng        kiss99State
+	dstSeq     [kawpowRegs]uint32
+	srcSeq     [kawpowRegs]uint32
+	dstCounter uint32
+	srcCounter uint32
+}
+
+func newMixRNGState(seedLo, seedHi uint32) mixRNGState {
+	z := fnv1aInline(0x811c9dc5, seedLo)
+	w := fnv1aInline(z, seedHi)
+	jsr := fnv1aInline(w, seedLo)
+	jcong := fnv1aInline(jsr, seedHi)
+	state := mixRNGState{
+		rng: kiss99State{
+			z:     z,
+			w:     w,
+			jsr:   jsr,
+			jcong: jcong,
+		},
+	}
+	for i := uint32(0); i < kawpowRegs; i++ {
+		state.dstSeq[i] = i
+		state.srcSeq[i] = i
+	}
+	for i := uint32(kawpowRegs); i > 1; i-- {
+		j := state.rand() % i
+		state.dstSeq[i-1], state.dstSeq[j] = state.dstSeq[j], state.dstSeq[i-1]
+		j = state.rand() % i
+		state.srcSeq[i-1], state.srcSeq[j] = state.srcSeq[j], state.srcSeq[i-1]
+	}
+	return state
+}
+
+func (s *mixRNGState) nextDst() uint32 {
+	val := s.dstSeq[s.dstCounter%kawpowRegs]
+	s.dstCounter++
+	return val
+}
+
+func (s *mixRNGState) nextSrc() uint32 {
+	val := s.srcSeq[s.srcCounter%kawpowRegs]
+	s.srcCounter++
+	return val
+}
+
+func (s *mixRNGState) rand() uint32 {
+	return kiss99(&s.rng)
 }
 
 type kiss99State struct {
@@ -191,19 +250,17 @@ func kiss99(st *kiss99State) uint32 {
 	return ((MWC ^ st.jcong) + st.jsr)
 }
 
-func fillMix(seed uint64, laneId uint32) [kawpowRegs]uint32 {
-	var st kiss99State
-	var mix [kawpowRegs]uint32
-
-	fnvHash := uint32(0x811c9dc5)
-
-	st.z = fnv1a(&fnvHash, lower32(seed))
-	st.w = fnv1a(&fnvHash, higher32(seed))
-	st.jsr = fnv1a(&fnvHash, laneId)
-	st.jcong = fnv1a(&fnvHash, laneId)
-
-	for i := 0; i < kawpowRegs; i++ {
-		mix[i] = kiss99(&st)
+func initKawpowMix(hashSeed [2]uint32) [kawpowLanes][kawpowRegs]uint32 {
+	var mix [kawpowLanes][kawpowRegs]uint32
+	z := fnv1aInline(fnvOffsetBasis, hashSeed[0])
+	w := fnv1aInline(z, hashSeed[1])
+	for lane := uint32(0); lane < kawpowLanes; lane++ {
+		jsr := fnv1aInline(w, lane)
+		jcong := fnv1aInline(jsr, lane)
+		state := kiss99State{z: z, w: w, jsr: jsr, jcong: jcong}
+		for i := 0; i < kawpowRegs; i++ {
+			mix[lane][i] = kiss99(&state)
+		}
 	}
 	return mix
 }
@@ -220,29 +277,6 @@ func merge(a *uint32, b uint32, r uint32) {
 	default:
 		*a = rotr32(*a, ((r>>16)%31)+1) ^ b
 	}
-}
-
-func kawpowInit(seed uint64) (kiss99State, [kawpowRegs]uint32, [kawpowRegs]uint32) {
-	var randState kiss99State
-
-	fnvHash := uint32(0x811c9dc5)
-
-	randState.z = fnv1a(&fnvHash, lower32(seed))
-	randState.w = fnv1a(&fnvHash, higher32(seed))
-	randState.jsr = fnv1a(&fnvHash, lower32(seed))
-	randState.jcong = fnv1a(&fnvHash, higher32(seed))
-
-	// Create a random sequence of mix destinations and sources
-	var dstSeq = [32]uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}
-	var srcSeq = [32]uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}
-
-	for i := uint32(kawpowRegs - 1); i > 0; i-- {
-		j := kiss99(&randState) % (i + 1)
-		dstSeq[i], dstSeq[j] = dstSeq[j], dstSeq[i]
-		j = kiss99(&randState) % (i + 1)
-		srcSeq[i], srcSeq[j] = srcSeq[j], srcSeq[i]
-	}
-	return randState, dstSeq, srcSeq
 }
 
 // Random math between two input values
@@ -279,107 +313,95 @@ func kawpowMath(a uint32, b uint32, r uint32) uint32 {
 	}
 }
 
-func kawpowLoop(seed uint64, loop uint32, mix *[kawpowLanes][kawpowRegs]uint32,
-	lookup func(index uint32) []byte,
-	cDag []uint32, datasetSize uint32) {
-	// All lanes share a base address for the global load
-	gOffset := mix[loop%kawpowLanes][0] % (64 * datasetSize / (kawpowLanes * kawpowDagLoads))
+func kawpowLoop(period uint64, round uint32, mix *[kawpowLanes][kawpowRegs]uint32,
+	lookup func(index uint32) []uint32,
+	cDag []uint32, datasetItems uint32) {
+	if datasetItems == 0 {
+		return
+	}
 
-	var (
-		srcCounter uint32
-		dstCounter uint32
-		randState  kiss99State
-		srcSeq     [32]uint32
-		dstSeq     [32]uint32
-		rnd        = kiss99
-		index      uint32
-		data_g     []uint32 = make([]uint32, kawpowDagLoads)
-	)
-	// 256 bytes of dag data
-	dag_item := make([]byte, 256)
-	// The lookup returns 64, so we'll fetch four items
-	copy(dag_item, lookup((gOffset*kawpowLanes)*kawpowDagLoads))
-	copy(dag_item[64:], lookup((gOffset*kawpowLanes)*kawpowDagLoads+16))
-	copy(dag_item[128:], lookup((gOffset*kawpowLanes)*kawpowDagLoads+32))
-	copy(dag_item[192:], lookup((gOffset*kawpowLanes)*kawpowDagLoads+48))
+	itemIndex := mix[round%kawpowLanes][0] % datasetItems
+	dagWords := lookup(itemIndex)
+	if len(dagWords) == 0 {
+		return
+	}
 
-	// Lanes can execute in parallel and will be convergent
-	for l := uint32(0); l < kawpowLanes; l++ {
+	wordsPerLane := len(dagWords) / int(kawpowLanes)
+	if wordsPerLane == 0 {
+		return
+	}
 
-		// initialize the seed and mix destination sequence
-		randState, dstSeq, srcSeq = kawpowInit(seed)
-		srcCounter = uint32(0)
-		dstCounter = uint32(0)
+	state := newMixRNGState(uint32(period), uint32(period>>32))
 
-		for i := uint32(0); i < kawpowCntMath; i++ {
-			if i < kawpowCntCache {
-				// Cached memory access
-				// lanes access random location
+	maxOps := kawpowCntCache
+	if kawpowCntMath > maxOps {
+		maxOps = kawpowCntMath
+	}
 
-				src := srcSeq[(srcCounter)%kawpowRegs]
-				srcCounter++
-
-				offset := mix[l][src] % kawpowCacheWords
+	cacheLen := uint32(len(cDag))
+	for op := 0; op < maxOps; op++ {
+		if op < kawpowCntCache && cacheLen > 0 {
+			src := state.nextSrc()
+			dst := state.nextDst()
+			sel := state.rand()
+			for lane := uint32(0); lane < kawpowLanes; lane++ {
+				offset := mix[lane][src] % cacheLen
 				data32 := cDag[offset]
-
-				dst := dstSeq[(dstCounter)%kawpowRegs]
-				dstCounter++
-
-				r := kiss99(&randState)
-				merge(&mix[l][dst], data32, r)
+				merge(&mix[lane][dst], data32, sel)
 			}
+		}
 
-			// Random Math
-			srcRnd := rnd(&randState) % (kawpowRegs * (kawpowRegs - 1))
+		if op < kawpowCntMath {
+			srcRnd := state.rand() % (kawpowRegs * (kawpowRegs - 1))
 			src1 := srcRnd % kawpowRegs
 			src2 := srcRnd / kawpowRegs
 			if src2 >= src1 {
 				src2++
 			}
-			data32 := kawpowMath(mix[l][src1], mix[l][src2], rnd(&randState))
-
-			dst := dstSeq[(dstCounter)%kawpowRegs]
-			dstCounter++
-
-			merge(&mix[l][dst], data32, rnd(&randState))
+			sel1 := state.rand()
+			dst := state.nextDst()
+			sel2 := state.rand()
+			for lane := uint32(0); lane < kawpowLanes; lane++ {
+				data32 := kawpowMath(mix[lane][src1], mix[lane][src2], sel1)
+				merge(&mix[lane][dst], data32, sel2)
+			}
 		}
-		index = ((l ^ loop) % kawpowLanes) * kawpowDagLoads
+	}
 
-		data_g[0] = binary.LittleEndian.Uint32(dag_item[4*index:])
-		data_g[1] = binary.LittleEndian.Uint32(dag_item[4*(index+1):])
-		data_g[2] = binary.LittleEndian.Uint32(dag_item[4*(index+2):])
-		data_g[3] = binary.LittleEndian.Uint32(dag_item[4*(index+3):])
+	dsts := make([]uint32, wordsPerLane)
+	sels := make([]uint32, wordsPerLane)
+	for i := 0; i < wordsPerLane; i++ {
+		if i == 0 {
+			dsts[i] = 0
+		} else {
+			dsts[i] = state.nextDst()
+		}
+		sels[i] = state.rand()
+	}
 
-		merge(&mix[l][0], data_g[0], rnd(&randState))
-
-		for i := 1; i < kawpowDagLoads; i++ {
-			dst := dstSeq[(dstCounter)%kawpowRegs]
-			dstCounter++
-			merge(&mix[l][dst], data_g[i], rnd(&randState))
+	for lane := uint32(0); lane < kawpowLanes; lane++ {
+		offset := int(((lane ^ round) % kawpowLanes) * uint32(wordsPerLane))
+		for i := 0; i < wordsPerLane; i++ {
+			word := dagWords[offset+i]
+			merge(&mix[lane][dsts[i]], word, sels[i])
 		}
 	}
 }
 
 // Main KAWPOW algorithm (ProgPoW with KAWPOW parameters)
 func kawpow(hash []byte, nonce uint64, size uint64, blockNumber uint64, cDag []uint32,
-	lookup func(index uint32) []byte) ([]byte, []byte) {
-	var (
-		mix         [kawpowLanes][kawpowRegs]uint32
-		laneResults [kawpowLanes]uint32
-	)
+	lookup func(index uint32) []uint32) ([]byte, []byte) {
+	var laneResults [kawpowLanes]uint32
 
 	// KAWPOW: Use kawpowInitialize instead of keccakF800Short to get seed with RAVENCOINKAWAOW
 	result := make([]uint32, 8)
-	seed, seedHead := kawpowInitialize(hash, nonce)
-	seedValue := seedHead // Use the seedHead for ProgPoW operations
-
-	for lane := uint32(0); lane < kawpowLanes; lane++ {
-		mix[lane] = fillMix(seedValue, lane)
-	}
+	seed, hashSeed := kawpowInitialize(hash, nonce)
+	mix := initKawpowMix(hashSeed)
 	// KAWPOW: Use period length 3 instead of 10
 	period := (blockNumber / kawpowPeriodLength)
+	datasetItems := uint32(size / kawpowMixBytes)
 	for l := uint32(0); l < kawpowCntDag; l++ {
-		kawpowLoop(period, l, &mix, lookup, cDag, uint32(size/kawpowMixBytes))
+		kawpowLoop(period, l, &mix, lookup, cDag, datasetItems)
 	}
 
 	// Reduce mix data to a single per-lane result
@@ -412,24 +434,26 @@ func kawpow(hash []byte, nonce uint64, size uint64, blockNumber uint64, cDag []u
 func kawpowLight(size uint64, cache []uint32, hash []byte, nonce uint64,
 	blockNumber uint64, cDag []uint32) ([]byte, []byte) {
 	keccak512 := makeHasher(sha3.NewLegacyKeccak512())
-	lookup := func(index uint32) []byte {
-		return generateDatasetItem(cache, index/16, keccak512)
+	lookup := func(index uint32) []uint32 {
+		return generateDatasetItem2048(cache, index, keccak512)
 	}
 	return kawpow(hash, nonce, size, blockNumber, cDag, lookup)
 }
 
 // kawpowFull computes the proof-of-work value for KAWPOW using the full dataset
 func kawpowFull(dataset []uint32, hash []byte, nonce uint64, blockNumber uint64) ([]byte, []byte) {
-	lookup := func(index uint32) []byte {
-		mix := make([]byte, hashBytes)
-		for i := uint32(0); i < hashWords; i++ {
-			binary.LittleEndian.PutUint32(mix[i*4:], dataset[index+i])
+	wordsPerItem := hashWords * kawpowDagLoads
+	lookup := func(index uint32) []uint32 {
+		start := int(index) * wordsPerItem
+		end := start + wordsPerItem
+		if start < 0 || end > len(dataset) {
+			return nil
 		}
-		return mix
+		out := make([]uint32, wordsPerItem)
+		copy(out, dataset[start:end])
+		return out
 	}
-	cDag := make([]uint32, kawpowCacheBytes/4)
-	for i := uint32(0); i < kawpowCacheBytes/4; i++ {
-		cDag[i] = dataset[i]
-	}
+	cDag := make([]uint32, kawpowCacheWords)
+	copy(cDag, dataset[:len(cDag)])
 	return kawpow(hash, nonce, uint64(len(dataset))*4, blockNumber, cDag, lookup)
 }

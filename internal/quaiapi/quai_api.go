@@ -1190,13 +1190,58 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw he
 }
 
 // GetWork retrieves a new work item to mine
-func (s *PublicBlockChainQuaiAPI) GetWork(ctx context.Context) (map[string]interface{}, error) {
-	auxTemplate := s.b.GetWork()
-	return types.RPCMarshalAuxTemplate(auxTemplate), nil
+func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context) (map[string]interface{}, error) {
+	pendingHeader, err := s.b.GetPendingHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	// add the seal hash to the end of the coinbase aux key
+	fields := types.RPCMarshalAuxPowForKawPow(pendingHeader.AuxPow())
+	return fields, nil
 }
 
-// TODO: Have to implement the current proxies that the stratums already use, to
-// receive a work when its done
+func (s *PublicBlockChainQuaiAPI) SubmitBlock(ctx context.Context, raw hexutil.Bytes) (common.Hash, error) {
+	const ravencoinHeaderSize = 120
+
+	log.Global.Info("SubmitBlock called with bytes", raw)
+
+	if len(raw) <= ravencoinHeaderSize {
+		return common.Hash{}, errors.New("submitBlock payload too short")
+	}
+
+	data := []byte(raw)
+	rvnHeaderBytes := data[:ravencoinHeaderSize]
+
+	ravencoinHeader, err := types.DecodeRavencoinHeader(rvnHeaderBytes)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("decode ravencoin header: %w", err)
+	}
+
+	extra := data[ravencoinHeaderSize:]
+	coinbaseTx, err := types.DecodeRavencoinCoinbaseTransaction(extra)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	if len(coinbaseTx.TxIn) == 0 {
+		return common.Hash{}, errors.New("coinbase transaction missing inputs")
+	}
+
+	sealHash, err := types.ExtractSealHashFromCoinbase(coinbaseTx.TxIn[0].SignatureScript)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	s.b.Logger().WithFields(log.Fields{
+		"height":     ravencoinHeader.Height,
+		"nonce":      ravencoinHeader.Nonce64,
+		"mixHash":    ravencoinHeader.MixHash.Hex(),
+		"headerHash": ravencoinHeader.GetKAWPOWHeaderHash().Hex(),
+		"seal":       sealHash.Hex(),
+	}).Info("Received mined KawPow block")
+
+	return sealHash, nil
+}
 
 func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw hexutil.Bytes) error {
 	nodeCtx := s.b.NodeCtx()
@@ -1634,9 +1679,9 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 	fmt.Println("DEBUG: SignAuxTemplate called with dataSize:", len(templateData), "otherIndex:", otherParticipantIndex, "nonceSize:", len(otherNonce))
 
 	s.b.Logger().WithFields(log.Fields{
-		"dataSize":    len(templateData),
-		"otherIndex":  otherParticipantIndex,
-		"nonceSize":   len(otherNonce),
+		"dataSize":   len(templateData),
+		"otherIndex": otherParticipantIndex,
+		"nonceSize":  len(otherNonce),
 	}).Info("API: SignAuxTemplate called - START")
 
 	// Get the MuSig2 key manager
@@ -1667,8 +1712,8 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 	message := messageHash[:]
 
 	s.b.Logger().WithFields(log.Fields{
-		"messageHash":   hex.EncodeToString(message[:]),
-		"templateSize":  len(templateData),
+		"messageHash":  hex.EncodeToString(message[:]),
+		"templateSize": len(templateData),
 	}).Info("Creating signing message from AuxTemplate")
 
 	// Create a musig2.Manager from the key manager's private key
@@ -1695,7 +1740,7 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 	ourNonce := session.GetPublicNonce()
 
 	s.b.Logger().WithFields(log.Fields{
-		"ourNonce":   hex.EncodeToString(ourNonce),
+		"ourNonce": hex.EncodeToString(ourNonce),
 	}).Info("Generated our nonce")
 
 	// If other nonce is provided, complete the partial signature
@@ -1721,7 +1766,7 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 
 		s.b.Logger().WithFields(log.Fields{
 			"partialSig": hex.EncodeToString(partialSig),
-			"sigLen": len(partialSig),
+			"sigLen":     len(partialSig),
 		}).Info("Created partial signature")
 	}
 
@@ -1787,7 +1832,7 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 	messageHashHex := hex.EncodeToString(messageHash[:])
 
 	s.b.Logger().WithFields(log.Fields{
-		"messageHash": messageHashHex,
+		"messageHash":  messageHashHex,
 		"templateSize": len(templateData),
 	}).Info("SubmitAuxTemplate - Message hash for verification")
 
@@ -1798,9 +1843,9 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 		}).Error("Signature verification failed")
 		return fmt.Errorf("signature verification failed")
 	}
-	
+
 	s.b.Logger().WithFields(log.Fields{
-		"messageHash": messageHashHex,
+		"messageHash":    messageHashHex,
 		"signatureCount": len(auxTemplate.Sigs()),
 	}).Info("✅ Signature verification successful")
 

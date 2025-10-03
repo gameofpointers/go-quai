@@ -87,7 +87,7 @@ message ProtoAuxPow {
   optional bytes signature = 3;  // Signature proving the work
   repeated bytes merkle_branch = 4;  // Merkle branch for coinbase
   optional bytes transaction = 5;  // Full coinbase transaction (serialized wire format, contains value in TxOut[0])
-  optional bytes prev_hash = 6;  // Previous block hash reference
+  reserved 6;
   optional uint64 signature_time = 7;  // Timestamp when signature was created
 }
 

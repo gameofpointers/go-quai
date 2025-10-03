@@ -2,6 +2,7 @@ package kawpow
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -114,7 +115,6 @@ func TestKAWPOWImplementation(t *testing.T) {
 			[]byte{},
 			[][]byte{},
 			coinbaseTx,
-			[]byte{},
 			0,
 		)
 
@@ -142,6 +142,95 @@ func TestKAWPOWImplementation(t *testing.T) {
 			t.Logf("✅ Mining and validation produce identical results")
 		} else {
 			t.Errorf("Mining and validation results differ")
+		}
+	})
+
+	t.Run("First Ravencoin KAWPOW block 1219737", func(t *testing.T) {
+		logger := log.NewLogger("test.log", "info", 100)
+		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+
+		// First KAWPOW block on Ravencoin blockchain
+		blockHeight := uint64(1219737)
+		nonce64 := uint64(0xe9d8d6)
+		headerHashStr := "e7946fbc0ddbf37a6210ae87ea66387621a39a8987e176d0c3574e9deb247aa2"
+		headerHashStrReversed := "a27a24eb9d4e57c3d076e187899aa321763866ea87ae10627af3db0dbc6f94e7"
+		// Mixhash as stored in raw block (little-endian)
+		expectedMixHash := "b0e016aaa82b7bc95a1ff881d5b42038307fe36429510fcf61659a53e47dd5a8"
+
+		cache := kawpow.cache(blockHeight)
+		size := datasetSize(blockHeight)
+		if cache.cDag == nil {
+			cDag := make([]uint32, kawpowCacheWords)
+			generateCDag(cDag, cache.cache, blockHeight/C_epochLength, kawpow.logger)
+			cache.cDag = cDag
+		}
+
+		// Test with original byte order
+		headerHashBytes, _ := hex.DecodeString(headerHashStr)
+		digest1, _ := kawpowLight(size, cache.cache, headerHashBytes, nonce64, blockHeight, cache.cDag)
+		mixHash1 := hex.EncodeToString(digest1)
+
+		// Test with reversed byte order
+		headerHashBytesRev, _ := hex.DecodeString(headerHashStrReversed)
+		digest2, _ := kawpowLight(size, cache.cache, headerHashBytesRev, nonce64, blockHeight, cache.cDag)
+		mixHash2 := hex.EncodeToString(digest2)
+
+		mixHash := mixHash1
+		if mixHash2 == expectedMixHash {
+			mixHash = mixHash2
+			fmt.Printf("✅ REVERSED byte order matches!\n")
+		}
+
+		fmt.Printf("First KAWPOW Ravencoin Block %d:\n", blockHeight)
+		fmt.Printf("  Header hash:     %s\n", headerHashStr)
+		fmt.Printf("  Nonce:           %d (0x%x)\n", nonce64, nonce64)
+		fmt.Printf("  Result mixhash:  %s\n", mixHash)
+		fmt.Printf("  Expected:        %s\n", expectedMixHash)
+		fmt.Printf("  Match: %v\n", mixHash == expectedMixHash)
+
+		if mixHash != expectedMixHash {
+			t.Errorf("❌ Mixhash mismatch with real Ravencoin block")
+		} else {
+			t.Logf("✅ Mixhash matches real Ravencoin blockchain!")
+		}
+	})
+
+	t.Run("GPU Mined block validation", func(t *testing.T) {
+		logger := log.NewLogger("test.log", "info", 100)
+		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+
+		// Latest submission from logs
+		blockHeight := uint64(1219736)
+		nonce64 := uint64(281475604189234)
+		headerHashStr := "822ddeefeda535c00d1099710e1dd279618d5728260e6a5529ad63f467a89529"
+		expectedMixHash := "86aa9dd58f1383bf2c913ba40cf02fdba116a8295f7b39fe8bd1e25e27ecedf7"
+
+		cache := kawpow.cache(blockHeight)
+		size := datasetSize(blockHeight)
+		if cache.cDag == nil {
+			cDag := make([]uint32, kawpowCacheWords)
+			generateCDag(cDag, cache.cache, blockHeight/C_epochLength, kawpow.logger)
+			cache.cDag = cDag
+		}
+
+		// Test with the header hash from stratum
+		headerHashBytes, _ := hex.DecodeString(headerHashStr)
+		digest, result := kawpowLight(size, cache.cache, headerHashBytes, nonce64, blockHeight, cache.cDag)
+		mixHash := hex.EncodeToString(digest)
+		powHash := hex.EncodeToString(result)
+
+		fmt.Printf("Header hash:     %s\n", headerHashStr)
+		fmt.Printf("Nonce:           %d\n", nonce64)
+		fmt.Printf("Height:          %d\n", blockHeight)
+		fmt.Printf("\nResult mixhash:  %s\n", mixHash)
+		fmt.Printf("Expected:        %s\n", expectedMixHash)
+		fmt.Printf("Match: %v\n", mixHash == expectedMixHash)
+		fmt.Printf("\nPow hash:        %s\n", powHash)
+
+		if mixHash == expectedMixHash {
+			t.Logf("✅ GPU miner result matches our KAWPOW implementation!")
+		} else {
+			t.Errorf("❌ Mixhash mismatch - GPU miner result does not match")
 		}
 	})
 
