@@ -317,3 +317,22 @@ func UpdateCoinbaseNonce(originalTx *wire.MsgTx, extraNonce1 uint32, extraNonce2
 
 	return newTx
 }
+
+func UpdateCoinbaseExtraData(originalTx *wire.MsgTx, extraData []byte) *wire.MsgTx {
+	if originalTx == nil || len(originalTx.TxIn) == 0 {
+		return originalTx
+	}
+
+	// Copy the transaction
+	newTx := originalTx.Copy()
+
+	// Extract existing scriptSig to get height and nonces
+	scriptSig := newTx.TxIn[0].SignatureScript
+	height, extraNonce1, extraNonce2, _ := ExtractNoncesFromCoinbase(scriptSig)
+
+	// Rebuild the scriptSig with new extra data
+	newScriptSig := BuildCoinbaseScriptSigWithNonce(height, extraNonce1, extraNonce2, extraData)
+	newTx.TxIn[0].SignatureScript = newScriptSig
+
+	return newTx
+}

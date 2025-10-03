@@ -1023,6 +1023,16 @@ func (sl *Slice) SetBestPh(pendingHeader *types.WorkObject) {
 	pendingHeader.WorkObjectHeader().SetLocation(sl.NodeLocation())
 	pendingHeader.WorkObjectHeader().SetTime(uint64(time.Now().Unix()))
 	pendingHeader.WorkObjectHeader().SetHeaderHash(pendingHeader.Header().Hash())
+
+	if sl.NodeCtx() == common.ZONE_CTX {
+		ravencoinHeaderBytes := pendingHeader.AuxPow().Header()
+		// Commiting the hash of the workobject header to the auxpow template
+		coinbaseTransaction := types.UpdateCoinbaseExtraData(pendingHeader.AuxPow().Transaction(), pendingHeader.SealHash().Bytes())
+		// Dont have the actual hash of the block yet
+		auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, pendingHeader.AuxPow().MerkleBranch(), coinbaseTransaction)
+		pendingHeader.WorkObjectHeader().SetAuxPow(auxPow)
+	}
+
 	sl.miner.worker.AddPendingWorkObjectBody(pendingHeader)
 	rawdb.WriteBestPendingHeader(sl.sliceDb, pendingHeader)
 	sl.WriteBestPh(pendingHeader)
