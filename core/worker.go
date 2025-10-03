@@ -788,8 +788,10 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	// Use the full 80-byte encoded header, not just the 32-byte hash
 	ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
 
+	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, []byte{}, auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
+
 	// Dont have the actual hash of the block yet
-	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), nil)
+	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
 
 	// Setting the auxpow so that pow id is registered properly
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
@@ -801,12 +803,6 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	}
 
 	work.wo = newWo
-
-	// Commiting the hash of the workobject header to the auxpow template
-	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, newWo.SealHash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
-	// Dont have the actual hash of the block yet
-	auxPow = types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
-	newWo.WorkObjectHeader().SetAuxPow(auxPow)
 
 	w.printPendingHeaderInfo(work, newWo, start)
 	work.utxosCreate = nil
