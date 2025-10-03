@@ -765,6 +765,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	ravencoinHeader.Height = 1219736 // KAWPOW activation height
 	// Set reasonable difficulty bits (0x1d00ffff = difficulty 1)
 	ravencoinHeader.Bits = 0x1d00ffff
+
 	// Set version to KAWPOW version
 	ravencoinHeader.Version = 0x20000000
 	// Set timestamp
@@ -788,7 +789,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	work.wo = newWo
 
 	// Commiting the hash of the workobject header to the auxpow template
-	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, newWo.Hash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
+	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, newWo.SealHash().Bytes(), auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
 	// Dont have the actual hash of the block yet
 	auxPow = types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)

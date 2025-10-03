@@ -749,10 +749,6 @@ func (b *QuaiAPIBackend) ComputeMinerDifficulty(parent *types.WorkObject) *big.I
 	return b.quai.core.ComputeMinerDifficulty(parent)
 }
 
-func (b *QuaiAPIBackend) GetWork() *types.AuxTemplate {
-	return b.quai.core.GetWork()
-}
-
 func (b *QuaiAPIBackend) CheckPowIdValidity(header *types.WorkObjectHeader) error {
 	return b.quai.core.CheckPowIdValidity(header)
 }

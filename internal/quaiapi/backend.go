@@ -119,7 +119,6 @@ type Backend interface {
 	GetMinerEndpoints() []string
 	GetWorkShareP2PThreshold() int
 	SetWorkShareP2PThreshold(threshold int)
-	GetWork() *types.AuxTemplate
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool

@@ -15,8 +15,8 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 	// Create coinbase transaction
 	coinbaseTx := CreateCoinbaseTxWithNonce(
 		blockHeight,
-		0x12345678,                  // extraNonce1
-		0x123456789ABCDEF0,          // extraNonce2
+		0x12345678,                    // extraNonce1
+		0x123456789ABCDEF0,            // extraNonce2
 		[]byte("Test RPC Marshaling"), // extra data
 		[]byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}, // P2PKH output
 		2500000000, // 25 RVN reward
@@ -33,25 +33,24 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 		[]byte("test signature"),
 		[][]byte{},
 		coinbaseTx,
-		[]byte("prev hash"),
 		1588788000, // signatureTime
 	)
 
 	// Create WorkObjectHeader
 	workHeader := NewWorkObjectHeader(
-		common.Hash{},                    // headerHash
-		common.Hash{},                    // parentHash
-		big.NewInt(int64(blockHeight)),   // number
-		big.NewInt(1000000),              // difficulty
-		big.NewInt(3000001),              // primeTerminusNumber
-		common.Hash{},                    // txHash
-		BlockNonce{},                     // nonce
-		0,                                // lock
-		1588788000,                       // time
-		common.Location{},                // location
-		common.Address{},                 // primaryCoinbase
-		[]byte{},                         // data
-		auxPow,                           // auxpow
+		common.Hash{},                  // headerHash
+		common.Hash{},                  // parentHash
+		big.NewInt(int64(blockHeight)), // number
+		big.NewInt(1000000),            // difficulty
+		big.NewInt(3000001),            // primeTerminusNumber
+		common.Hash{},                  // txHash
+		BlockNonce{},                   // nonce
+		0,                              // lock
+		1588788000,                     // time
+		common.Location{},              // location
+		common.Address{},               // primaryCoinbase
+		[]byte{},                       // data
+		auxPow,                         // auxpow
 	)
 
 	// Test RPC marshaling
@@ -82,7 +81,7 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 	}
 
 	// Verify expected fields are present
-	expectedFields := []string{"powId", "header", "signature", "merkleBranch", "transaction", "prevHash", "signatureTime"}
+	expectedFields := []string{"powId", "header", "signature", "merkleBranch", "transaction", "signatureTime"}
 	for _, field := range expectedFields {
 		if _, exists := auxPowMap[field]; !exists {
 			t.Errorf("Missing expected field in AuxPow: %s", field)

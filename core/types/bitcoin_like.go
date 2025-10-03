@@ -319,29 +319,29 @@ func (h *DogecoinBlockHeader) validateMergedMiningCommitment(coinbaseTx *wire.Ms
 
 // validateParentMerkleProof verifies the merkle proof from coinbase to parent block merkle root
 func (h *DogecoinBlockHeader) validateParentMerkleProof(coinbaseTx *wire.MsgTx, merkleBranch []string, parentHeader []byte) error {
-    if len(parentHeader) < 80 {
-        return fmt.Errorf("parent header too short: %d", len(parentHeader))
-    }
+	if len(parentHeader) < 80 {
+		return fmt.Errorf("parent header too short: %d", len(parentHeader))
+	}
 
-    // Parent merkle root in header is already in internal (little-endian) byte order
-    var parentRoot common.Hash
-    copy(parentRoot[:], parentHeader[36:68])
+	// Parent merkle root in header is already in internal (little-endian) byte order
+	var parentRoot common.Hash
+	copy(parentRoot[:], parentHeader[36:68])
 
-    // Build merkle branch in internal order (reverse each sibling from display hex)
-    branchLE := make([][]byte, len(merkleBranch))
-    for i, s := range merkleBranch {
-        b := common.FromHex(s)
-        // reverse to little-endian
-        for l, r := 0, len(b)-1; l < r; l, r = l+1, r-1 {
-            b[l], b[r] = b[r], b[l]
-        }
-        branchLE[i] = b
-    }
+	// Build merkle branch in internal order (reverse each sibling from display hex)
+	branchLE := make([][]byte, len(merkleBranch))
+	for i, s := range merkleBranch {
+		b := common.FromHex(s)
+		// reverse to little-endian
+		for l, r := 0, len(b)-1; l < r; l, r = l+1, r-1 {
+			b[l], b[r] = b[r], b[l]
+		}
+		branchLE[i] = b
+	}
 
-    if !VerifyMerkleProof(coinbaseTx.TxHash(), branchLE, parentRoot) {
-        return fmt.Errorf("merkle proof validation failed")
-    }
-    return nil
+	if !VerifyMerkleProof(coinbaseTx.TxHash(), branchLE, parentRoot) {
+		return fmt.Errorf("merkle proof validation failed")
+	}
+	return nil
 }
 
 // validateChainCommitment verifies that the chain commitment includes this Dogecoin block
@@ -386,4 +386,14 @@ func (h *DogecoinBlockHeader) validateChainCommitment(chainRootFromScript []byte
 		return false
 	}
 	return bytes.Equal(finalBytes, chainRootFromScript) || bytes.Equal(reverseBytesCopy(finalBytes), chainRootFromScript)
+}
+
+func GetTargetFromBits(bits uint32) *big.Int {
+	return compactToTarget(bits)
+}
+
+func GetTargetInHex(bits uint32) string {
+	target := compactToTarget(bits)
+	// Return as 64-character hex string (padded with leading zeros)
+	return fmt.Sprintf("%064x", target)
 }
