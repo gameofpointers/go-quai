@@ -592,10 +592,10 @@ func (kawpow *Kawpow) IsDomCoincident(chain consensus.ChainHeaderReader, header 
 
 // ComputePowLight computes the kawpow hash and returns mixHash and powHash
 func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, powHash common.Hash) {
-	hashes, ok := kawpow.hashCache.Peek(header.Hash())
-	if ok {
-		return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
-	}
+	// hashes, ok := kawpow.hashCache.Peek(header.Hash())
+	// if ok {
+	// 	return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
+	// }
 
 	// For quai blocks to rely on pow done on the raven coin donor header
 	if header.AuxPow() == nil {
@@ -616,6 +616,13 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	kawpowHeaderHash := ravencoinHeader.GetKAWPOWHeaderHash()
 	blockNumber := uint64(ravencoinHeader.Height)
 
+	kawpow.logger.WithFields(log.Fields{
+		"kawpowHeaderHash": kawpowHeaderHash.Hex(),
+		"nonce":            nonce64,
+		"blockNumber":      blockNumber,
+		"mixHashInHeader":  ravencoinHeader.MixHash.Hex(),
+	}).Error("ComputePowLight inputs")
+
 	// Get cache for this block (same as sealer)
 	ethashCache := kawpow.cache(blockNumber)
 	if ethashCache.cDag == nil {
@@ -629,11 +636,12 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	digest, result := kawpowLight(size, ethashCache.cache, kawpowHeaderHash.Bytes(), nonce64, blockNumber, ethashCache.cDag)
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
-	header.PowDigest.Store(mixHash)
-	header.PowHash.Store(powHash)
 
-	// Cache the hash
-	kawpow.hashCache.Add(header.Hash(), mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
+	// Don't cache the result anymore since the AuxPow header can change
+	// and we need to recalculate based on the actual mined header
+	// header.PowDigest.Store(mixHash)
+	// header.PowHash.Store(powHash)
+	// kawpow.hashCache.Add(header.Hash(), mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
 
 	return mixHash, powHash
 }
@@ -675,12 +683,7 @@ func (kawpow *Kawpow) verifySeal(header *types.WorkObjectHeader) (common.Hash, e
 }
 
 func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
-	// Check kawpow
-	mixHash := header.PowDigest.Load()
-	powHash := header.PowHash.Load()
-	if powHash == nil || mixHash == nil {
-		mixHash, powHash = kawpow.ComputePowLight(header)
-	}
+	mixHash, powHash := kawpow.ComputePowLight(header)
 	// For KAWPOW, get the mix hash from the Ravencoin header in AuxPow
 	auxPow := header.AuxPow()
 	if auxPow == nil {
@@ -693,10 +696,14 @@ func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Has
 	}
 
 	// Verify the calculated values against the ones provided in the Ravencoin header
-	if !bytes.Equal(ravencoinHeader.MixHash.Bytes(), mixHash.(common.Hash).Bytes()) {
+	if !bytes.Equal(ravencoinHeader.MixHash.Bytes(), mixHash.Bytes()) {
+		kawpow.logger.WithFields(log.Fields{
+			"receivedMixHash":   ravencoinHeader.MixHash.Hex(),
+			"calculatedMixHash": mixHash.Hex(),
+		}).Error("MixHash mismatch in ComputePowHash")
 		return common.Hash{}, consensus.ErrInvalidMixHash
 	}
-	return powHash.(common.Hash), nil
+	return powHash, nil
 }
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a

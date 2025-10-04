@@ -2412,20 +2412,16 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 func (w *worker) AddPendingWorkObjectBody(wo *types.WorkObject) {
 	// do not include the tx hash while storing the body
 	woHeaderCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
-	woHeaderCopy.SetTxHash(common.Hash{})
 	w.pendingBlockBody.Add(woHeaderCopy.SealHash(), *wo)
 }
 
 // GetPendingBlockBody gets the block body associated with the given header.
-func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
-	// do not include the tx hash while storing the body
-	woHeaderCopy := types.CopyWorkObjectHeader(woHeader)
-	woHeaderCopy.SetTxHash(common.Hash{})
-	body, ok := w.pendingBlockBody.Peek(woHeaderCopy.SealHash())
+func (w *worker) GetPendingBlockBody(sealHash common.Hash) (*types.WorkObject, error) {
+	body, ok := w.pendingBlockBody.Peek(sealHash)
 	if ok {
 		return &body, nil
 	}
-	w.logger.WithField("key", woHeader.SealHash()).Warn("pending block body not found for header")
+	w.logger.WithField("key", sealHash).Warn("pending block body not found for header")
 	return nil, errors.New("pending block body not found")
 }
 

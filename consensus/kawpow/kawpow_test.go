@@ -199,11 +199,11 @@ func TestKAWPOWImplementation(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
 		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
 
-		// Latest submission from logs
+		// Block from log: headerHash=0xc09b76e782c9c43795599f0e3f204ea87efab090800055547621301b0f5fa899
 		blockHeight := uint64(1219736)
-		nonce64 := uint64(281475175521209)
-		headerHashStr := "89daddb9eef83fcef74d272e64a407b33280f5b2d2f057eb8cde6760672f7b4e"
-		expectedMixHash := "77148b2f3534d9706d667cd30b16bda0d4d037476ca17f5360622124f6439eb5"
+		nonce64 := uint64(281475099654374)
+		headerHashStr := "c09b76e782c9c43795599f0e3f204ea87efab090800055547621301b0f5fa899"
+		expectedMixHash := "e1837a2b25364d04a5b05458a066d236a747e047bdebbf12512130a9c271afc5"
 
 		cache := kawpow.cache(blockHeight)
 		size := datasetSize(blockHeight)

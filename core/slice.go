@@ -60,6 +60,7 @@ type CoreBackend interface {
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)
 	GetPrimeBlock(blockHash common.Hash) *types.WorkObject
 	GetKQuaiAndUpdateBit(blockHash common.Hash) (*big.Int, uint8, error)
+	ReceiveMinedHeader(header *types.WorkObject) error
 }
 
 type pEtxRetry struct {
@@ -1253,7 +1254,9 @@ func (sl *Slice) ConstructLocalMinedBlock(wo *types.WorkObject) (*types.WorkObje
 	nodeCtx := sl.NodeLocation().Context()
 	var pendingBlockBody *types.WorkObject
 	if nodeCtx == common.ZONE_CTX {
-		pendingBlockBody = sl.GetPendingBlockBody(wo.WorkObjectHeader())
+		// do not include the tx hash while storing the body
+		woHeaderCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
+		pendingBlockBody = sl.GetPendingBlockBody(woHeaderCopy.SealHash())
 		if pendingBlockBody == nil {
 			sl.logger.WithFields(log.Fields{"wo.Hash": wo.Hash(),
 				"wo.Header":       wo.HeaderHash(),
@@ -1876,8 +1879,8 @@ func (sl *Slice) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	return pendingHeader, nil
 }
 
-func (sl *Slice) GetPendingBlockBody(wo *types.WorkObjectHeader) *types.WorkObject {
-	blockBody, _ := sl.miner.worker.GetPendingBlockBody(wo)
+func (sl *Slice) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
+	blockBody, _ := sl.miner.worker.GetPendingBlockBody(sealHash)
 	return blockBody
 }
 
@@ -2258,4 +2261,131 @@ func (sl *Slice) AddGenesisPendingEtxs(block *types.WorkObject) {
 // SubscribeExpansionEvent subscribes to the expansion feed
 func (sl *Slice) SubscribeExpansionEvent(ch chan<- ExpansionEvent) event.Subscription {
 	return sl.scope.Track(sl.expansionFeed.Subscribe(ch))
+}
+
+// This function returns bools for isBlock or isWorkShare.
+// If this is a subWorkShare, it will not return an error, but isBlock and isWorkShare will be false.
+// If an error is returned this means the workShare was invalid and/or did not meet the minimum p2p threshold.
+func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView *types.WorkObjectShareView, isBlock, isWorkShare bool, err error) {
+	if workShare != nil {
+		var isWorkShare, isSubShare bool
+
+		engine := sl.GetEngineForHeader(workShare)
+		if engine == nil {
+			return nil, false, false, errors.New("could not get engine for workshare")
+		}
+
+		isSubShare = engine.CheckWorkThreshold(workShare, params.WorkShareP2PThresholdDiff)
+		if !isSubShare {
+			// This cannot be a block or a workshare or even a subWorkShare since it didn't pass the minimum workShare threshold.
+			return nil, false, false, errors.New("workshare has less entropy than the workshare p2p threshold")
+		}
+		sl.logger.WithField("number", workShare.NumberU64()).Info("Received Work Share")
+
+		// Now check if this subWorkShare is a full block.
+		var isBlock bool
+		_, err := engine.VerifySeal(workShare)
+		if err == nil {
+			isBlock = true
+		}
+
+		pendingBlockBody := sl.GetPendingBlockBody(workShare.SealHash())
+		txs, err := sl.GetTxsFromBroadcastSet(workShare.TxHash())
+		if err != nil {
+			txs = types.Transactions{}
+			if workShare.TxHash() != types.EmptyRootHash {
+				sl.logger.Warn("Failed to get txs from the broadcastSetCache", "err", err)
+			}
+		}
+		// If the share qualifies is not a workshare and there are no transactions,
+		// there is no need to broadcast the share
+		isWorkShare = engine.CheckWorkThreshold(workShare, params.WorkSharesThresholdDiff)
+		if !isWorkShare && len(txs) == 0 {
+			// This is a p2p workshare and has no transactions.
+			return nil, false, true, nil
+		}
+		if pendingBlockBody == nil {
+			err = errors.New("pending block body is nil")
+			sl.logger.WithField("err", err).Warn("Could not get the pending Block body")
+			return nil, isBlock, isWorkShare, err
+		}
+		wo := types.NewWorkObject(workShare, pendingBlockBody.Body(), nil)
+		shareView := wo.ConvertToWorkObjectShareView(txs)
+		return shareView, isBlock, isWorkShare, nil
+	}
+	return nil, false, false, errors.New("workshare is nil")
+}
+
+func (sl *Slice) ReceiveMinedHeader(woHeader *types.WorkObject) (*types.WorkObject, error) {
+
+	block, err := sl.ConstructLocalMinedBlock(woHeader)
+	if err != nil && err.Error() == ErrBadSubManifest.Error() && sl.NodeLocation().Context() < common.ZONE_CTX {
+		sl.logger.Info("filling sub manifest")
+		// If we just mined this block, and we have a subordinate chain, its possible
+		// the subordinate manifest in our block body is incorrect. If so, ask our sub
+		// for the correct manifest and reconstruct the block.
+		var err error
+		block, err = sl.fillSubordinateManifest(block)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Set the Auxpow
+	block.WorkObjectHeader().SetAuxPow(woHeader.AuxPow())
+
+	// Get the order of the block
+	_, order, err := sl.CalcOrder(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// If its a dom block, call the ReceiveMinedHeader on the dom interface
+	if order < sl.NodeCtx() {
+		sl.domInterface.ReceiveMinedHeader(types.CopyWorkObject(block))
+	}
+
+	sl.logger.WithFields(log.Fields{
+		"number":   block.Number(sl.NodeCtx()),
+		"location": block.Location(),
+		"hash":     block.Hash(),
+	}).Info("Received mined header")
+
+	return block, nil
+}
+
+func (sl *Slice) fillSubordinateManifest(workObject *types.WorkObject) (*types.WorkObject, error) {
+	nodeCtx := sl.NodeCtx()
+	if workObject.ManifestHash(nodeCtx+1) == types.EmptyRootHash {
+		return nil, errors.New("cannot fill empty subordinate manifest")
+	} else if subManifestHash := types.DeriveSha(workObject.Manifest(), trie.NewStackTrie(nil)); subManifestHash == workObject.ManifestHash(nodeCtx+1) {
+		// If the manifest hashes match, nothing to do
+		return workObject, nil
+	} else {
+		subParentHash := workObject.ParentHash(nodeCtx + 1)
+		var subManifest types.BlockManifest
+		if subParent := sl.hc.GetBlockByHash(subParentHash); subParent != nil {
+			// If we have the the subordinate parent in our chain, that means that block
+			// was also coincident. In this case, the subordinate manifest resets, and
+			// only consists of the subordinate parent hash.
+			subManifest = types.BlockManifest{subParentHash}
+		} else {
+			// Otherwise we need to reconstruct the sub manifest, by getting the
+			// parent's sub manifest and appending the parent hash.
+			var err error
+			subManifest, err = sl.GetSubManifest(workObject.Location(), subParentHash)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(subManifest) == 0 {
+			return nil, errors.New("reconstructed sub manifest is empty")
+		}
+		if subManifest == nil || workObject.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest, trie.NewStackTrie(nil)) {
+			return nil, errors.New("reconstructed sub manifest does not match manifest hash")
+		}
+		return types.NewWorkObjectWithHeaderAndTx(workObject.WorkObjectHeader(), workObject.Tx()).WithBody(workObject.Header(), workObject.Transactions(), workObject.OutboundEtxs(), workObject.Uncles(), subManifest, workObject.InterlinkHashes()), nil
+	}
 }
