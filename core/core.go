@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"runtime/debug"
@@ -17,6 +18,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/common/math"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
@@ -562,6 +564,72 @@ func (c *Core) BadHashExistsInChain() bool {
 	return false
 }
 
+func (c *Core) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView *types.WorkObjectShareView, isBlock, isWorkShare bool, err error) {
+	return c.sl.ReceiveWorkShare(workShare)
+}
+
+func (c *Core) ReceiveMinedHeader(workObject *types.WorkObject) (*types.WorkObject, error) {
+	return c.sl.ReceiveMinedHeader(workObject)
+}
+
+func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
+	const ravencoinHeaderSize = 120
+
+	log.Global.Info("SubmitBlock called with bytes", raw)
+
+	if len(raw) <= ravencoinHeaderSize {
+		return nil, errors.New("submitBlock payload too short")
+	}
+
+	data := []byte(raw)
+	rvnHeaderBytes := data[:ravencoinHeaderSize]
+
+	ravencoinHeader, err := types.DecodeRavencoinHeader(rvnHeaderBytes)
+	if err != nil {
+		return nil, fmt.Errorf("decode ravencoin header: %w", err)
+	}
+
+	extra := data[ravencoinHeaderSize:]
+	coinbaseTx, err := types.DecodeRavencoinCoinbaseTransaction(extra)
+	if err != nil {
+		return nil, err
+	}
+	if len(coinbaseTx.TxIn) == 0 {
+		return nil, errors.New("coinbase transaction missing inputs")
+	}
+
+	sealHash, err := types.ExtractSealHashFromCoinbase(coinbaseTx.TxIn[0].SignatureScript)
+	if err != nil {
+		return nil, err
+	}
+
+	c.logger.WithFields(log.Fields{
+		"height":     ravencoinHeader.Height,
+		"nonce":      ravencoinHeader.Nonce64,
+		"mixHash":    ravencoinHeader.MixHash.Hex(),
+		"headerHash": ravencoinHeader.GetKAWPOWHeaderHash().Hex(),
+		"seal":       sealHash.Hex(),
+	}).Info("Received mined KawPow block")
+
+	// get the pending block body
+	workObject := c.sl.GetPendingBlockBody(sealHash)
+	if workObject == nil {
+		return nil, fmt.Errorf("could not get the pending block body for this seal hash %v", sealHash)
+	}
+
+	workObjectCopy := types.CopyWorkObject(workObject)
+
+	// Set the Ravencoin header and coinbase transaction
+	workObjectCopy.AuxPow().SetHeader(rvnHeaderBytes)
+	workObjectCopy.AuxPow().SetTransaction(coinbaseTx)
+
+	c.logger.WithFields(log.Fields{
+		"raven header bytes": len(rvnHeaderBytes),
+	}).Info("Received mined KawPow block")
+
+	return workObjectCopy, nil
+}
+
 func (c *Core) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Subscription {
 	return c.sl.SubscribeMissingBlockEvent(ch)
 }
@@ -715,8 +783,8 @@ func (c *Core) ConstructLocalMinedBlock(woHeader *types.WorkObject) (*types.Work
 	return c.sl.ConstructLocalMinedBlock(woHeader)
 }
 
-func (c *Core) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObject {
-	return c.sl.GetPendingBlockBody(woHeader)
+func (c *Core) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
+	return c.sl.GetPendingBlockBody(sealHash)
 }
 
 func (c *Core) NewGenesisPendigHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, genesisHash common.Hash) error {

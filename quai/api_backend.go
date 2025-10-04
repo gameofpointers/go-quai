@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/bloombits"
@@ -517,8 +518,72 @@ func (b *QuaiAPIBackend) ConstructLocalMinedBlock(header *types.WorkObject) (*ty
 	return b.quai.core.ConstructLocalMinedBlock(header)
 }
 
-func (b *QuaiAPIBackend) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObject {
-	return b.quai.core.GetPendingBlockBody(woHeader)
+func (b *QuaiAPIBackend) ReceiveWorkShare(workShare *types.WorkObjectHeader) error {
+	// Evaluate the validity of the share and add it to the chain.
+	shareView, isBlock, isWorkShare, err := b.quai.core.ReceiveWorkShare(workShare)
+	if err != nil && !isBlock && !isWorkShare {
+		// An error was returned and this isn't a block or regular share indicating the object is not even a valid p2p share.
+		return err
+	}
+	if isBlock {
+		return nil
+	}
+
+	return b.BroadcastWorkShare(shareView, b.NodeLocation())
+}
+
+func (b *QuaiAPIBackend) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
+	return b.quai.core.GetPendingBlockBody(sealHash)
+}
+
+func (b *QuaiAPIBackend) SubmitBlock(raw hexutil.Bytes) error {
+	wo, err := b.quai.core.SubmitBlock(raw)
+	if err != nil {
+		return err
+	}
+	return b.ReceiveMinedHeader(wo)
+}
+
+func (b *QuaiAPIBackend) ReceiveMinedHeader(wo *types.WorkObject) error {
+
+	if b.NodeCtx() == common.ZONE_CTX {
+		// Once the sealhash and the nonce is recieved, the workshare is constructed
+		workShare, isBlock, isWorkShare, err := b.quai.core.ReceiveWorkShare(wo.WorkObjectHeader())
+		if err == nil && !isBlock && isWorkShare {
+			if workShare != nil {
+				// Only if the workshare had transactions should it be broadcasted.
+				// Broadcast the share to P2P backend.
+				err = b.BroadcastWorkShare(workShare, b.NodeLocation())
+				if err != nil {
+					b.Logger().WithField("err", err).Error("Error broadcasting block")
+				}
+			}
+			return nil
+		} else if err != nil {
+			return err
+		}
+	}
+
+	block, err := b.quai.core.ReceiveMinedHeader(wo)
+	if err != nil {
+		return err
+	}
+
+	// Broadcast the block and announce chain insertion event
+	if block.Header() != nil {
+		err := b.BroadcastBlock(block, b.NodeLocation())
+		if err != nil {
+			b.Logger().WithField("err", err).Error("Error broadcasting block")
+		}
+		if b.NodeLocation().Context() == common.ZONE_CTX {
+			err = b.BroadcastHeader(block, b.NodeLocation())
+			if err != nil {
+				b.Logger().WithField("err", err).Error("Error broadcasting header")
+			}
+		}
+	}
+
+	return nil
 }
 
 func (b *QuaiAPIBackend) GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, error) {

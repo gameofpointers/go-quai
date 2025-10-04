@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/bloombits"
@@ -83,7 +84,10 @@ type Backend interface {
 	RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int)
 	NewGenesisPendingHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, hash common.Hash) error
 	GetPendingHeader() (*types.WorkObject, error)
-	GetPendingBlockBody(workShare *types.WorkObjectHeader) *types.WorkObject
+	GetPendingBlockBody(sealHash common.Hash) *types.WorkObject
+	SubmitBlock(raw hexutil.Bytes) error
+	ReceiveMinedHeader(woHeader *types.WorkObject) error
+	ReceiveWorkShare(workShare *types.WorkObjectHeader) error
 	GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, error)
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)
 	GetSubManifest(slice common.Location, blockHash common.Hash) (types.BlockManifest, error)
