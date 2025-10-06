@@ -155,7 +155,7 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, Id string, topic s
 				txCountersBySlice[sliceName] = newCounter
 			}
 		}
-	case types.AuxTemplate:
+	case *types.AuxTemplate:
 		backend := *qbe.GetBackend(nodeLocation)
 		if backend == nil {
 			log.Global.Error("no backend found")
@@ -174,7 +174,7 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, Id string, topic s
 		// - Storing it for miners to use
 		// - Possibly forwarding to mining operations
 		if backend.NodeCtx() == common.ZONE_CTX && backend.ProcessingState() {
-			backend.SendAuxPowTemplate(&data)
+			backend.SendAuxPowTemplate(data)
 		}
 
 	default:

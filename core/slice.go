@@ -856,6 +856,20 @@ func (sl *Slice) asyncPendingHeaderLoop() {
 	}
 }
 
+func (sl *Slice) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
+	err := sl.miner.worker.AddAuxPowTemplate(auxTemplate)
+	if err != nil {
+		return err
+	}
+	// Read back the bestPh and set it again to make sure that any changes to
+	// the auxpow is picked up
+	bestPh := sl.ReadBestPh()
+	if bestPh != nil {
+		sl.SetBestPh(bestPh)
+	}
+	return nil
+}
+
 func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 	if bestPh == nil {
 		return
@@ -1025,12 +1039,33 @@ func (sl *Slice) SetBestPh(pendingHeader *types.WorkObject) {
 	pendingHeader.WorkObjectHeader().SetTime(uint64(time.Now().Unix()))
 	pendingHeader.WorkObjectHeader().SetHeaderHash(pendingHeader.Header().Hash())
 
-	if sl.NodeCtx() == common.ZONE_CTX {
-		ravencoinHeaderBytes := pendingHeader.AuxPow().Header()
-		// Commiting the hash of the workobject header to the auxpow template
-		coinbaseTransaction := types.UpdateCoinbaseExtraData(pendingHeader.AuxPow().Transaction(), pendingHeader.SealHash().Bytes())
+	// If we have an auxpow template, we need to create a proper Ravencoin header
+	auxTemplate := sl.miner.worker.GetBestAuxTemplate(types.Kawpow)
+
+	if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
+
+		// Create a properly configured Ravencoin header for KAWPOW mining
+		ravencoinHeader := types.EmptyRavencoinHeader()
+		// Use a reasonable height (KAWPOW activation or current block number)
+		// For now, use KAWPOW activation height as minimum
+		ravencoinHeader.Height = auxTemplate.Height()
+		ravencoinHeader.Bits = auxTemplate.NBits()
+		// Set version to KAWPOW version
+		ravencoinHeader.Version = int32(auxTemplate.Version())
+		// Set timestamp
+		ravencoinHeader.Time = uint32(pendingHeader.Time())
+		ravencoinHeader.HashPrevBlock = auxTemplate.PrevHash()
+		// TODO: need to calculate merkle root? not sure yet
+
+		// Use the full 80-byte encoded header, not just the 32-byte hash
+		ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
+
+		coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
+		coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, pendingHeader.SealHash().Bytes())
 		// Dont have the actual hash of the block yet
-		auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, pendingHeader.AuxPow().MerkleBranch(), coinbaseTransaction)
+		auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+
+		// Update the auxpow in the best pending header
 		pendingHeader.WorkObjectHeader().SetAuxPow(auxPow)
 	}
 
