@@ -53,7 +53,7 @@ type Backend interface {
 	ProcessingState() bool
 	NodeLocation() common.Location
 	NodeCtx() int
-	Engine() consensus.Engine
+	Engine(header *types.WorkObjectHeader) consensus.Engine
 
 	BloomStatus() (uint64, uint64)
 	ServiceFilter(ctx context.Context, session *bloombits.MatcherSession)
