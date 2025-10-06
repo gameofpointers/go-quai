@@ -29,7 +29,6 @@ import (
 	quai "github.com/dominant-strategies/go-quai"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
-	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -298,7 +297,11 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 				target := new(big.Int).Div(common.Big2e256, header.Difficulty())
 
 				// Get the PoW hash from the engine
-				powHash := api.backend.Engine(header).ComputePowHash(header)
+				powHash, err := api.backend.Engine(header).ComputePowHash(header)
+				if err != nil {
+					api.backend.Logger().Error("Failed to compute PoW hash for workshare", "hash", w.Hash().Hex(), "err", err)
+					continue
+				}
 
 				// If it meets the full difficulty target, it's a block, not a workshare
 				if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) <= 0 {

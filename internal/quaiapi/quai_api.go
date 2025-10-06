@@ -1009,7 +1009,7 @@ func RPCMarshalBlock(backend Backend, block *types.WorkObject, inclTx bool, full
 	fields["woHeader"] = block.WorkObjectHeader().RPCMarshalWorkObjectHeader()
 	fields["header"] = block.Body().Header().RPCMarshalHeader()
 	fields["size"] = hexutil.Uint64(block.Size())
-	_, order, err := backend.Engine().CalcOrder(backend, block)
+	_, order, err := backend.Engine(block.WorkObjectHeader()).CalcOrder(backend, block)
 	if err != nil {
 		fields["order"] = common.ZONE_CTX
 	} else {
