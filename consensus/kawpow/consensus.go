@@ -2,6 +2,7 @@ package kawpow
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -19,6 +20,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/state"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
+	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/crypto/multiset"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
@@ -592,11 +594,6 @@ func (kawpow *Kawpow) IsDomCoincident(chain consensus.ChainHeaderReader, header 
 
 // ComputePowLight computes the kawpow hash and returns mixHash and powHash
 func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, powHash common.Hash) {
-	// hashes, ok := kawpow.hashCache.Peek(header.Hash())
-	// if ok {
-	// 	return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
-	// }
-
 	// For quai blocks to rely on pow done on the raven coin donor header
 	if header.AuxPow() == nil {
 		kawpow.logger.Error("AuxPow is nil in ComputePowLight")
@@ -616,12 +613,17 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	kawpowHeaderHash := ravencoinHeader.GetKAWPOWHeaderHash()
 	blockNumber := uint64(ravencoinHeader.Height)
 
-	kawpow.logger.WithFields(log.Fields{
-		"kawpowHeaderHash": kawpowHeaderHash.Hex(),
-		"nonce":            nonce64,
-		"blockNumber":      blockNumber,
-		"mixHashInHeader":  ravencoinHeader.MixHash.Hex(),
-	}).Error("ComputePowLight inputs")
+	// Create a unique cache key using kawpowHeaderHash + nonce
+	// This ensures different nonces for the same block template have separate cache entries
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, nonce64)
+	cacheKey := crypto.Keccak256Hash(kawpowHeaderHash.Bytes(), nonceBytes)
+
+	// Check cache with the unique key
+	hashes, ok := kawpow.hashCache.Peek(cacheKey)
+	if ok {
+		return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
+	}
 
 	// Get cache for this block (same as sealer)
 	ethashCache := kawpow.cache(blockNumber)
@@ -637,11 +639,8 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
 
-	// Don't cache the result anymore since the AuxPow header can change
-	// and we need to recalculate based on the actual mined header
-	// header.PowDigest.Store(mixHash)
-	// header.PowHash.Store(powHash)
-	// kawpow.hashCache.Add(header.Hash(), mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
+	// Cache the result with the unique key
+	kawpow.hashCache.Add(cacheKey, mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
 
 	return mixHash, powHash
 }
