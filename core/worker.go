@@ -753,45 +753,8 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 		work.batch.Reset()
 	}
 
-	// TODO: fill the header with actual information from template
-	auxPowTemplate := types.EmptyAuxTemplate()
-
-	// Set the PowID to KAWPOW
-	auxPowTemplate.SetPowID(types.Kawpow)
-	// Create a properly configured Ravencoin header for KAWPOW mining
-	ravencoinHeader := types.EmptyRavencoinHeader()
-	// Use a reasonable height (KAWPOW activation or current block number)
-	// For now, use KAWPOW activation height as minimum
-	ravencoinHeader.Height = 1219736 // KAWPOW activation height
-
-	// Convert the difficulty to bits
-	if work.wo.Difficulty().Cmp(big.NewInt(0)) > 0 {
-		log.Global.WithFields(log.Fields{
-			"difficulty": work.wo.Difficulty().String(),
-		}).Info("Converting difficulty to nBits")
-		ravencoinHeader.Bits, err = common.DifficultyToBits(work.wo.Difficulty())
-		if err != nil {
-			return nil, err
-		}
-		log.Global.WithFields(log.Fields{
-			"nBits": fmt.Sprintf("0x%08x", ravencoinHeader.Bits),
-		}).Info("Converted difficulty to nBits")
-	} else {
-		log.Global.Warn("Difficulty is zero or negative, not setting nBits")
-	}
-
-	// Set version to KAWPOW version
-	ravencoinHeader.Version = 0x20000000
-	// Set timestamp
-	ravencoinHeader.Time = uint32(work.wo.Time())
-
-	// Use the full 80-byte encoded header, not just the 32-byte hash
-	ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
-
-	coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, []byte{}, auxPowTemplate.PayoutScript(), int64(auxPowTemplate.CoinbaseValue()))
-
-	// Dont have the actual hash of the block yet
-	auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxPowTemplate.MerkleBranch(), coinbaseTransaction)
+	// If there is no auxpow template, then just fill the pow id for now
+	auxPow := types.NewAuxPow(types.Kawpow, []byte{}, []byte{}, nil, nil)
 
 	// Setting the auxpow so that pow id is registered properly
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
@@ -2475,11 +2438,11 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 	}
 
 	w.uncles.ContainsOrAdd(workShare.Hash(), *workShare)
-	
+
 	// Emit workshare event for real-time updates
 	workshareObj := types.NewWorkObjectWithHeaderAndTx(workShare, nil)
 	w.hc.workshareFeed.Send(NewWorkshareEvent{Workshare: workshareObj})
-	
+
 	return nil
 }
 

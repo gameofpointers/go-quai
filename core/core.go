@@ -915,6 +915,10 @@ func (c *Core) GetPrimeBlock(blockHash common.Hash) *types.WorkObject {
 	return c.sl.GetPrimeBlock(blockHash)
 }
 
+func (c *Core) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
+	return c.sl.SendAuxPowTemplate(auxTemplate)
+}
+
 //---------------------//
 // HeaderChain methods //
 //---------------------//
@@ -1281,10 +1285,6 @@ func (c *Core) SetLockupByte(lockupByte uint8) {
 
 func (c *Core) SetMinerPreference(minerPreference float64) {
 	c.sl.miner.worker.SetMinerPreference(minerPreference)
-}
-
-func (c *Core) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
-	return c.sl.miner.worker.AddAuxPowTemplate(auxTemplate)
 }
 
 // SubscribePendingLogs starts delivering logs from pending transactions

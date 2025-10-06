@@ -181,6 +181,7 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 	var (
 		coinbaseValue uint64
 		coinbaseAux   []byte
+		payoutScript  []byte
 	)
 
 	if tx := ap.transaction; tx != nil {
@@ -190,6 +191,7 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 		if len(tx.TxIn) > 0 {
 			coinbaseAux = tx.TxIn[0].SignatureScript
 		}
+		payoutScript = ap.transaction.TxOut[0].PkScript
 	}
 
 	return map[string]interface{}{
@@ -200,6 +202,7 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 		"coinbasevalue":     coinbaseValue,
 		"target":            GetTargetInHex(ravencoinHeader.Bits),
 		"coinbaseaux":       hexutil.Encode(coinbaseAux),
+		"payoutscript":      hexutil.Encode(payoutScript),
 		"merkleBranch":      merkleBranch,
 	}
 }

@@ -1118,6 +1118,14 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context) (map[str
 
 	// add the seal hash to the end of the coinbase aux key
 	fields := types.RPCMarshalAuxPowForKawPow(pendingHeader.AuxPow())
+
+	// Modify the logic here to produce workshares
+	bits, err := common.DifficultyToBits(pendingHeader.Difficulty())
+	if err != nil {
+		return nil, err
+	}
+	fields["target"] = types.GetTargetInHex(bits)
+
 	return fields, nil
 }
 
