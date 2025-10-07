@@ -533,6 +533,10 @@ func (b *QuaiAPIBackend) ReceiveWorkShare(workShare *types.WorkObjectHeader) err
 		// An error was returned and this isn't a block or regular share indicating the object is not even a valid p2p share.
 		return err
 	}
+	// this is the case of a p2p share with no transactions
+	if shareView == nil && err == nil {
+		return nil
+	}
 	if isBlock {
 		return nil
 	}

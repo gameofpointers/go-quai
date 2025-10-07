@@ -1324,17 +1324,12 @@ func CopyWorkObjectBody(wb *WorkObjectBody) *WorkObjectBody {
 func (wb *WorkObjectBody) ProtoEncode(woType WorkObjectView) (*ProtoWorkObjectBody, error) {
 	switch woType {
 	case WorkShareTxObject:
-		header, err := wb.header.ProtoEncode()
-		if err != nil {
-			return nil, err
-		}
 		// Only encode the txs field in the body
 		protoTransactions, err := wb.transactions.ProtoEncode()
 		if err != nil {
 			return nil, err
 		}
 		return &ProtoWorkObjectBody{
-			Header:       header,
 			Transactions: protoTransactions,
 		}, nil
 
@@ -1401,10 +1396,6 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 		}
 	case WorkShareTxObject:
 		wb.header = &Header{}
-		err := wb.header.ProtoDecode(data.GetHeader(), location)
-		if err != nil {
-			return err
-		}
 		wb.transactions = Transactions{}
 		err = wb.transactions.ProtoDecode(data.GetTransactions(), location)
 		if err != nil {
@@ -1516,6 +1507,6 @@ func (wo *WorkObject) ConvertToPEtxView() *WorkObject {
 
 func (wo *WorkObject) ConvertToWorkObjectShareView(txs Transactions) *WorkObjectShareView {
 	return &WorkObjectShareView{
-		WorkObject: wo.WithBody(wo.Header(), txs, nil, nil, nil, nil),
+		WorkObject: wo.WithBody(nil, txs, nil, nil, nil, nil),
 	}
 }

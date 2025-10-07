@@ -1031,6 +1031,8 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.WorkObject, domTerminus c
 // GetPendingHeader is used by the miner to request the current pending header
 func (sl *Slice) GetPendingHeader() (*types.WorkObject, error) {
 	phCopy := types.CopyWorkObject(sl.ReadBestPh())
+	// set the auxpow to nil
+	phCopy.WorkObjectHeader().SetAuxPow(nil)
 	return phCopy, nil
 }
 
@@ -2324,7 +2326,6 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 			isBlock = true
 		}
 
-		pendingBlockBody := sl.GetPendingBlockBody(workShare.SealHash())
 		txs, err := sl.GetTxsFromBroadcastSet(workShare.TxHash())
 		if err != nil {
 			txs = types.Transactions{}
@@ -2337,14 +2338,9 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		isWorkShare = engine.CheckWorkThreshold(workShare, params.WorkSharesThresholdDiff)
 		if !isWorkShare && len(txs) == 0 {
 			// This is a p2p workshare and has no transactions.
-			return nil, false, true, nil
+			return nil, false, false, nil
 		}
-		if pendingBlockBody == nil {
-			err = errors.New("pending block body is nil")
-			sl.logger.WithField("err", err).Warn("Could not get the pending Block body")
-			return nil, isBlock, isWorkShare, err
-		}
-		wo := types.NewWorkObject(workShare, pendingBlockBody.Body(), nil)
+		wo := types.NewWorkObject(workShare, nil, nil)
 		shareView := wo.ConvertToWorkObjectShareView(txs)
 		return shareView, isBlock, isWorkShare, nil
 	}
