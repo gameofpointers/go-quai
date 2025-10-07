@@ -763,7 +763,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 
 	engine := sl.GetEngineForHeader(block.WorkObjectHeader())
 	intrinsicS := engine.IntrinsicLogEntropy(block.Hash())
-	workShare, err := engine.WorkShareLogEntropy(sl.hc, block)
+	workShare, err := sl.hc.WorkShareLogEntropy(block)
 	if err != nil {
 		sl.logger.WithField("err", err).Error("Error calculating the work share log entropy")
 		workShare = big.NewInt(0)
@@ -879,7 +879,11 @@ func (sl *Slice) WriteBestPh(bestPh *types.WorkObject) {
 }
 
 func (sl *Slice) ReadBestPh() *types.WorkObject {
-	phCopy := types.CopyWorkObject(sl.bestPh.Load().(*types.WorkObject))
+	bestPh := sl.bestPh.Load()
+	if bestPh == nil {
+		return nil
+	}
+	phCopy := types.CopyWorkObject(bestPh.(*types.WorkObject))
 	return phCopy
 }
 
@@ -1029,10 +1033,12 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.WorkObject, domTerminus c
 }
 
 // GetPendingHeader is used by the miner to request the current pending header
-func (sl *Slice) GetPendingHeader() (*types.WorkObject, error) {
+func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) {
 	phCopy := types.CopyWorkObject(sl.ReadBestPh())
-	// set the auxpow to nil
-	phCopy.WorkObjectHeader().SetAuxPow(nil)
+	// set the auxpow to nil if its progpow
+	if powId == types.Progpow {
+		phCopy.WorkObjectHeader().SetAuxPow(nil)
+	}
 	return phCopy, nil
 }
 

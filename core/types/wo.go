@@ -1132,7 +1132,7 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 func (wh *WorkObjectHeader) Hash() common.Hash {
 	// If the prime terminus number is below the KawPow fork block, then use the
 	// normal hashing
-	if !wh.IsKawPowBlock() || wh.IsTransitionProgPowBlock() {
+	if !wh.KawpowActivationHappened() || wh.IsTransitionProgPowBlock() {
 		return wh.WoProgpowHash()
 	} else {
 		if wh.IsKawPowBlock() {

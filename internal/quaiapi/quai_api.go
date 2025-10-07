@@ -1111,7 +1111,7 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 
 // GetWork retrieves a new work item to mine
 func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context) (map[string]interface{}, error) {
-	pendingHeader, err := s.b.GetPendingHeader()
+	pendingHeader, err := s.b.GetPendingHeader(types.Kawpow)
 	if err != nil {
 		return nil, err
 	}
@@ -1179,7 +1179,7 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
-	pendingHeader, err := s.b.GetPendingHeader() // 0 is default progpow
+	pendingHeader, err := s.b.GetPendingHeader(types.Progpow) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

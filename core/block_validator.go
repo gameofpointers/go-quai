@@ -413,8 +413,7 @@ func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.S
 	}
 
 	// Check that the UncledEntropy in the header matches the S from the block
-	engine := v.getEngineForHeader(block.WorkObjectHeader())
-	expectedUncledEntropy := engine.UncledLogEntropy(block)
+	expectedUncledEntropy := v.hc.UncledLogEntropy(block)
 	if expectedUncledEntropy.Cmp(header.UncledEntropy()) != 0 {
 		return fmt.Errorf("invalid uncledEntropy (remote: %x local: %x)", header.UncledEntropy(), expectedUncledEntropy)
 	}
