@@ -343,9 +343,6 @@ func (v *BlockValidator) SanityCheckWorkObjectShareViewBody(wo *types.WorkObject
 	if wo.WorkObjectHeader().NumberU64() < 2*params.BlocksPerMonth && wo.WorkObjectHeader().Lock() != 0 {
 		return fmt.Errorf("work object header has invalid lockup byte")
 	}
-	if wo.Header() == nil {
-		return fmt.Errorf("wo header is nil")
-	}
 	// Transactions, SubManifestHash, InterlinkHashes should be nil in the workshare in Zone context
 	if len(wo.OutboundEtxs()) != 0 {
 		return fmt.Errorf("zone body has non zero transactions")
