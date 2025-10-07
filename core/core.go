@@ -799,8 +799,8 @@ func (c *Core) WriteGenesisBlock(block *types.WorkObject, location common.Locati
 	c.sl.WriteGenesisBlock(block, location)
 }
 
-func (c *Core) GetPendingHeader() (*types.WorkObject, error) {
-	return c.sl.GetPendingHeader()
+func (c *Core) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) {
+	return c.sl.GetPendingHeader(powId)
 }
 
 func (c *Core) GetManifest(blockHash common.Hash) (types.BlockManifest, error) {
@@ -1151,6 +1151,10 @@ func (c *Core) CalcBaseFee(wo *types.WorkObject) *big.Int {
 
 func (c *Core) GetKQuaiAndUpdateBit(blockHash common.Hash) (*big.Int, uint8, error) {
 	return c.sl.hc.GetKQuaiAndUpdateBit(blockHash)
+}
+
+func (c *Core) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, error) {
+	return c.sl.hc.WorkShareLogEntropy(wo)
 }
 
 func (c *Core) TxMiningEnabled() bool {

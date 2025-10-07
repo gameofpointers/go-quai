@@ -83,7 +83,7 @@ type Backend interface {
 	PendingBlock() *types.WorkObject
 	RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int)
 	NewGenesisPendingHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, hash common.Hash) error
-	GetPendingHeader() (*types.WorkObject, error)
+	GetPendingHeader(powID types.PowID) (*types.WorkObject, error)
 	GetPendingBlockBody(sealHash common.Hash) *types.WorkObject
 	SubmitBlock(raw hexutil.Bytes) error
 	ReceiveMinedHeader(woHeader *types.WorkObject) error

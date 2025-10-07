@@ -6,7 +6,6 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
-	bigMath "github.com/dominant-strategies/go-quai/common/math"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
@@ -92,7 +91,7 @@ func (kawpow *Kawpow) TotalLogEntropy(chain consensus.ChainHeaderReader, header 
 		return big.NewInt(0)
 	}
 	if kawpow.NodeLocation().Context() == common.ZONE_CTX {
-		workShareEntropy, err := kawpow.WorkShareLogEntropy(chain, header)
+		workShareEntropy, err := chain.WorkShareLogEntropy(header)
 		if err != nil {
 			kawpow.logger.WithField("err", err).Error("Error calculating WorkShareLogEntropy in TotalLogEntropy")
 			return big.NewInt(0)
@@ -126,7 +125,7 @@ func (kawpow *Kawpow) DeltaLogEntropy(chain consensus.ChainHeaderReader, header 
 		return big.NewInt(0)
 	}
 	if kawpow.NodeLocation().Context() == common.ZONE_CTX {
-		workShareS, err := kawpow.WorkShareLogEntropy(chain, header)
+		workShareS, err := chain.WorkShareLogEntropy(header)
 		if err != nil {
 			kawpow.logger.WithField("err", err).Error("Error calculating WorkShareLogEntropy in DeltaLogEntropy")
 			return big.NewInt(0)
@@ -145,81 +144,6 @@ func (kawpow *Kawpow) DeltaLogEntropy(chain consensus.ChainHeaderReader, header 
 		return totalDeltaEntropy
 	}
 	return big.NewInt(0)
-}
-
-func (kawpow *Kawpow) UncledLogEntropy(block *types.WorkObject) *big.Int {
-	uncles := block.Uncles()
-	totalUncledLogS := big.NewInt(0)
-	for _, uncle := range uncles {
-		// Verify the seal and get the powHash for the given header
-		powHash, err := kawpow.verifySeal(uncle)
-		if err != nil {
-			continue
-		}
-		// Get entropy reduction of this header
-		intrinsicEntropy := kawpow.IntrinsicLogEntropy(powHash)
-		totalUncledLogS.Add(totalUncledLogS, intrinsicEntropy)
-	}
-	return totalUncledLogS
-}
-
-func (kawpow *Kawpow) WorkShareLogEntropy(chain consensus.ChainHeaderReader, wo *types.WorkObject) (*big.Int, error) {
-	workShares := wo.Uncles()
-	totalWsEntropy := big.NewInt(0)
-	for _, ws := range workShares {
-		powHash, err := kawpow.ComputePowHash(ws)
-		if err != nil {
-			return big.NewInt(0), err
-		}
-		// Two discounts need to be applied to the weight of each work share
-		// 1) Discount based on the amount of number of other possible work
-		// shares for the same entropy value
-		// 2) Discount based on the staleness of inclusion, for every block
-		// delay the weight gets reduced by the factor of 2
-
-		// Discount 1) only applies if the workshare has less weight than the
-		// work object threshold
-		var wsEntropy *big.Int
-		woDiff := new(big.Int).Set(wo.Difficulty())
-		target := new(big.Int).Div(common.Big2e256, woDiff)
-		if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) > 0 { // powHash > target
-			// The work share that has less than threshold weight needs to add
-			// an extra bit for each level
-			// This is achieved using three steps
-			// 1) Find the difference in entropy between the work share and
-			// threshold in the 2^mantBits bits field because otherwise the precision
-			// is lost due to integer division
-			// 2) Divide this difference with the 2^mantBits to get the number
-			// of bits of difference to discount the workshare entropy
-			// 3) Divide the entropy difference with 2^(extraBits+1) to get the
-			// actual work share weight here +1 is done to the extraBits because
-			// of Quo and if the difference is less than 0, its within the first
-			// level
-			cBigBits := kawpow.IntrinsicLogEntropy(powHash)
-			thresholdBigBits := kawpow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
-			wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
-			extraBits := new(big.Float).Quo(new(big.Float).SetInt(wsEntropy), new(big.Float).SetInt(common.Big2e64))
-			wsEntropyAdj := new(big.Float).Quo(new(big.Float).SetInt(common.Big2e64), bigMath.TwoToTheX(extraBits))
-			wsEntropy, _ = wsEntropyAdj.Int(wsEntropy)
-		} else {
-			cBigBits := kawpow.IntrinsicLogEntropy(powHash)
-			thresholdBigBits := kawpow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
-			wsEntropy = new(big.Int).Sub(cBigBits, thresholdBigBits)
-		}
-		// Discount 2) applies to all shares regardless of the weight
-		// a workshare cannot reference another workshare, it has to be either a block or an uncle
-		// check that the parent hash referenced by the workshare is an uncle or a canonical block
-		// then if its an uncle, traverse back until we hit a canonical block, other wise, use that
-		// as a reference to calculate the distance
-		distance, err := chain.WorkShareDistance(wo, ws)
-		if err != nil {
-			return big.NewInt(0), err
-		}
-		wsEntropy = new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), distance, nil))
-		// Add the entropy into the total entropy once the discount calculation is done
-		totalWsEntropy.Add(totalWsEntropy, wsEntropy)
-	}
-	return totalWsEntropy, nil
 }
 
 func (kawpow *Kawpow) UncledDeltaLogEntropy(chain consensus.ChainHeaderReader, header *types.WorkObject) *big.Int {

@@ -103,6 +103,8 @@ type ChainHeaderReader interface {
 
 	CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) error
 
+	WorkShareLogEntropy(block *types.WorkObject) (*big.Int, error)
+
 	BlockReader
 }
 
@@ -140,12 +142,6 @@ type Engine interface {
 
 	// DeltaLogEntropy returns the log of the entropy delta for a chain since its prior coincidence
 	DeltaLogEntropy(chain ChainHeaderReader, header *types.WorkObject) *big.Int
-
-	// UncledLogEntropy returns the log of the entropy reduction by uncles referenced in the block
-	UncledLogEntropy(block *types.WorkObject) *big.Int
-
-	// WorkShareLogEntropy returns the log of the entropy reduction by the workshare referenced in the block
-	WorkShareLogEntropy(chain ChainHeaderReader, block *types.WorkObject) (*big.Int, error)
 
 	// CheckIfValidWorkShare checks if the workshare meets the work share
 	// requirements defined by the protocol

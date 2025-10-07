@@ -638,8 +638,12 @@ func (b *QuaiAPIBackend) WriteGenesisBlock(block *types.WorkObject, location com
 	b.quai.core.WriteGenesisBlock(block, location)
 }
 
-func (b *QuaiAPIBackend) GetPendingHeader() (*types.WorkObject, error) {
-	return b.quai.core.GetPendingHeader()
+func (b *QuaiAPIBackend) GetPendingHeader(powID types.PowID) (*types.WorkObject, error) {
+	return b.quai.core.GetPendingHeader(powID)
+}
+
+func (b *QuaiAPIBackend) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, error) {
+	return b.quai.core.WorkShareLogEntropy(wo)
 }
 
 func (b *QuaiAPIBackend) GetManifest(blockHash common.Hash) (types.BlockManifest, error) {

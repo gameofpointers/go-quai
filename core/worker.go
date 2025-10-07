@@ -2332,7 +2332,7 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 		// TODO: uncled entropy should be part of something else now because,
 		// consensus doesnt have access to other pow engines, since we can have
 		// many different kinds of workshares
-		wo.Header().SetUncledEntropy(engine.UncledLogEntropy(wo))
+		wo.Header().SetUncledEntropy(w.hc.UncledLogEntropy(wo))
 	}
 
 	manifestHash := w.ComputeManifestHash(parent)
