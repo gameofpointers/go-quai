@@ -658,7 +658,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			if err != nil {
 				return nil, err
 			}
-			zoneThresholdEntropy := engine.IntrinsicLogEntropy(powHash)
+			zoneThresholdEntropy := common.IntrinsicLogEntropy(powHash)
 			totalEntropy = new(big.Int).Add(totalEntropy, zoneThresholdEntropy)
 
 			// First step is to collect all the workshares and uncles at this targetBlockNumber depth, then
@@ -683,18 +683,17 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 					if uncle.NumberU64() == targetBlockNumber {
 						engine := w.hc.GetEngineForHeader(uncle)
 						_, err := engine.VerifySeal(uncle)
-						if err != nil {
+						if err != nil { // TODO: need to probably use the classification method
 							// uncle is a workshare
-							powHash, err := engine.ComputePowHash(uncle)
+							uncleEntropy, err = w.hc.IntrinsicLogEntropy(uncle)
 							if err != nil {
 								return nil, err
 							}
-							uncleEntropy = new(big.Int).Set(engine.IntrinsicLogEntropy(powHash))
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						} else {
 							// Add the target weight into the uncles
 							target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-							uncleEntropy = engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+							uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						}
 						sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)

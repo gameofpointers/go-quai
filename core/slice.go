@@ -761,8 +761,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 		"t5_3": time5_3,
 	}).Info("Times during sub append")
 
-	engine := sl.GetEngineForHeader(block.WorkObjectHeader())
-	intrinsicS := engine.IntrinsicLogEntropy(block.Hash())
+	intrinsicS, _ := sl.hc.IntrinsicLogEntropy(block.WorkObjectHeader())
 	workShare, err := sl.hc.WorkShareLogEntropy(block)
 	if err != nil {
 		sl.logger.WithField("err", err).Error("Error calculating the work share log entropy")

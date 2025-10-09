@@ -9,7 +9,6 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
-	"modernc.org/mathutil"
 )
 
 // CalcOrder returns the order of the block within the hierarchy of chains
@@ -33,9 +32,9 @@ func (kawpow *Kawpow) CalcOrder(chain consensus.BlockReader, header *types.WorkO
 	}
 
 	// Get entropy reduction of this header
-	intrinsicEntropy = kawpow.IntrinsicLogEntropy(powHash)
+	intrinsicEntropy = common.IntrinsicLogEntropy(powHash)
 	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
-	zoneThresholdEntropy := kawpow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+	zoneThresholdEntropy := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 
 	// PRIME
 	// PrimeEntropyThreshold number of zone blocks times the intrinsic logs of
@@ -68,16 +67,6 @@ func (kawpow *Kawpow) CalcOrder(chain consensus.BlockReader, header *types.WorkO
 	// Zone case
 	chain.AddToCalcOrderCache(header.Hash(), common.ZONE_CTX, intrinsicEntropy)
 	return intrinsicEntropy, common.ZONE_CTX, nil
-}
-
-// IntrinsicLogEntropy returns the logarithm of the intrinsic entropy reduction of a PoW hash
-func (kawpow *Kawpow) IntrinsicLogEntropy(powHash common.Hash) *big.Int {
-	x := new(big.Int).SetBytes(powHash.Bytes())
-	d := new(big.Int).Div(common.Big2e256, x)
-	c, m := mathutil.BinaryLog(d, consensus.MantBits)
-	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(consensus.MantBits), nil))
-	bigBits = new(big.Int).Add(bigBits, m)
-	return bigBits
 }
 
 // TotalLogEntropy returns the total entropy reduction if the chain since genesis to the given header
@@ -192,9 +181,9 @@ func (kawpow *Kawpow) CalcRank(chain consensus.ChainHeaderReader, header *types.
 	}
 
 	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
-	zoneThresholdS := kawpow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+	zoneThresholdS := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 
-	intrinsicS := kawpow.IntrinsicLogEntropy(powHash)
+	intrinsicS := common.IntrinsicLogEntropy(powHash)
 	for i := common.InterlinkDepth; i > 0; i-- {
 		extraBits := math.Pow(2, float64(i))
 		primeBlockEntropyThreshold := new(big.Int).Add(zoneThresholdS, common.BitsToBigBits(big.NewInt(int64(extraBits))))

@@ -10,7 +10,6 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
-	"modernc.org/mathutil"
 )
 
 // CalcOrder returns the order of the block within the hierarchy of chains
@@ -34,9 +33,9 @@ func (blake3pow *Blake3pow) CalcOrder(chain consensus.BlockReader, header *types
 	}
 
 	// Get entropy reduction of this header
-	intrinsicEntropy = blake3pow.IntrinsicLogEntropy(header.Hash())
+	intrinsicEntropy = common.IntrinsicLogEntropy(header.Hash())
 	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
-	zoneThresholdEntropy := blake3pow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+	zoneThresholdEntropy := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 
 	// PRIME
 	// PrimeEntropyThreshold number of zone blocks times the intrinsic logs of
@@ -69,16 +68,6 @@ func (blake3pow *Blake3pow) CalcOrder(chain consensus.BlockReader, header *types
 	// Zone case
 	chain.AddToCalcOrderCache(header.Hash(), common.ZONE_CTX, intrinsicEntropy)
 	return intrinsicEntropy, common.ZONE_CTX, nil
-}
-
-// IntrinsicLogEntropy returns the logarithm of the intrinsic entropy reduction of a PoW hash
-func (blake3pow *Blake3pow) IntrinsicLogEntropy(powHash common.Hash) *big.Int {
-	x := new(big.Int).SetBytes(powHash.Bytes())
-	d := new(big.Int).Div(common.Big2e256, x)
-	c, m := mathutil.BinaryLog(d, consensus.MantBits)
-	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(consensus.MantBits), nil))
-	bigBits = new(big.Int).Add(bigBits, m)
-	return bigBits
 }
 
 // TotalLogEntropy returns the total entropy reduction if the chain since genesis to the given header
@@ -190,9 +179,9 @@ func (blake3pow *Blake3pow) CalcRank(chain consensus.ChainHeaderReader, header *
 
 	powHash := header.Hash()
 	target := new(big.Int).Div(common.Big2e256, header.Difficulty())
-	zoneThresholdEntropy := blake3pow.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+	zoneThresholdEntropy := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 
-	intrinsicEntropy := blake3pow.IntrinsicLogEntropy(powHash)
+	intrinsicEntropy := common.IntrinsicLogEntropy(powHash)
 	for i := common.InterlinkDepth; i > 0; i-- {
 		extraBits := math.Pow(2, float64(i))
 		primeBlockEntropyThreshold := new(big.Int).Add(zoneThresholdEntropy, common.BitsToBigBits(big.NewInt(int64(extraBits))))

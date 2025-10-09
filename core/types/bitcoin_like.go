@@ -10,9 +10,8 @@ import (
 	"math/big"
 
 	"github.com/btcsuite/btcd/wire"
-	"golang.org/x/crypto/scrypt"
-
 	"github.com/dominant-strategies/go-quai/common"
+	"golang.org/x/crypto/scrypt"
 )
 
 type bitcoinLikeHeader struct {
@@ -72,7 +71,7 @@ func (h *bitcoinLikeHeader) encodeBinary() []byte {
 
 func (h *bitcoinLikeHeader) hash() common.Hash {
 	data := h.encodeBinary()
-	return doubleSHA256Hash(data)
+	return ShaPowHash(data)
 }
 
 func compactToTarget(bits uint32) *big.Int {
@@ -103,14 +102,14 @@ func reverseBytesCopy(b []byte) []byte {
 	return out
 }
 
-func doubleSHA256Hash(data []byte) common.Hash {
-	first := sha256.Sum256(data)
+func ShaPowHash(headerBytes []byte) common.Hash {
+	first := sha256.Sum256(headerBytes)
 	second := sha256.Sum256(first[:])
 	return common.BytesToHash(reverseBytesCopy(second[:]))
 }
 
-func litecoinScryptHash(data []byte) (common.Hash, error) {
-	digest, err := scrypt.Key(data, data, 1024, 1, 1, 32)
+func ScryptPowHash(headerBytes []byte) (common.Hash, error) {
+	digest, err := scrypt.Key(headerBytes, headerBytes, 1024, 1, 1, 32)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -206,7 +205,7 @@ func (h *BitcoinBlockHeader) VerifyPow() (common.Hash, bool) {
 }
 
 func (h *LitecoinBlockHeader) VerifyPow() (common.Hash, bool) {
-	powHash, err := litecoinScryptHash(h.encodeBinary())
+	powHash, err := ScryptPowHash(h.encodeBinary())
 	if err != nil {
 		return common.Hash{}, false
 	}
@@ -266,7 +265,7 @@ func (h *DogecoinBlockHeader) validateParentBlockPoW(parentHeader []byte) (commo
 		return common.Hash{}, fmt.Errorf("parent header too short: %d bytes (minimum 80)", len(parentHeader))
 	}
 
-	powHash, err := litecoinScryptHash(parentHeader[:80])
+	powHash, err := ScryptPowHash(parentHeader[:80])
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to compute scrypt hash: %w", err)
 	}

@@ -295,8 +295,7 @@ func (c *Core) EntropyWindow() *big.Int {
 		}
 		c.sl.hc.powHashCache.Add(currentHeader.Hash(), powhash)
 	}
-	engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
-	currentBlockIntrinsic := engine.IntrinsicLogEntropy(powhash)
+	currentBlockIntrinsic := common.IntrinsicLogEntropy(powhash)
 	MaxAllowableEntropyDist := new(big.Int).Mul(currentBlockIntrinsic, big.NewInt(c_maxFutureEntropyMultiple))
 	currentHeaderEntropy := c.CurrentHeader().ParentEntropy(common.ZONE_CTX)
 	return new(big.Int).Add(currentHeaderEntropy, MaxAllowableEntropyDist)

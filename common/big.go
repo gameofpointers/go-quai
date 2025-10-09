@@ -95,6 +95,15 @@ func LogBig(diff *big.Int) *big.Int {
 	return bigBits
 }
 
+func IntrinsicLogEntropy(powHash Hash) *big.Int {
+	x := new(big.Int).SetBytes(powHash.Bytes())
+	d := new(big.Int).Div(Big2e256, x)
+	c, m := mathutil.BinaryLog(d, MantBits)
+	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(MantBits), nil))
+	bigBits = new(big.Int).Add(bigBits, m)
+	return bigBits
+}
+
 // DifficultyToBits converts Quai-style difficulty (where difficulty = 2^256/target)
 // to Bitcoin-style compact target (nBits).
 func DifficultyToBits(difficulty *big.Int) (uint32, error) {
