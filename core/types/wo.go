@@ -53,6 +53,8 @@ type WorkObjectHeader struct {
 	data                []byte
 	lock                uint8
 	auxPow              *AuxPow // New field for auxiliary proof-of-work
+	scryptDiffAndCount  *PowShareDiffAndCount
+	shaDiffAndCount     *PowShareDiffAndCount
 	PowHash             atomic.Value
 	PowDigest           atomic.Value
 }
@@ -70,6 +72,62 @@ const (
 	WorkShareObject
 	WorkShareTxObject
 )
+
+type PowShareDiffAndCount struct {
+	Difficulty *big.Int
+	Count      uint16
+}
+
+func NewPowShareDiffAndCount(difficulty *big.Int, count uint16) *PowShareDiffAndCount {
+	return &PowShareDiffAndCount{
+		Difficulty: difficulty,
+		Count:      count,
+	}
+}
+
+func (p *PowShareDiffAndCount) Clone() *PowShareDiffAndCount {
+	var difficulty *big.Int
+	if p.Difficulty != nil {
+		difficulty = new(big.Int).Set(p.Difficulty)
+	}
+	return &PowShareDiffAndCount{
+		Difficulty: difficulty,
+		Count:      p.Count,
+	}
+}
+
+func (p *PowShareDiffAndCount) ProtoEncode() *ProtoPowShareDiffAndCount {
+	if p == nil {
+		return nil
+	}
+	if p.Difficulty == nil && p.Count == 0 {
+		return nil
+	}
+	protoShare := &ProtoPowShareDiffAndCount{}
+	if p.Difficulty != nil {
+		protoShare.Difficulty = p.Difficulty.Bytes()
+	}
+	count := uint32(p.Count)
+	protoShare.Count = &count
+	return protoShare
+}
+
+func (p *PowShareDiffAndCount) ProtoDecode(protoShare *ProtoPowShareDiffAndCount) {
+	if p == nil {
+		return
+	}
+	if protoShare == nil {
+		p.Difficulty = nil
+		p.Count = 0
+		return
+	}
+	if len(protoShare.GetDifficulty()) > 0 {
+		p.Difficulty = new(big.Int).SetBytes(protoShare.GetDifficulty())
+	} else {
+		p.Difficulty = nil
+	}
+	p.Count = uint16(protoShare.GetCount())
+}
 
 type WorkShareValidity int
 
@@ -611,6 +669,20 @@ func (wh *WorkObjectHeader) AuxPow() *AuxPow {
 	return wh.auxPow
 }
 
+func (wh *WorkObjectHeader) ScryptDiffAndCount() *PowShareDiffAndCount {
+	if wh.scryptDiffAndCount == nil {
+		return &PowShareDiffAndCount{}
+	}
+	return wh.scryptDiffAndCount.Clone()
+}
+
+func (wh *WorkObjectHeader) ShaDiffAndCount() *PowShareDiffAndCount {
+	if wh.shaDiffAndCount == nil {
+		return &PowShareDiffAndCount{}
+	}
+	return wh.shaDiffAndCount.Clone()
+}
+
 ////////////////////////////////////////////////////////////
 /////////////////// Work Object Header Setters ///////////////
 ////////////////////////////////////////////////////////////
@@ -669,6 +741,14 @@ func (wh *WorkObjectHeader) SetData(val []byte) {
 
 func (wh *WorkObjectHeader) SetAuxPow(auxPow *AuxPow) {
 	wh.auxPow = auxPow
+}
+
+func (wh *WorkObjectHeader) SetScryptDiffAndCount(val *PowShareDiffAndCount) {
+	wh.scryptDiffAndCount = val.Clone()
+}
+
+func (wh *WorkObjectHeader) SetShaDiffAndCount(val *PowShareDiffAndCount) {
+	wh.shaDiffAndCount = val.Clone()
 }
 
 type WorkObjectBody struct {
@@ -874,7 +954,21 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 }
 
 func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, woType WorkObjectView) *WorkObject {
-	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.WorkObjectHeader().number, header.WorkObjectHeader().difficulty, header.WorkObjectHeader().PrimeTerminusNumber(), header.WorkObjectHeader().txHash, header.WorkObjectHeader().nonce, header.WorkObjectHeader().lock, header.WorkObjectHeader().time, header.Location(), header.PrimaryCoinbase(), header.WorkObjectHeader().data, header.WorkObjectHeader().AuxPow())
+	woHeader := NewWorkObjectHeader(header.Hash(),
+		header.ParentHash(common.ZONE_CTX),
+		header.WorkObjectHeader().number,
+		header.WorkObjectHeader().difficulty,
+		header.WorkObjectHeader().PrimeTerminusNumber(),
+		header.WorkObjectHeader().txHash,
+		header.WorkObjectHeader().nonce,
+		header.WorkObjectHeader().lock,
+		header.WorkObjectHeader().time,
+		header.Location(),
+		header.PrimaryCoinbase(),
+		header.WorkObjectHeader().data,
+		header.WorkObjectHeader().AuxPow(),
+		header.WorkObjectHeader().ScryptDiffAndCount(),
+		header.WorkObjectHeader().ShaDiffAndCount())
 	woBody, _ := NewWorkObjectBody(header.Body().Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
 }
@@ -1048,7 +1142,7 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Locatio
 	return nil
 }
 
-func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow) *WorkObjectHeader {
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, scryptDiffAndCount *PowShareDiffAndCount, shaDiffAndCount *PowShareDiffAndCount) *WorkObjectHeader {
 	return &WorkObjectHeader{
 		headerHash:          headerHash,
 		parentHash:          parentHash,
@@ -1063,6 +1157,8 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 		primaryCoinbase:     primaryCoinbase,
 		data:                data,
 		auxPow:              auxpow,
+		scryptDiffAndCount:  scryptDiffAndCount.Clone(),
+		shaDiffAndCount:     shaDiffAndCount.Clone(),
 	}
 }
 
@@ -1081,6 +1177,13 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 	cpy.SetLock(wh.Lock())
 	cpy.SetPrimaryCoinbase(wh.PrimaryCoinbase())
 	cpy.SetData(wh.Data())
+
+	if wh.ScryptDiffAndCount() != nil {
+		cpy.SetScryptDiffAndCount(wh.ScryptDiffAndCount())
+	}
+	if wh.ShaDiffAndCount() != nil {
+		cpy.SetShaDiffAndCount(wh.ShaDiffAndCount())
+	}
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
@@ -1124,6 +1227,26 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 	// Include AuxPow if present
 	if wh.AuxPow() != nil {
 		result["auxpow"] = wh.AuxPow().RPCMarshal()
+	}
+
+	if scrypt := wh.ScryptDiffAndCount(); scrypt.Difficulty != nil || scrypt.Count != 0 {
+		scryptResult := map[string]interface{}{
+			"count": scrypt.Count,
+		}
+		if scrypt.Difficulty != nil {
+			scryptResult["difficulty"] = (*hexutil.Big)(scrypt.Difficulty)
+		}
+		result["scryptDiffAndCount"] = scryptResult
+	}
+
+	if sha := wh.ShaDiffAndCount(); sha.Difficulty != nil || sha.Count != 0 {
+		shaResult := map[string]interface{}{
+			"count": sha.Count,
+		}
+		if sha.Difficulty != nil {
+			shaResult["difficulty"] = (*hexutil.Big)(sha.Difficulty)
+		}
+		result["shaDiffAndCount"] = shaResult
 	}
 
 	return result
@@ -1201,7 +1324,7 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 	coinbase := common.ProtoAddress{Value: wh.PrimaryCoinbase().Bytes()}
 	data := wh.Data()
 
-	return &ProtoWorkObjectHeader{
+	protoWh := &ProtoWorkObjectHeader{
 		HeaderHash:          &headerHash,
 		ParentHash:          &parentHash,
 		Number:              number,
@@ -1215,6 +1338,15 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 		Data:                data,
 		// AuxPow explicitly NOT included to avoid circular reference
 	}
+
+	// After kawpow activation the scrypt and sha share diff count should
+	// be part of the seal
+	if wh.KawpowActivationHappened() {
+		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
+		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
+	}
+
+	return protoWh
 }
 
 func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
@@ -1231,13 +1363,7 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 	coinbase := common.ProtoAddress{Value: wh.PrimaryCoinbase().Bytes()}
 	data := wh.Data()
 
-	// Include AuxPow if present
-	var auxPow *ProtoAuxPow
-	if wh.auxPow != nil {
-		auxPow = wh.auxPow.ProtoEncode()
-	}
-
-	return &ProtoWorkObjectHeader{
+	protoWh := &ProtoWorkObjectHeader{
 		HeaderHash:          &hash,
 		ParentHash:          &parentHash,
 		Number:              number,
@@ -1251,8 +1377,21 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 		Time:                &wh.time,
 		PrimaryCoinbase:     &coinbase,
 		Data:                data,
-		AuxPow:              auxPow,
-	}, nil
+	}
+
+	// Include AuxPow if present
+	var auxPow *ProtoAuxPow
+	// kawpow fork happened?
+	if wh.KawpowActivationHappened() {
+		if wh.auxPow != nil {
+			auxPow = wh.auxPow.ProtoEncode()
+		}
+		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
+		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
+		protoWh.AuxPow = auxPow
+	}
+
+	return protoWh, nil
 }
 
 func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location common.Location) error {
@@ -1274,11 +1413,25 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 	wh.SetPrimaryCoinbase(common.BytesToAddress(data.GetPrimaryCoinbase().GetValue(), location))
 	wh.SetData(data.GetData())
 
-	// Decode AuxPow if present
-	if data.AuxPow != nil {
-		wh.auxPow = &AuxPow{}
-		if err := wh.auxPow.ProtoDecode(data.AuxPow); err != nil {
-			return err
+	if new(big.Int).SetBytes(data.GetPrimeTerminusNumber()).Uint64() >= params.KawPowForkBlock {
+
+		// if the scryptDiffAndCount or the shaDiffAndCount doesnt
+		// exist after the fork, throw an error
+		if data.GetShaDiffAndCount() == nil {
+			return errors.New("sha diff and count is nil")
+		}
+		if data.GetScryptDiffAndCount() == nil {
+			return errors.New("scrypt diff and count is nil")
+		}
+		wh.scryptDiffAndCount.ProtoDecode(data.GetScryptDiffAndCount())
+		wh.shaDiffAndCount.ProtoDecode(data.GetShaDiffAndCount())
+
+		// Decode AuxPow if present
+		if data.AuxPow != nil {
+			wh.auxPow = &AuxPow{}
+			if err := wh.auxPow.ProtoDecode(data.AuxPow); err != nil {
+				return err
+			}
 		}
 	}
 
