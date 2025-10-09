@@ -331,6 +331,11 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 	}
 }
 
+func (hc *HeaderChain) CalculatePowDiff(prevDiff *big.Int, numShares uint16) *big.Int {
+	// TODO: implement the pow diff adjustment algo, it also needs to have a min
+	return big.NewInt(10000)
+}
+
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
 // chain in the slice which emitted the given block.
 func (hc *HeaderChain) CollectSubRollup(b *types.WorkObject) (types.Transactions, error) {

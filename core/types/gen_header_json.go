@@ -360,6 +360,8 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		Lock 	   hexutil.Uint64 `json:"lock" gencoden:"required"`
 		PrimaryCoinbase   string `json:"primaryCoinbase" gencoden:"required"`
 		Data hexutil.Bytes       `json:"data" gencoden:"required"`
+		ScryptDiffAndCount *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
+		ShaDiffAndCount    *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -374,6 +376,16 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 	enc.Lock = hexutil.Uint64(wh.Lock())
 	enc.PrimaryCoinbase = wh.PrimaryCoinbase().Hex()
 	enc.Data = wh.Data()
+
+	// Only include these fields if they are non-nil and non-empty (for backward compatibility)
+	scrypt := wh.ScryptDiffAndCount()
+	if scrypt != nil && (scrypt.Difficulty != nil || scrypt.Count != 0) {
+		enc.ScryptDiffAndCount = scrypt
+	}
+	sha := wh.ShaDiffAndCount()
+	if sha != nil && (sha.Difficulty != nil || sha.Count != 0) {
+		enc.ShaDiffAndCount = sha
+	}
 
 	raw, err := json.Marshal(&enc)
 	return raw, err
@@ -395,6 +407,8 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		PrimaryCoinbase   string  `json:"primaryCoinbase" gencoden:"required"`
 		Data hexutil.Bytes        `json:"data" gencoden:"required"`
 		AuxPow     json.RawMessage `json:"auxpow"`
+		ScryptDiffAndCount *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
+		ShaDiffAndCount    *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -430,6 +444,16 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 			return err
 		}
 		wh.SetAuxPow(auxPow)
+	}
+
+	// Handle ScryptDiffAndCount if present
+	if dec.ScryptDiffAndCount != nil {
+		wh.SetScryptDiffAndCount(dec.ScryptDiffAndCount)
+	}
+
+	// Handle ShaDiffAndCount if present
+	if dec.ShaDiffAndCount != nil {
+		wh.SetShaDiffAndCount(dec.ShaDiffAndCount)
 	}
 
 	return nil

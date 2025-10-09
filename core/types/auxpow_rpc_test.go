@@ -51,6 +51,8 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 		common.Address{},               // primaryCoinbase
 		[]byte{},                       // data
 		auxPow,                         // auxpow
+		&PowShareDiffAndCount{},        // scryptDiffAndCount
+		&PowShareDiffAndCount{},        // shaDiffAndCount
 	)
 
 	// Test RPC marshaling
