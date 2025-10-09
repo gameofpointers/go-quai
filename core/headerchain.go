@@ -229,10 +229,13 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 	workShares := wo.Uncles()
 	totalWsEntropy := big.NewInt(0)
 	for _, ws := range workShares {
-		engine := hc.GetEngineForHeader(ws)
-		powHash, err := engine.ComputePowHash(ws)
+		wsType := hc.UncleWorkShareClassification(ws)
+		if wsType == types.Invalid {
+			return nil, errors.New("invalid workshare detected")
+		}
+		cBigBits, err := hc.IntrinsicLogEntropy(ws)
 		if err != nil {
-			return big.NewInt(0), err
+			return nil, errors.New("cannot compute intrinsic log entropy for the workshare")
 		}
 		// Two discounts need to be applied to the weight of each work share
 		// 1) Discount based on the amount of number of other possible work
@@ -245,7 +248,7 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 		var wsEntropy *big.Int
 		woDiff := new(big.Int).Set(wo.Difficulty())
 		target := new(big.Int).Div(common.Big2e256, woDiff)
-		if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) > 0 { // powHash > target
+		if wsType == types.Valid {
 			// The work share that has less than threshold weight needs to add
 			// an extra bit for each level
 			// This is achieved using three steps
@@ -258,16 +261,13 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 			// actual work share weight here +1 is done to the extraBits because
 			// of Quo and if the difference is less than 0, its within the first
 			// level
-
-			cBigBits := engine.IntrinsicLogEntropy(powHash)
-			thresholdBigBits := engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+			thresholdBigBits := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 			wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
 			extraBits := new(big.Float).Quo(new(big.Float).SetInt(wsEntropy), new(big.Float).SetInt(common.Big2e64))
 			wsEntropyAdj := new(big.Float).Quo(new(big.Float).SetInt(common.Big2e64), bigMath.TwoToTheX(extraBits))
 			wsEntropy, _ = wsEntropyAdj.Int(wsEntropy)
-		} else {
-			cBigBits := engine.IntrinsicLogEntropy(powHash)
-			thresholdBigBits := engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+		} else if wsType == types.Block {
+			thresholdBigBits := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 			wsEntropy = new(big.Int).Sub(cBigBits, thresholdBigBits)
 		}
 		// Discount 2) applies to all shares regardless of the weight
@@ -297,10 +297,38 @@ func (hc *HeaderChain) UncledLogEntropy(block *types.WorkObject) *big.Int {
 			hc.logger.WithField("uncle", uncle.Hash()).Error("Failed to compute pow hash for uncle")
 			continue
 		}
-		uncleEntropy := engine.IntrinsicLogEntropy(powHash)
+		uncleEntropy := common.IntrinsicLogEntropy(powHash)
 		totalUncledLogS = new(big.Int).Add(totalUncledLogS, uncleEntropy)
 	}
 	return totalUncledLogS
+}
+
+func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int, error) {
+	// If auxpow is not nil and its not kawpow or progpow, we need to compute it directly as
+	// we dont have engine interface for sha and scrypt
+	if ws.AuxPow() == nil || ws.AuxPow().PowID() <= types.Kawpow {
+		engine := hc.GetEngineForHeader(ws)
+		powHash, err := engine.ComputePowHash(ws)
+		if err != nil {
+			hc.logger.WithField("workshare", ws.Hash()).Error("Failed to compute pow hash for workshare")
+			return big.NewInt(0), err
+		}
+		return common.IntrinsicLogEntropy(powHash), nil
+	}
+
+	switch ws.AuxPow().PowID() {
+	case types.SHA:
+		powHash := types.ShaPowHash(ws.AuxPow().Header())
+		return common.IntrinsicLogEntropy(powHash), nil
+	case types.Scrypt:
+		powHash, err := types.ScryptPowHash(ws.AuxPow().Header())
+		if err != nil {
+			return nil, err
+		}
+		return common.IntrinsicLogEntropy(powHash), nil
+	default:
+		return nil, errors.New("unknown auxpow type")
+	}
 }
 
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate

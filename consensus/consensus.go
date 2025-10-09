@@ -131,9 +131,6 @@ type Engine interface {
 	// engine is based on signatures.
 	Author(header *types.WorkObject) (common.Address, error)
 
-	// IntrinsicLogEntropy returns the logarithm of the intrinsic entropy reduction of a PoW hash
-	IntrinsicLogEntropy(powHash common.Hash) *big.Int
-
 	// CalcOrder returns the order of the block within the hierarchy of chains
 	CalcOrder(chain BlockReader, header *types.WorkObject) (*big.Int, int, error)
 

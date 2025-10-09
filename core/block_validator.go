@@ -201,7 +201,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 		}
 		v.hc.powHashCache.Add(wo.Hash(), powhash)
 	}
-	newBlockIntrinsic := v.getEngineForHeader(wo.WorkObjectHeader()).IntrinsicLogEntropy(powhash)
+	newBlockIntrinsic := common.IntrinsicLogEntropy(powhash)
 
 	currentHeader := v.hc.CurrentHeader()
 	currentHeaderHash := currentHeader.Hash()
@@ -219,7 +219,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 		}
 		v.hc.powHashCache.Add(currentHeaderHash, currentHeaderPowHash)
 	}
-	currentHeaderIntrinsic := v.getEngineForHeader(currentHeader.WorkObjectHeader()).IntrinsicLogEntropy(currentHeaderPowHash)
+	currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
 
 	// Check if the Block is atleast half the current difficulty in Zone Context,
 	// this makes sure that the nodes don't listen to the forks with the PowHash

@@ -408,12 +408,12 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			if err != nil {
 				return pubsub.ValidationReject
 			}
-			currentHeaderIntrinsic := backend.Engine(currentHeader.WorkObjectHeader()).IntrinsicLogEntropy(currentHeaderPowHash)
+			currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
 			if currentHeaderIntrinsic == nil {
 				return pubsub.ValidationIgnore
 			}
 
-			workShareIntrinsicEntropy := backend.Engine(block.WorkObjectHeader()).IntrinsicLogEntropy(powHash)
+			workShareIntrinsicEntropy := common.IntrinsicLogEntropy(powHash)
 			if workShareIntrinsicEntropy == nil {
 				return pubsub.ValidationIgnore
 			}

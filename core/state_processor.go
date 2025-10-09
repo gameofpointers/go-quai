@@ -1119,7 +1119,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		if err != nil {
 			return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute pow hash for the target block")
 		}
-		zoneThresholdEntropy := engine.IntrinsicLogEntropy(powHash)
+		zoneThresholdEntropy := common.IntrinsicLogEntropy(powHash)
 		totalEntropy = new(big.Int).Add(totalEntropy, zoneThresholdEntropy)
 
 		// First step is to collect all the workshares and uncles at this targetBlockNumber depth, then
@@ -1145,17 +1145,15 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 					engine := p.hc.GetEngineForHeader(uncle)
 					_, err := engine.VerifySeal(uncle)
 					if err != nil {
-						// uncle is a workshare
-						powHash, err := engine.ComputePowHash(uncle)
+						uncleEntropy, err = p.hc.IntrinsicLogEntropy(uncle)
 						if err != nil {
-							return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
+							return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute intrinsic log entropy for the workshare")
 						}
-						uncleEntropy = new(big.Int).Set(engine.IntrinsicLogEntropy(powHash))
 						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 					} else {
 						// Add the target weight into the uncles
 						target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-						uncleEntropy = engine.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+						uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 					}
 					sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)

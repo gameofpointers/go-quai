@@ -122,7 +122,7 @@ func (h *handler) missingBlockLoop() {
 				if err != nil {
 					continue
 				}
-				currentHeaderIntrinsic := h.core.Engine(currentHeader.WorkObjectHeader()).IntrinsicLogEntropy(currentHeaderPowHash)
+				currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
 				currentS := h.core.CurrentHeader().ParentEntropy(h.core.NodeCtx())
 				MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, new(big.Int).SetUint64(params.MaxAllowableEntropyDist))
 
