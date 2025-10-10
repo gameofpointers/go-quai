@@ -1175,22 +1175,12 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 	return s.b.ReceiveWorkShare(workShare)
 }
 
-func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil.Bytes, error) {
+func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context, powId types.PowID) (hexutil.Bytes, error) {
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
 
-	// If powid is set use that
-	powId := ctx.Value("powid")
-	var powIdValue = types.Progpow
-	if powIdValue, ok := powId.(uint32); ok {
-		s.b.Logger().WithField("powid", powIdValue).Debug("Using powid from context")
-	}
-
-	// TODO: Fix this, hard coding for now, need a way to get this information
-	powIdValue = types.SHA
-
-	pendingHeader, err := s.b.GetPendingHeader(powIdValue) // 0 is default progpow
+	pendingHeader, err := s.b.GetPendingHeader(powId) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

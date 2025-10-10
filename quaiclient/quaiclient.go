@@ -127,9 +127,9 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number string) *types.Head
 //// Miner APIS
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, error) {
+func (ec *Client) GetPendingHeader(ctx context.Context, powId types.PowID) (*types.WorkObject, error) {
 	var raw hexutil.Bytes
-	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader")
+	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader", powId)
 	if err != nil {
 		return nil, err
 	}

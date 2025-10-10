@@ -1094,6 +1094,23 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 			}
 		case types.Scrypt:
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
+				scryptHeader := types.NewShaHeader(
+					int32(auxTemplate.Version()),
+					auxTemplate.PrevHash(),
+					common.Hash{},
+					uint32(phCopy.Time()),
+					auxTemplate.NBits(),
+					0, // Nonce will be found by miner
+				)
+				// Use the full 80-byte encoded header, not just the 32-byte hash
+				scryptHeaderBytes := scryptHeader.EncodeBinary()
+
+				coinbaseTransaction := types.CreateCoinbaseTxWithHeight(auxTemplate.Height(), []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
+				coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, phCopy.SealHash().Bytes())
+				// Dont have the actual hash of the block yet
+				auxPow := types.NewAuxPow(types.Scrypt, scryptHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+
+				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
 			} else {
 				return nil, errors.New("no auxpow template available for Scrypt mining")
 			}

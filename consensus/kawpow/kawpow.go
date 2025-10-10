@@ -237,10 +237,8 @@ type Kawpow struct {
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
 func New(config Config, notify []string, noverify bool, logger *log.Logger) *Kawpow {
-	if config.CachesInMem <= 0 {
-		logger.WithField("requested", config.CachesInMem).Warn("Invalid kawpow caches in memory, defaulting to 3")
-		config.CachesInMem = 3
-	}
+	logger.WithField("requested", config.CachesInMem).Warn("Invalid kawpow caches in memory, defaulting to 3")
+	config.CachesInMem = 3
 	if config.CacheDir != "" && config.CachesOnDisk > 0 {
 		logger.WithFields(log.Fields{
 			"dir":   config.CacheDir,
