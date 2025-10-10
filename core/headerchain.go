@@ -261,9 +261,28 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 			// actual work share weight here +1 is done to the extraBits because
 			// of Quo and if the difference is less than 0, its within the first
 			// level
-			thresholdBigBits := common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
-			wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
+
+			// TODO: NEED TO CALCULATE THE ENTROPY CONTRIBUTED BY SHA AND SCRYPT SHARES properly
+			var thresholdBigBits *big.Int
+			var shaTarget, scryptTarget *big.Int
+			if ws.AuxPow() != nil && ws.AuxPow().PowID() > types.Kawpow {
+				if ws.AuxPow().PowID() == types.SHA {
+					shaTarget = new(big.Int).Div(common.Big2e256, wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
+					thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(shaTarget.Bytes()))
+				} else if ws.AuxPow().PowID() == types.Scrypt {
+					scryptTarget = new(big.Int).Div(common.Big2e256, wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
+					thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(scryptTarget.Bytes()))
+				}
+				wsEntropy = new(big.Int).Sub(cBigBits, thresholdBigBits) // Extra bits after the threshold for sha and scrypt
+			} else {
+				thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+				wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
+			}
+
+			hc.logger.WithFields(log.Fields{"ws_entropy_pre_adj": wsEntropy, "wsType": wsType, "sha target bytes": shaTarget, "cBigBits": cBigBits, "thresholdBigBits": thresholdBigBits, "target": target, "woDiff": woDiff}).Warn("workshare entropy information")
+
 			extraBits := new(big.Float).Quo(new(big.Float).SetInt(wsEntropy), new(big.Float).SetInt(common.Big2e64))
+
 			wsEntropyAdj := new(big.Float).Quo(new(big.Float).SetInt(common.Big2e64), bigMath.TwoToTheX(extraBits))
 			wsEntropy, _ = wsEntropyAdj.Int(wsEntropy)
 		} else if wsType == types.Block {
@@ -279,6 +298,7 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 		if err != nil {
 			return big.NewInt(0), err
 		}
+		hc.logger.WithFields(log.Fields{"ws_entropy": wsEntropy, "distance": distance, "wsType": wsType}).Warn("workshare entropy information")
 		wsEntropy = new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), distance, nil))
 		// Add the entropy into the total entropy once the discount calculation is done
 		totalWsEntropy.Add(totalWsEntropy, wsEntropy)
@@ -330,8 +350,38 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 }
 
 func (hc *HeaderChain) CalculatePowDiff(prevDiff *big.Int, numShares uint16) *big.Int {
-	// TODO: implement the pow diff adjustment algo, it also needs to have a min
-	return big.NewInt(10000)
+	var minSrc *big.Int
+	if params.MinShaDiff.Cmp(params.MinScryptDiff) <= 0 {
+		minSrc = params.MinShaDiff
+	} else {
+		minSrc = params.MinScryptDiff
+	}
+	minDiff := new(big.Int).Set(minSrc)
+
+	if prevDiff == nil || prevDiff.Sign() <= 0 {
+		return minDiff
+	}
+
+	diff := new(big.Int).Set(prevDiff)
+	if diff.Cmp(minDiff) < 0 {
+		diff.Set(minDiff)
+	}
+
+	targetShares := params.MaxWorkShareCount
+	if targetShares == 0 {
+		return diff
+	}
+
+	if numShares == 0 {
+		return minDiff
+	}
+
+	result := new(big.Int).Mul(diff, big.NewInt(int64(numShares)))
+	result.Quo(result, big.NewInt(int64(targetShares)))
+	if result.Cmp(minDiff) < 0 {
+		result.Set(minDiff)
+	}
+	return result
 }
 
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
