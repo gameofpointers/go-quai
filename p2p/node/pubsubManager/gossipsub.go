@@ -362,67 +362,93 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				return pubsub.ValidationReject
 			}
 
-			threshold := backend.GetWorkShareP2PThreshold()
-			if !backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), threshold) {
-				backend.Logger().Error("workshare has less entropy than the workshare p2p threshold")
-				return pubsub.ValidationReject
-			}
+			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
+			if block.WorkObject.AuxPow().PowID() == types.SHA || block.WorkObject.AuxPow().PowID() == types.Scrypt {
 
-			// After the goldenage fork v3 if a share that is not a workshare is broadcasted without the
-			// transactions then throw an error
-			isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), params.WorkSharesThresholdDiff)
-			if !isWorkShare && len(block.WorkObject.Transactions()) == 0 {
-				return pubsub.ValidationReject
-			}
+				workShareTarget := new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
+				var powHash common.Hash
+				if block.WorkObject.AuxPow().PowID() == types.Scrypt {
+					powHash, err = types.ScryptPowHash(block.WorkObject.AuxPow().Header())
+					if err != nil {
+						return pubsub.ValidationReject
+					}
+				} else {
+					powHash = types.ShaPowHash(block.WorkObject.AuxPow().Header())
+				}
 
-			if len(block.WorkObject.Transactions()) > int(backend.GetMaxTxInWorkShare()) {
-				backend.Logger().Errorf("workshare contains more transactions than allowed. Max allowed: %d, actual: %d", backend.GetMaxTxInWorkShare(), len(block.WorkObject.Transactions()))
-				return pubsub.ValidationReject
-			}
+				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
-			powHash, err := backend.Engine(block.WorkObjectHeader()).ComputePowHash(block.WorkObject.WorkObjectHeader())
-			if err != nil {
-				backend.Logger().WithField("err", err).Error("Error computing the powHash of the work object header received from peer")
-				return pubsub.ValidationReject
-			}
+				// Check if satisfies workShareTarget
+				if powHashBigInt.Cmp(workShareTarget) > 0 {
+					return pubsub.ValidationReject
+				}
 
-			currentHeader := backend.CurrentHeader()
+				// TODO: Add additional checks comparing the current header
+				// share diff and also the distance checks from below
 
-			// Check that the work share is atmost c_MaxWorkShareDist behind
-			if block.WorkObject.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist < currentHeader.NumberU64(backend.NodeCtx()) {
-				return pubsub.ValidationIgnore
-			}
+			} else {
+				threshold := backend.GetWorkShareP2PThreshold()
+				if !backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), threshold) {
+					backend.Logger().Error("workshare has less entropy than the workshare p2p threshold")
+					return pubsub.ValidationReject
+				}
 
-			// Check that the workshare is atmost c_MaxWorkShareDist ahead
-			if block.WorkObject.NumberU64(backend.NodeCtx()) > currentHeader.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist {
-				return pubsub.ValidationIgnore
-			}
+				// After the goldenage fork v3 if a share that is not a workshare is broadcasted without the
+				// transactions then throw an error
+				isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), params.WorkSharesThresholdDiff)
+				if !isWorkShare && len(block.WorkObject.Transactions()) == 0 {
+					return pubsub.ValidationReject
+				}
 
-			currentHeaderHash := currentHeader.Hash()
-			// cannot have a pow filter when the current header is genesis
-			if backend.IsGenesisHash(currentHeaderHash) {
-				return pubsub.ValidationAccept
-			}
+				if len(block.WorkObject.Transactions()) > int(backend.GetMaxTxInWorkShare()) {
+					backend.Logger().Errorf("workshare contains more transactions than allowed. Max allowed: %d, actual: %d", backend.GetMaxTxInWorkShare(), len(block.WorkObject.Transactions()))
+					return pubsub.ValidationReject
+				}
 
-			currentHeaderPowHash, err := backend.Engine(currentHeader.WorkObjectHeader()).VerifySeal(currentHeader.WorkObjectHeader())
-			if err != nil {
-				return pubsub.ValidationReject
-			}
-			currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
-			if currentHeaderIntrinsic == nil {
-				return pubsub.ValidationIgnore
-			}
+				powHash, err := backend.Engine(block.WorkObjectHeader()).ComputePowHash(block.WorkObject.WorkObjectHeader())
+				if err != nil {
+					backend.Logger().WithField("err", err).Error("Error computing the powHash of the work object header received from peer")
+					return pubsub.ValidationReject
+				}
 
-			workShareIntrinsicEntropy := common.IntrinsicLogEntropy(powHash)
-			if workShareIntrinsicEntropy == nil {
-				return pubsub.ValidationIgnore
-			}
+				currentHeader := backend.CurrentHeader()
 
-			// Check if the Block is atleast half the current difficulty in Zone Context,
-			// this makes sure that the nodes don't listen to the forks with the PowHash
-			//	with less than 50% of current difficulty
-			if backend.NodeCtx() == common.ZONE_CTX && workShareIntrinsicEntropy.Cmp(new(big.Int).Div(currentHeaderIntrinsic, big.NewInt(2))) < 0 {
-				return pubsub.ValidationIgnore
+				// Check that the work share is atmost c_MaxWorkShareDist behind
+				if block.WorkObject.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist < currentHeader.NumberU64(backend.NodeCtx()) {
+					return pubsub.ValidationIgnore
+				}
+
+				// Check that the workshare is atmost c_MaxWorkShareDist ahead
+				if block.WorkObject.NumberU64(backend.NodeCtx()) > currentHeader.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist {
+					return pubsub.ValidationIgnore
+				}
+
+				currentHeaderHash := currentHeader.Hash()
+				// cannot have a pow filter when the current header is genesis
+				if backend.IsGenesisHash(currentHeaderHash) {
+					return pubsub.ValidationAccept
+				}
+
+				currentHeaderPowHash, err := backend.Engine(currentHeader.WorkObjectHeader()).VerifySeal(currentHeader.WorkObjectHeader())
+				if err != nil {
+					return pubsub.ValidationReject
+				}
+				currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
+				if currentHeaderIntrinsic == nil {
+					return pubsub.ValidationIgnore
+				}
+
+				workShareIntrinsicEntropy := common.IntrinsicLogEntropy(powHash)
+				if workShareIntrinsicEntropy == nil {
+					return pubsub.ValidationIgnore
+				}
+
+				// Check if the Block is atleast half the current difficulty in Zone Context,
+				// this makes sure that the nodes don't listen to the forks with the PowHash
+				//	with less than 50% of current difficulty
+				if backend.NodeCtx() == common.ZONE_CTX && workShareIntrinsicEntropy.Cmp(new(big.Int).Div(currentHeaderIntrinsic, big.NewInt(2))) < 0 {
+					return pubsub.ValidationIgnore
+				}
 			}
 		case *types.AuxTemplate:
 			// TODO: Aux template, signature checks go here, once that is pulled in

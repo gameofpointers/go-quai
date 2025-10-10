@@ -1038,11 +1038,11 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 	if powId == types.Progpow {
 		phCopy.WorkObjectHeader().SetAuxPow(nil)
 	} else {
-		// If we have an auxpow template, we need to create a proper Ravencoin header
+		auxTemplate := sl.miner.worker.GetBestAuxTemplate(powId)
+		// If we have a KAWPOW template, we need to create a proper Ravencoin header
 		switch powId {
 		case types.Kawpow:
-			auxTemplate := sl.miner.worker.GetBestAuxTemplate(powId)
-			// If we have a KAWPOW template, we need to create a proper Ravencoin header
+			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 				// Create a properly configured Ravencoin header for KAWPOW mining
 				ravencoinHeader := types.EmptyRavencoinHeader()
@@ -1067,6 +1067,35 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
+			} else {
+				return nil, errors.New("no auxpow template available for KAWPOW mining")
+			}
+		case types.SHA:
+			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
+				shaHeader := types.NewShaHeader(
+					int32(auxTemplate.Version()),
+					auxTemplate.PrevHash(),
+					common.Hash{},
+					uint32(phCopy.Time()),
+					auxTemplate.NBits(),
+					0, // Nonce will be found by miner
+				)
+				// Use the full 80-byte encoded header, not just the 32-byte hash
+				shaHeaderBytes := shaHeader.EncodeBinary()
+
+				coinbaseTransaction := types.CreateCoinbaseTxWithHeight(auxTemplate.Height(), []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
+				coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, phCopy.SealHash().Bytes())
+				// Dont have the actual hash of the block yet
+				auxPow := types.NewAuxPow(types.SHA, shaHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+
+				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
+			} else {
+				return nil, errors.New("no auxpow template available for SHA mining")
+			}
+		case types.Scrypt:
+			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
+			} else {
+				return nil, errors.New("no auxpow template available for Scrypt mining")
 			}
 		}
 	}
@@ -2318,7 +2347,33 @@ func (sl *Slice) SubscribeExpansionEvent(ch chan<- ExpansionEvent) event.Subscri
 // If an error is returned this means the workShare was invalid and/or did not meet the minimum p2p threshold.
 func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView *types.WorkObjectShareView, isBlock, isWorkShare bool, err error) {
 	if workShare != nil {
+		// If the workshares are from sha or scrypt, we have to validate them separately
 		var isWorkShare, isSubShare bool
+		if workShare.AuxPow() != nil {
+			if workShare.AuxPow().PowID() == types.SHA || workShare.AuxPow().PowID() == types.Scrypt {
+
+				workShareTarget := new(big.Int).Div(common.Big2e256, workShare.ShaDiffAndCount().Difficulty())
+				var powHash common.Hash
+				if workShare.AuxPow().PowID() == types.Scrypt {
+					powHash, err = types.ScryptPowHash(workShare.AuxPow().Header())
+					if err != nil {
+						return nil, false, false, errors.New("failed to compute scrypt pow hash")
+					}
+				} else {
+					powHash = types.ShaPowHash(workShare.AuxPow().Header())
+				}
+				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
+
+				// Check if satisfies workShareTarget
+				if powHashBigInt.Cmp(workShareTarget) < 0 {
+					wo := types.NewWorkObject(workShare, nil, nil)
+					shareView := wo.ConvertToWorkObjectShareView([]*types.Transaction{})
+					return shareView, false, true, nil
+				} else {
+					return nil, false, false, errors.New("workshare does not satisfy the target")
+				}
+			}
+		}
 
 		engine := sl.GetEngineForHeader(workShare)
 		if engine == nil {
@@ -2356,6 +2411,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		wo := types.NewWorkObject(workShare, nil, nil)
 		shareView := wo.ConvertToWorkObjectShareView(txs)
 		return shareView, isBlock, isWorkShare, nil
+
 	}
 	return nil, false, false, errors.New("workshare is nil")
 }

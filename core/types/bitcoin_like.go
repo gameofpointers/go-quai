@@ -35,6 +35,28 @@ type BitcoinCashBlockHeader struct {
 	bitcoinLikeHeader
 }
 
+func NewShaHeader(version int32, prevBlockHash common.Hash, merkleRootHash common.Hash, time uint32, bits uint32, nonce uint32) *BitcoinBlockHeader {
+	return &BitcoinBlockHeader{
+		bitcoinLikeHeader: bitcoinLikeHeader{
+			Version:        version,
+			HashPrevBlock:  prevBlockHash,
+			HashMerkleRoot: merkleRootHash,
+			Time:           time,
+			Bits:           bits, // Bitcoin genesis difficulty
+			Nonce:          nonce,
+		},
+	}
+}
+
+func (h *BitcoinBlockHeader) SetTime(time uint32) {
+	h.Time = time
+}
+
+// SetNonce sets the nonce value in the Bitcoin-like block header
+func (h *BitcoinBlockHeader) SetNonce(nonce uint32) {
+	h.Nonce = nonce
+}
+
 // LitecoinAuxPoW represents the auxiliary proof-of-work data for Dogecoin merged mining with Litecoin
 type LitecoinAuxPoW struct {
 	// Parent block header (80 bytes) from the Litecoin parent chain
