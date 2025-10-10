@@ -1179,7 +1179,18 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
-	pendingHeader, err := s.b.GetPendingHeader(types.Progpow) // 0 is default progpow
+
+	// If powid is set use that
+	powId := ctx.Value("powid")
+	var powIdValue = types.Progpow
+	if powIdValue, ok := powId.(uint32); ok {
+		s.b.Logger().WithField("powid", powIdValue).Debug("Using powid from context")
+	}
+
+	// TODO: Fix this, hard coding for now, need a way to get this information
+	powIdValue = types.SHA
+
+	pendingHeader, err := s.b.GetPendingHeader(powIdValue) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

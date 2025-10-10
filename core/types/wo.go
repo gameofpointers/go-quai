@@ -74,40 +74,48 @@ const (
 )
 
 type PowShareDiffAndCount struct {
-	Difficulty *big.Int
-	Count      uint16
+	difficulty *big.Int
+	count      uint16
 }
 
 func NewPowShareDiffAndCount(difficulty *big.Int, count uint16) *PowShareDiffAndCount {
 	return &PowShareDiffAndCount{
-		Difficulty: difficulty,
-		Count:      count,
+		difficulty: difficulty,
+		count:      count,
 	}
 }
 
 func (p *PowShareDiffAndCount) Clone() *PowShareDiffAndCount {
 	var difficulty *big.Int
-	if p.Difficulty != nil {
-		difficulty = new(big.Int).Set(p.Difficulty)
+	if p.difficulty != nil {
+		difficulty = new(big.Int).Set(p.difficulty)
 	}
 	return &PowShareDiffAndCount{
-		Difficulty: difficulty,
-		Count:      p.Count,
+		difficulty: difficulty,
+		count:      p.count,
 	}
+}
+
+func (p *PowShareDiffAndCount) Difficulty() *big.Int {
+	return p.difficulty
+}
+
+func (p *PowShareDiffAndCount) Count() uint16 {
+	return p.count
 }
 
 func (p *PowShareDiffAndCount) ProtoEncode() *ProtoPowShareDiffAndCount {
 	if p == nil {
 		return nil
 	}
-	if p.Difficulty == nil && p.Count == 0 {
+	if p.difficulty == nil && p.count == 0 {
 		return nil
 	}
 	protoShare := &ProtoPowShareDiffAndCount{}
-	if p.Difficulty != nil {
-		protoShare.Difficulty = p.Difficulty.Bytes()
+	if p.difficulty != nil {
+		protoShare.Difficulty = p.difficulty.Bytes()
 	}
-	count := uint32(p.Count)
+	count := uint32(p.count)
 	protoShare.Count = &count
 	return protoShare
 }
@@ -117,16 +125,16 @@ func (p *PowShareDiffAndCount) ProtoDecode(protoShare *ProtoPowShareDiffAndCount
 		return
 	}
 	if protoShare == nil {
-		p.Difficulty = nil
-		p.Count = 0
+		p.difficulty = nil
+		p.count = 0
 		return
 	}
 	if len(protoShare.GetDifficulty()) > 0 {
-		p.Difficulty = new(big.Int).SetBytes(protoShare.GetDifficulty())
+		p.difficulty = new(big.Int).SetBytes(protoShare.GetDifficulty())
 	} else {
-		p.Difficulty = nil
+		p.difficulty = nil
 	}
-	p.Count = uint16(protoShare.GetCount())
+	p.count = uint16(protoShare.GetCount())
 }
 
 type WorkShareValidity int
@@ -1229,22 +1237,22 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		result["auxpow"] = wh.AuxPow().RPCMarshal()
 	}
 
-	if scrypt := wh.ScryptDiffAndCount(); scrypt.Difficulty != nil || scrypt.Count != 0 {
+	if scrypt := wh.ScryptDiffAndCount(); scrypt.Difficulty() != nil || scrypt.Count() != 0 {
 		scryptResult := map[string]interface{}{
-			"count": scrypt.Count,
+			"count": scrypt.Count(),
 		}
 		if scrypt.Difficulty != nil {
-			scryptResult["difficulty"] = (*hexutil.Big)(scrypt.Difficulty)
+			scryptResult["difficulty"] = (*hexutil.Big)(scrypt.Difficulty())
 		}
 		result["scryptDiffAndCount"] = scryptResult
 	}
 
-	if sha := wh.ShaDiffAndCount(); sha.Difficulty != nil || sha.Count != 0 {
+	if sha := wh.ShaDiffAndCount(); sha.Difficulty() != nil || sha.Count() != 0 {
 		shaResult := map[string]interface{}{
-			"count": sha.Count,
+			"count": sha.Count(),
 		}
 		if sha.Difficulty != nil {
-			shaResult["difficulty"] = (*hexutil.Big)(sha.Difficulty)
+			shaResult["difficulty"] = (*hexutil.Big)(sha.Difficulty())
 		}
 		result["shaDiffAndCount"] = shaResult
 	}
@@ -1258,12 +1266,7 @@ func (wh *WorkObjectHeader) Hash() common.Hash {
 	if !wh.KawpowActivationHappened() || wh.IsTransitionProgPowBlock() {
 		return wh.WoProgpowHash()
 	} else {
-		if wh.IsKawPowBlock() {
-			return wh.WoCustomPowHash()
-		} else {
-			log.Global.Error("Non KawPow block after kawpow transition")
-			return common.Hash{}
-		}
+		return wh.WoCustomPowHash()
 	}
 }
 
@@ -1385,10 +1388,10 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 	if wh.KawpowActivationHappened() {
 		if wh.auxPow != nil {
 			auxPow = wh.auxPow.ProtoEncode()
+			protoWh.AuxPow = auxPow
 		}
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
-		protoWh.AuxPow = auxPow
 	}
 
 	return protoWh, nil
@@ -1423,8 +1426,11 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 		if data.GetScryptDiffAndCount() == nil {
 			return errors.New("scrypt diff and count is nil")
 		}
-		wh.scryptDiffAndCount.ProtoDecode(data.GetScryptDiffAndCount())
+		wh.shaDiffAndCount = &PowShareDiffAndCount{}
 		wh.shaDiffAndCount.ProtoDecode(data.GetShaDiffAndCount())
+
+		wh.scryptDiffAndCount = &PowShareDiffAndCount{}
+		wh.scryptDiffAndCount.ProtoDecode(data.GetScryptDiffAndCount())
 
 		// Decode AuxPow if present
 		if data.AuxPow != nil {

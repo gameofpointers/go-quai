@@ -291,13 +291,11 @@ func (hc *HeaderChain) UncledLogEntropy(block *types.WorkObject) *big.Int {
 	// Calculate the uncles' log entropy for the given block
 	totalUncledLogS := big.NewInt(0)
 	for _, uncle := range block.Uncles() {
-		engine := hc.GetEngineForHeader(uncle)
-		powHash, err := engine.ComputePowHash(uncle)
+		uncleEntropy, err := hc.IntrinsicLogEntropy(uncle)
 		if err != nil {
-			hc.logger.WithField("uncle", uncle.Hash()).Error("Failed to compute pow hash for uncle")
+			hc.logger.WithField("uncle", uncle.Hash()).Error("Failed to compute intrinsic log entropy for uncle")
 			continue
 		}
-		uncleEntropy := common.IntrinsicLogEntropy(powHash)
 		totalUncledLogS = new(big.Int).Add(totalUncledLogS, uncleEntropy)
 	}
 	return totalUncledLogS
@@ -456,9 +454,11 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 		return fmt.Errorf("wo is nil")
 	}
 	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
-		wo.AuxPow() != nil && wo.AuxPow().PowID() != types.Kawpow {
+		wo.AuxPow() != nil &&
+		wo.AuxPow().PowID() != types.Kawpow {
 		return fmt.Errorf("wo auxpow is nil for kawpow block")
 	}
+
 	return nil
 }
 
@@ -471,7 +471,7 @@ func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader
 		return fmt.Errorf("wo is nil")
 	}
 	if wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
-		if wo.AuxPow() != nil && wo.AuxPow().PowID() != types.Progpow {
+		if wo.AuxPow() != nil {
 			return fmt.Errorf("workshare auxpow powid is not progpow before kawpow fork")
 		}
 	} else if wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock &&
@@ -929,9 +929,33 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 				// Valid kawpow block
 				return types.Block
 			}
-			// TODO: Need to write logic for SHA and Scrypt workshares
 		case types.SHA:
+			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ShaDiffAndCount().Difficulty())
+			powHash := types.ShaPowHash(wo.AuxPow().Header())
+			powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
+
+			// Check if satisfies workShareTarget
+			if powHashBigInt.Cmp(workShareTarget) < 0 {
+				return types.Valid
+			}
+
 		case types.Scrypt:
+
+			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ShaDiffAndCount().Difficulty())
+			var powHash common.Hash
+			var err error
+			powHash, err = types.ScryptPowHash(wo.AuxPow().Header())
+			if err != nil {
+				return types.Invalid
+			}
+
+			powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
+
+			// Check if satisfies workShareTarget
+			if powHashBigInt.Cmp(workShareTarget) < 0 {
+				return types.Valid
+			}
+
 		default:
 		}
 	}

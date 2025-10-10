@@ -257,9 +257,13 @@ var (
 )
 
 var (
-	KawPowForkBlock        uint64 = 5  // Block at which KawPow activates
+	KawPowForkBlock        uint64 = 1  // Block at which KawPow activates
 	KawPowTransitionPeriod uint64 = 10 // Number of blocks over which the transition happens
 	TotalPowEngines        uint64 = 2  // Total number of PoW engines supported
+
+	// PoW share difficulty parameters
+	MinShaDiff    = big.NewInt(100000) // Minimum difficulty for a SHA work share
+	MinScryptDiff = big.NewInt(100000) // Minimum difficulty for a Scrypt work share
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go

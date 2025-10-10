@@ -379,11 +379,11 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 
 	// Only include these fields if they are non-nil and non-empty (for backward compatibility)
 	scrypt := wh.ScryptDiffAndCount()
-	if scrypt != nil && (scrypt.Difficulty != nil || scrypt.Count != 0) {
+	if scrypt != nil && (scrypt.Difficulty() != nil || scrypt.Count() != 0) {
 		enc.ScryptDiffAndCount = scrypt
 	}
 	sha := wh.ShaDiffAndCount()
-	if sha != nil && (sha.Difficulty != nil || sha.Count != 0) {
+	if sha != nil && (sha.Difficulty() != nil || sha.Count() != 0) {
 		enc.ShaDiffAndCount = sha
 	}
 

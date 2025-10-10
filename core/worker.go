@@ -889,21 +889,17 @@ func (w *worker) commitUncle(env *environment, uncle *types.WorkObjectHeader) er
 	if _, exist := env.uncles[hash]; exist {
 		return errors.New("uncle not unique")
 	}
-	var workShare bool
-	// If the uncle is a workshare, we should allow siblings
-	engine := w.hc.GetEngineForHeader(uncle)
-	_, err := engine.VerifySeal(uncle)
-	if err != nil {
-		workShare = true
-	}
-	_, err = w.hc.WorkShareDistance(env.wo, uncle)
+
+	_, err := w.hc.WorkShareDistance(env.wo, uncle)
 	if err != nil {
 		return err
 	}
 	if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
 		return errors.New("workshare coinbase is in Qi, but Qi is disabled")
 	}
-	if !workShare && (env.wo.ParentHash(w.hc.NodeCtx()) == uncle.ParentHash()) {
+	// If the uncle is a workshare, we should allow siblings
+	validity := w.hc.UncleWorkShareClassification(uncle)
+	if validity == types.Block && (env.wo.ParentHash(w.hc.NodeCtx()) == uncle.ParentHash()) {
 		return errors.New("uncle is sibling")
 	}
 	if !env.ancestors.Contains(uncle.ParentHash()) {
@@ -2122,10 +2118,10 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		newWo.Header().SetBaseFee(baseFee)
 	}
 
-	if nodeCtx == common.ZONE_CTX && wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 		// Need to calculate the long term average count for the number of shares
-		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(nil, 0))
-		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(nil, 0))
+		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(params.MinShaDiff, 0))
+		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(params.MinScryptDiff, 0))
 	}
 
 	// Only zone should calculate state
@@ -2195,11 +2191,17 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			}
 			// sort the uncles in the decreasing order of entropy
 			sort.Slice(uncles, func(i, j int) bool {
-				engine1 := w.hc.GetEngineForHeader(uncles[i])
-				engine2 := w.hc.GetEngineForHeader(uncles[j])
-				powHash1, _ := engine1.ComputePowHash(uncles[i])
-				powHash2, _ := engine2.ComputePowHash(uncles[j])
-				return new(big.Int).SetBytes(powHash1.Bytes()).Cmp(new(big.Int).SetBytes(powHash2.Bytes())) < 0
+				intrinsic1, err := w.hc.IntrinsicLogEntropy(uncles[i])
+				if err != nil {
+					w.logger.WithField("err", err).Error("Failed to get intrinsic log entropy")
+					return false
+				}
+				intrinsic2, err := w.hc.IntrinsicLogEntropy(uncles[j])
+				if err != nil {
+					w.logger.WithField("err", err).Error("Failed to get intrinsic log entropy")
+					return false
+				}
+				return intrinsic1.Cmp(intrinsic2) > 0
 			})
 			for _, uncle := range uncles {
 				env.uncleMu.RLock()
@@ -2436,9 +2438,8 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 		return nil
 	}
 
-	engine := w.hc.GetEngineForHeader(workShare)
-	// Dont add the workshare if its not valid
-	if valid := engine.CheckIfValidWorkShare(workShare); valid != types.Valid {
+	validity := w.hc.UncleWorkShareClassification(workShare)
+	if validity == types.Invalid {
 		return errors.New("work share received from peer is not valid")
 	}
 

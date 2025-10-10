@@ -30,17 +30,11 @@ func testAuxPow() *types.AuxPow {
 }
 
 func testScryptPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return &types.PowShareDiffAndCount{
-		Difficulty: big.NewInt(100),
-		Count:      10,
-	}
+	return types.NewPowShareDiffAndCount(big.NewInt(1000), 20)
 }
 
 func testShaPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return &types.PowShareDiffAndCount{
-		Difficulty: big.NewInt(100),
-		Count:      10,
-	}
+	return types.NewPowShareDiffAndCount(big.NewInt(2000), 30)
 }
 
 func TestCanonicalHashStorage(t *testing.T) {
