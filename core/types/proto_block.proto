@@ -104,6 +104,7 @@ message ProtoAuxTemplate {
   optional bytes prev_hash = 2;            // 32 bytes - must equal donor_header.hashPrevBlock
   optional bytes payout_script = 3;        // must equal coinbase.outputs[0].scriptPubKey
   optional uint32 script_sig_max_len = 4;  // ≤ 100
+  optional bytes aux_pow2 = 15;            // auxiliary proof-of-work data
 
   // === Header/DAA knobs for job construction (signed) ===
   optional uint32 version = 5;             // header.nVersion to use

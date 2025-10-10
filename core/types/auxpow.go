@@ -75,6 +75,7 @@ type AuxTemplate struct {
 	prevHash        [32]byte // must equal donor_header.hashPrevBlock
 	payoutScript    []byte   // must equal coinbase.outputs[0].scriptPubKey
 	scriptSigMaxLen uint16   // ≤ 100
+	auxPow2         []byte
 
 	// === Header/DAA knobs for job construction (signed) ===
 	version   uint32    // header.nVersion to use
@@ -112,6 +113,7 @@ func EmptyAuxTemplate() *AuxTemplate {
 		prevHash:        [32]byte{},
 		payoutScript:    nil,
 		scriptSigMaxLen: 100,
+		auxPow2:         nil,
 		version:         536870912, // 0x20000000 (RVN)
 		nBits:           0,
 		nTimeMask:       0,
@@ -149,6 +151,7 @@ func RPCMarshalAuxTemplate(at *AuxTemplate) map[string]interface{} {
 		"prevHash":        hexutil.Encode(at.prevHash[:]),
 		"payoutScript":    hexutil.Encode(at.payoutScript),
 		"scriptSigMaxLen": at.scriptSigMaxLen,
+		"auxPow2":         hexutil.Encode(at.auxPow2),
 		"version":         at.version,
 		"nBits":           at.nBits,
 		"nTimeMask":       uint32(at.nTimeMask),
@@ -212,6 +215,7 @@ func (at *AuxTemplate) PowID() PowID            { return at.powID }
 func (at *AuxTemplate) PrevHash() [32]byte      { return at.prevHash }
 func (at *AuxTemplate) PayoutScript() []byte    { return at.payoutScript }
 func (at *AuxTemplate) ScriptSigMaxLen() uint16 { return at.scriptSigMaxLen }
+func (at *AuxTemplate) AuxPow2() []byte         { return at.auxPow2 }
 func (at *AuxTemplate) Version() uint32         { return at.version }
 func (at *AuxTemplate) NBits() uint32           { return at.nBits }
 func (at *AuxTemplate) NTimeMask() NTimeMask    { return at.nTimeMask }
@@ -228,6 +232,7 @@ func (at *AuxTemplate) SetPowID(id PowID)               { at.powID = id }
 func (at *AuxTemplate) SetPrevHash(hash [32]byte)       { at.prevHash = hash }
 func (at *AuxTemplate) SetPayoutScript(script []byte)   { at.payoutScript = script }
 func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)   { at.scriptSigMaxLen = len }
+func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)       { at.auxPow2 = auxPow2 }
 func (at *AuxTemplate) SetVersion(v uint32)             { at.version = v }
 func (at *AuxTemplate) SetNBits(bits uint32)            { at.nBits = bits }
 func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)     { at.nTimeMask = mask }
@@ -271,6 +276,7 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 		PrevHash:        at.prevHash[:],
 		PayoutScript:    at.payoutScript,
 		ScriptSigMaxLen: &scriptSigMaxLen,
+		AuxPow2:         at.auxPow2,
 		Version:         &version,
 		Nbits:           &nbits,
 		NtimeMask:       &ntimeMask,
@@ -299,6 +305,7 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 	at.payoutScript = data.GetPayoutScript()
 	at.scriptSigMaxLen = uint16(data.GetScriptSigMaxLen())
+	at.auxPow2 = data.GetAuxPow2()
 	at.version = data.GetVersion()
 	at.nBits = data.GetNbits()
 	at.nTimeMask = NTimeMask(data.GetNtimeMask())
