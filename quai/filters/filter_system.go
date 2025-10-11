@@ -69,24 +69,24 @@ const (
 	// logsChanSize is the size of channel listening to LogsEvent.
 	logsChanSize = 10
 	// chainEvChanSize is the size of channel listening to ChainEvent.
-	chainEvChanSize      = 10
-	unlocksEvChanSize    = 10
+	chainEvChanSize     = 10
+	unlocksEvChanSize   = 10
 	workshareEvChanSize = 100
 )
 
 type subscription struct {
-	id        rpc.ID
-	typ       Type
-	created   time.Time
-	logsCrit  quai.FilterQuery
+	id         rpc.ID
+	typ        Type
+	created    time.Time
+	logsCrit   quai.FilterQuery
 	logs       chan []*types.Log
 	hashes     chan []common.Hash
 	headers    chan *types.WorkObject
 	unlocks    chan core.UnlocksEvent
 	header     chan *types.WorkObject
 	workshares chan *types.WorkObject
-	installed chan struct{} // closed when the filter is installed
-	err       chan error    // closed when the filter is uninstalled
+	installed  chan struct{} // closed when the filter is installed
+	err        chan error    // closed when the filter is uninstalled
 }
 
 // EventSystem creates subscriptions, processes events and broadcasts them to the
@@ -106,15 +106,15 @@ type EventSystem struct {
 	workshareSub   event.Subscription // Subscription for new workshare event
 
 	// Channels
-	install       chan *subscription         // install filter for event notification
-	uninstall     chan *subscription         // remove filter for event notification
-	txsCh         chan core.NewTxsEvent      // Channel to receive new transactions event
-	logsCh        chan []*types.Log          // Channel to receive new log event
-	pendingLogsCh chan []*types.Log          // Channel to receive new log event
-	rmLogsCh      chan core.RemovedLogsEvent // Channel to receive removed log event
-	chainCh       chan core.ChainEvent       // Channel to receive new chain event
-	unlocksCh     chan core.UnlocksEvent       // Channel to receive newly unlocked coinbases
-	chainHeadCh   chan core.ChainHeadEvent     // Channel to receive new chain event
+	install       chan *subscription          // install filter for event notification
+	uninstall     chan *subscription          // remove filter for event notification
+	txsCh         chan core.NewTxsEvent       // Channel to receive new transactions event
+	logsCh        chan []*types.Log           // Channel to receive new log event
+	pendingLogsCh chan []*types.Log           // Channel to receive new log event
+	rmLogsCh      chan core.RemovedLogsEvent  // Channel to receive removed log event
+	chainCh       chan core.ChainEvent        // Channel to receive new chain event
+	unlocksCh     chan core.UnlocksEvent      // Channel to receive newly unlocked coinbases
+	chainHeadCh   chan core.ChainHeadEvent    // Channel to receive new chain event
 	workshareCh   chan core.NewWorkshareEvent // Channel to receive new workshare event
 }
 
@@ -313,7 +313,7 @@ func (es *EventSystem) subscribePendingLogs(crit quai.FilterQuery, logs chan []*
 func (es *EventSystem) SubscribeNewHeads(headers chan *types.WorkObject) *Subscription {
 	sub := &subscription{
 		id:        rpc.NewID(),
-		typ:       BlocksSubscription,
+		typ:       ChainHeadSubscription,
 		created:   time.Now(),
 		logs:      make(chan []*types.Log),
 		hashes:    make(chan []common.Hash),

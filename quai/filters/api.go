@@ -309,13 +309,7 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 					continue
 				}
 
-				notifier.Notify(rpcSub.ID, map[string]interface{}{
-					"hash":       w.Hash().Hex(),
-					"parentHash": w.ParentHash(common.ZONE_CTX).Hex(),
-					"number":     hexutil.Uint64(w.NumberU64(common.ZONE_CTX)),
-					"type":       "workshare",
-					"timestamp":  hexutil.Uint64(w.WorkObjectHeader().Time()),
-				})
+				notifier.Notify(rpcSub.ID, w)
 			case <-rpcSub.Err():
 				worksharesSub.Unsubscribe()
 				return
@@ -353,7 +347,7 @@ func (api *PublicFilterAPI) NewHeads(ctx context.Context) (*rpc.Subscription, er
 			api.activeSubscriptions -= 1
 		}()
 		api.activeSubscriptions += 1
-		headers := make(chan *types.WorkObject)
+		headers := make(chan *types.WorkObject, 10) // Buffer to prevent blocking
 		headersSub := api.events.SubscribeNewHeads(headers)
 
 		for {
