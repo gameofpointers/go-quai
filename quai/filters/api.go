@@ -294,22 +294,47 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 				// Check if this is actually a block (meets full difficulty target)
 				// A block meets the full difficulty, while a workshare only meets the lower threshold
 				header := w.WorkObjectHeader()
-				target := new(big.Int).Div(common.Big2e256, header.Difficulty())
 
-				// Get the PoW hash from the engine
-				powHash, err := api.backend.Engine(header).ComputePowHash(header)
-				if err != nil {
-					api.backend.Logger().Error("Failed to compute PoW hash for workshare", "hash", w.Hash().Hex(), "err", err)
-					continue
+				if header.AuxPow() != nil {
+					switch header.AuxPow().PowID() {
+					case types.SHA:
+						target := new(big.Int).Div(common.Big2e256, header.ShaDiffAndCount().Difficulty())
+						powHash := types.ShaPowHash(header.AuxPow().Header())
+						// If it meets the full difficulty target, it's a block, not a workshare
+						if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) >= 0 {
+							api.backend.Logger().Error("Skipping block in workshare subscription", "hash", w.Hash().Hex())
+							continue
+						}
+					case types.Scrypt:
+						target := new(big.Int).Div(common.Big2e256, header.ScryptDiffAndCount().Difficulty())
+						powHash, err := types.ScryptPowHash(header.AuxPow().Header())
+						if err != nil {
+							api.backend.Logger().Error("Failed to compute scrypt PoW hash for workshare", "hash", w.Hash().Hex(), "err", err)
+							continue
+						}
+						// If it meets the full difficulty target, it's a block, not a workshare
+						if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) >= 0 {
+							api.backend.Logger().Error("Skipping block in workshare subscription", "hash", w.Hash().Hex())
+							continue
+						}
+					default:
+						target := new(big.Int).Div(common.Big2e256, header.Difficulty())
+
+						// Get the PoW hash from the engine
+						powHash, err := api.backend.Engine(header).ComputePowHash(header)
+						if err != nil {
+							api.backend.Logger().Error("Failed to compute PoW hash for workshare", "hash", w.Hash().Hex(), "err", err)
+							continue
+						}
+
+						// If it meets the full difficulty target, it's a block, not a workshare
+						if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) <= 0 {
+							api.backend.Logger().Debug("Skipping block in workshare subscription", "hash", w.Hash().Hex())
+							continue
+						}
+					}
 				}
 
-				// If it meets the full difficulty target, it's a block, not a workshare
-				if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) <= 0 {
-					api.backend.Logger().Debug("Skipping block in workshare subscription", "hash", w.Hash().Hex())
-					continue
-				}
-
-				// Marshal the WorkObject using RPC format to include all fields (including auxPow)
 				notifier.Notify(rpcSub.ID, w.RPCMarshalWorkObject())
 			case <-rpcSub.Err():
 				worksharesSub.Unsubscribe()
