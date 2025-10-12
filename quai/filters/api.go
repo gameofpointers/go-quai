@@ -309,7 +309,8 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 					continue
 				}
 
-				notifier.Notify(rpcSub.ID, w)
+				// Marshal the WorkObject using RPC format to include all fields (including auxPow)
+				notifier.Notify(rpcSub.ID, w.RPCMarshalWorkObject())
 			case <-rpcSub.Err():
 				worksharesSub.Unsubscribe()
 				return
