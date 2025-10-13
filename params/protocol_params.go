@@ -262,8 +262,8 @@ var (
 	TotalPowEngines        uint64 = 2  // Total number of PoW engines supported
 
 	// PoW share difficulty parameters
-	MinShaDiff    = big.NewInt(100000) // Minimum difficulty for a SHA work share
-	MinScryptDiff = big.NewInt(100000) // Minimum difficulty for a Scrypt work share
+	MinShaDiff    = big.NewInt(10000000) // Minimum difficulty for a SHA work share
+	MinScryptDiff = big.NewInt(1000)     // Minimum difficulty for a Scrypt work share
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
