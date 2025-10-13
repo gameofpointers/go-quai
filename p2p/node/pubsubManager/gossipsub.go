@@ -362,6 +362,18 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				return pubsub.ValidationReject
 			}
 
+			currentHeader := backend.CurrentHeader()
+
+			// Check that the work share is atmost c_MaxWorkShareDist behind
+			if block.WorkObject.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist < currentHeader.NumberU64(backend.NodeCtx()) {
+				return pubsub.ValidationIgnore
+			}
+
+			// Check that the workshare is atmost c_MaxWorkShareDist ahead
+			if block.WorkObject.NumberU64(backend.NodeCtx()) > currentHeader.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist {
+				return pubsub.ValidationIgnore
+			}
+
 			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
 			if block.WorkObject.WorkObjectHeader().KawpowActivationHappened() &&
 				block.WorkObject.AuxPow() != nil &&
@@ -374,8 +386,32 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					if err != nil {
 						return pubsub.ValidationReject
 					}
+					shareDiff := block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
+					if shareDiff.Cmp(thresholdShareDiff) > 0 {
+						backend.Logger().WithFields(log.Fields{
+							"peer":               id,
+							"workshareDiff":      shareDiff,
+							"currentHeaderDiff":  currentHeaderShareDiff,
+							"shareDiffThreshold": thresholdShareDiff,
+						}).Warn("Scrypt workshare difficulty is too high")
+						return pubsub.ValidationReject
+					}
 				} else {
 					powHash = types.ShaPowHash(block.WorkObject.AuxPow().Header())
+					shareDiff := block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
+					if shareDiff.Cmp(thresholdShareDiff) > 0 {
+						backend.Logger().WithFields(log.Fields{
+							"peer":               id,
+							"workshareDiff":      shareDiff,
+							"currentHeaderDiff":  currentHeaderShareDiff,
+							"shareDiffThreshold": thresholdShareDiff,
+						}).Warn("Sha workshare difficulty is too high")
+						return pubsub.ValidationReject
+					}
 				}
 
 				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
@@ -384,9 +420,6 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				if powHashBigInt.Cmp(workShareTarget) > 0 {
 					return pubsub.ValidationReject
 				}
-
-				// TODO: Add additional checks comparing the current header
-				// share diff and also the distance checks from below
 
 			} else {
 				threshold := backend.GetWorkShareP2PThreshold()
@@ -411,18 +444,6 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				if err != nil {
 					backend.Logger().WithField("err", err).Error("Error computing the powHash of the work object header received from peer")
 					return pubsub.ValidationReject
-				}
-
-				currentHeader := backend.CurrentHeader()
-
-				// Check that the work share is atmost c_MaxWorkShareDist behind
-				if block.WorkObject.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist < currentHeader.NumberU64(backend.NodeCtx()) {
-					return pubsub.ValidationIgnore
-				}
-
-				// Check that the workshare is atmost c_MaxWorkShareDist ahead
-				if block.WorkObject.NumberU64(backend.NodeCtx()) > currentHeader.NumberU64(backend.NodeCtx())+c_MaxWorkShareDist {
-					return pubsub.ValidationIgnore
 				}
 
 				currentHeaderHash := currentHeader.Hash()
@@ -453,7 +474,41 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				}
 			}
 		case *types.AuxTemplate:
-			// TODO: Aux template, signature checks go here, once that is pulled in
+			// Make sure no value in the template is nil, unless its specific
+			protoAuxTemplate := new(types.ProtoAuxTemplate)
+			err := proto.Unmarshal(protoData, protoAuxTemplate)
+			if err != nil {
+				return pubsub.ValidationReject
+			}
+
+			auxTemplate := &types.AuxTemplate{}
+			err = auxTemplate.ProtoDecode(protoAuxTemplate)
+			if err != nil {
+				return pubsub.ValidationReject
+			}
+
+			// AuxTemplate specific checks
+			// TODO: Add sanity checks for AuxTemplate
+
+			time := auxTemplate.NTimeMask()
+			backend := *g.consensus.GetBackend(topic.location)
+			if backend == nil {
+				log.Global.WithFields(log.Fields{
+					"peer": id,
+				}).Error("no backend found for this location")
+			}
+
+			currentHeader := backend.CurrentHeader()
+
+			// AuxTemplate nTimeMask cannot be too far in the future
+			if currentHeader.Time() > uint64(time)+params.AuxTemplateLivenessTime {
+				return pubsub.ValidationIgnore
+			}
+
+			if !auxTemplate.VerifySignature() {
+				backend.Logger().WithField("err", err).Warn("AuxTemplate signature verification failed")
+				return pubsub.ValidationReject
+			}
 		}
 		return pubsub.ValidationAccept
 	}
