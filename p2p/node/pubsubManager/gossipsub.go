@@ -363,7 +363,9 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			}
 
 			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
-			if block.WorkObject.AuxPow() != nil && (block.WorkObject.AuxPow().PowID() == types.SHA || block.WorkObject.AuxPow().PowID() == types.Scrypt) {
+			if block.WorkObject.WorkObjectHeader().KawpowActivationHappened() &&
+				block.WorkObject.AuxPow() != nil &&
+				(block.WorkObject.AuxPow().PowID() == types.SHA || block.WorkObject.AuxPow().PowID() == types.Scrypt) {
 
 				workShareTarget := new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 				var powHash common.Hash

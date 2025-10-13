@@ -507,6 +507,10 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 		wo.AuxPow() != nil &&
 		wo.AuxPow().PowID() != types.Kawpow {
 		return fmt.Errorf("wo auxpow is nil for kawpow block")
+	} else if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod {
+		if wo.AuxPow() == nil {
+			return fmt.Errorf("workshare auxpow powid is nil after kawpow transition")
+		}
 	}
 
 	return nil
@@ -530,6 +534,9 @@ func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader
 			return fmt.Errorf("workshare auxpow powid is not valid during kawpow transition")
 		}
 	} else if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod {
+		if wo.AuxPow() == nil {
+			return fmt.Errorf("workshare auxpow powid is nil after kawpow transition")
+		}
 		if wo.AuxPow() != nil && wo.AuxPow().PowID() == types.Progpow {
 			return fmt.Errorf("workshare auxpow powid is progpow after kawpow transition")
 		}
