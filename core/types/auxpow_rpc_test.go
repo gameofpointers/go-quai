@@ -5,21 +5,27 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 )
+
+// Helper function to serialize TxOut to wire format
+func serializeAuxpowRpcTxOut(value int64, pkScript []byte) []byte {
+	return serializeTxOut(wire.NewTxOut(value, pkScript))
+}
 
 func TestAuxPowRPCMarshaling(t *testing.T) {
 	// Create a test KAWPOW block with AuxPow
 	blockHeight := uint32(1219736)
 
 	// Create coinbase transaction
+	coinbaseOut := serializeAuxpowRpcTxOut(2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
 	coinbaseTx := CreateCoinbaseTxWithNonce(
 		blockHeight,
 		0x12345678,                    // extraNonce1
 		0x123456789ABCDEF0,            // extraNonce2
 		[]byte("Test RPC Marshaling"), // extra data
-		[]byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}, // P2PKH output
-		2500000000, // 25 RVN reward
+		coinbaseOut,
 	)
 
 	// Create 80-byte block header

@@ -101,34 +101,28 @@ message ProtoAuxTemplate {
   // === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
   optional uint32 chain_id = 1;            // must match ap.Chain (RVN)
   optional bytes prev_hash = 2;            // 32 bytes - must equal donor_header.hashPrevBlock
-  optional bytes payout_script = 3;        // must equal coinbase.outputs[0].scriptPubKey
-  optional uint32 script_sig_max_len = 4;  // ≤ 100
-  optional bytes aux_pow2 = 15;            // auxiliary proof-of-work data
 
   // === Header/DAA knobs for job construction (signed) ===
-  optional uint32 version = 5;             // header.nVersion to use
-  optional uint32 nbits = 6;               // header.nBits
-  optional uint32 ntime_mask = 7;          // allowed time range/step
-  optional uint32 height = 8;              // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
+  optional uint32 version = 3;             // header.nVersion to use
+  optional uint32 nbits = 4;               // header.nBits
+  optional uint32 ntime_mask = 5;          // allowed time range/step
+  optional uint32 height = 6;              // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
-  // === Coinbase economics (signed) ===
-  optional uint64 coinbase_value = 9;      // subsidy + fees for output[0] (in RVN sats)
-
-  // === Tx set commitment for Merkle root (signed) ===
-  // Choose ONE of the two modes below:
-
-  // Mode A: COINBASE-ONLY (simplest; smallest template)
-  optional bool coinbase_only = 10;        // if true => MerkleBranch is empty; tx count = 1
+  // CoinbaseOut is the coinbase payout
+  optional ProtoCoinbaseTxOut coinbase_out = 7;        // full coinbase output script (scriptPubKey)
 
   // Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
-  optional uint32 tx_count = 11;           // total txs INCLUDING coinbase (index 0)
-  repeated bytes merkle_branch = 12;       // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
-
-  // === Miner extranonce ergonomics (signed/advisory) ===
-  optional uint32 extranonce2_size = 13;   // typical 4..8
+  repeated bytes merkle_branch = 8;       // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
 
   // === Quorum signatures over CanonicalEncode(template WITHOUT Sigs) ===
-  repeated ProtoSignerEnvelope sigs = 14;
+  optional bytes sigs = 9;
+
+  optional bytes aux_pow2 = 10;            // auxiliary proof-of-work data
+}
+
+message ProtoCoinbaseTxOut {
+  optional int64 value = 1;      // in satoshis
+  optional bytes script_pub_key = 2; // full scriptPubKey
 }
 
 message ProtoPowShareDiffAndCount {
@@ -153,6 +147,7 @@ message ProtoWorkObjectHeader {
   optional ProtoAuxPow aux_pow = 14;  // New field for auxiliary proof-of-work
   optional ProtoPowShareDiffAndCount scrypt_diff_and_count = 15;
   optional ProtoPowShareDiffAndCount sha_diff_and_count = 16;
+  optional bytes share_target = 17;
 }
 
 message ProtoWorkObjectHeaders {

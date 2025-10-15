@@ -143,17 +143,13 @@ func (kawpow *Kawpow) MineToThreshold(workObject *types.WorkObject, workShareThr
 		return
 	}
 
-	header, err := types.DecodeRavencoinHeader(auxPow.Header())
-	if err != nil {
-		kawpow.logger.WithField("err", err).Error("Failed to decode Ravencoin header for KAWPOW mining")
-		return
-	}
+	header := auxPow.Header()
 
 	// Get the block height directly from the header (now properly encoded)
-	blockHeight := uint64(header.Height)
+	blockHeight := uint64(header.Height())
 
 	// Get the KAWPOW header hash (this is the input to the KAWPOW algorithm)
-	kawpowHeaderHash := header.GetKAWPOWHeaderHash()
+	kawpowHeaderHash := header.SealHash()
 
 	// Pre-initialize cache and dataset (expensive operations)
 	cache := kawpow.cache(blockHeight)
@@ -207,24 +203,16 @@ search:
 				workObject = types.CopyWorkObject(workObject)
 
 				// Update the Ravencoin header with the found nonce and mix hash
-				header.Nonce64 = nonce
-				header.MixHash = common.BytesToHash(digest)
-
-				// Re-encode the updated Ravencoin header
-				updatedHeaderBytes := header.EncodeBinaryRavencoinHeader()
-
-				// Update the coinbase transaction with the new nonce
-				// The nonce64 is typically stored as extraNonce2 in the coinbase scriptSig
-				updatedCoinbaseTx := types.UpdateCoinbaseNonce(auxPow.Transaction(), uint32(nonce>>32), nonce)
+				header.SetNonce64(nonce)
+				header.SetMixHash(common.BytesToHash(digest))
 
 				// Create a new AuxPow with the updated header and coinbase
-				updatedAuxPow := types.NewAuxPowWithFields(
+				updatedAuxPow := types.NewAuxPow(
 					auxPow.PowID(),
-					updatedHeaderBytes,
+					header,
 					auxPow.Signature(),
 					auxPow.MerkleBranch(),
-					updatedCoinbaseTx,
-					auxPow.SignatureTime(),
+					auxPow.Transaction(),
 				)
 
 				// Set the updated AuxPow (don't touch other WorkObject header fields)

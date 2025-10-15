@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -588,16 +589,14 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 		return nil, fmt.Errorf("decode ravencoin header: %w", err)
 	}
 
-	extra := data[ravencoinHeaderSize:]
-	coinbaseTx, err := types.DecodeRavencoinCoinbaseTransaction(extra)
-	if err != nil {
-		return nil, err
-	}
-	if len(coinbaseTx.TxIn) == 0 {
-		return nil, errors.New("coinbase transaction missing inputs")
-	}
+	auxHeader := types.NewAuxPowHeader(ravencoinHeader)
 
-	sealHash, err := types.ExtractSealHashFromCoinbase(coinbaseTx.TxIn[0].SignatureScript)
+	extra := data[ravencoinHeaderSize:]
+
+	auxCoinbaseTx := &types.AuxPowCoinbaseTx{}
+	auxCoinbaseTx.DeserializeNoWitness(bytes.NewReader(extra))
+
+	sealHash, err := types.ExtractSealHashFromCoinbase(auxCoinbaseTx.ScriptSig())
 	if err != nil {
 		return nil, err
 	}
@@ -619,8 +618,8 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 	workObjectCopy := types.CopyWorkObject(workObject)
 
 	// Set the Ravencoin header and coinbase transaction
-	workObjectCopy.AuxPow().SetHeader(rvnHeaderBytes)
-	workObjectCopy.AuxPow().SetTransaction(coinbaseTx)
+	workObjectCopy.AuxPow().SetHeader(auxHeader)
+	workObjectCopy.AuxPow().SetTransaction(auxCoinbaseTx)
 
 	c.logger.WithFields(log.Fields{
 		"raven header bytes": len(rvnHeaderBytes),

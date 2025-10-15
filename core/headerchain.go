@@ -266,7 +266,7 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 			var thresholdBigBits *big.Int
 			var shaTarget, scryptTarget *big.Int
 			if ws.AuxPow() != nil && ws.AuxPow().PowID() > types.Kawpow {
-				if ws.AuxPow().PowID() == types.SHA {
+				if ws.AuxPow().PowID() == types.SHA_BCH || ws.AuxPow().PowID() == types.SHA_BTC {
 					shaTarget = new(big.Int).Div(common.Big2e256, wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 					thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(shaTarget.Bytes()))
 				} else if ws.AuxPow().PowID() == types.Scrypt {
@@ -335,14 +335,8 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 	}
 
 	switch ws.AuxPow().PowID() {
-	case types.SHA:
-		powHash := types.ShaPowHash(ws.AuxPow().Header())
-		return common.IntrinsicLogEntropy(powHash), nil
-	case types.Scrypt:
-		powHash, err := types.ScryptPowHash(ws.AuxPow().Header())
-		if err != nil {
-			return nil, err
-		}
+	case types.SHA_BCH, types.SHA_BTC, types.Scrypt:
+		powHash := ws.AuxPow().Header().PowHash()
 		return common.IntrinsicLogEntropy(powHash), nil
 	default:
 		return nil, errors.New("unknown auxpow type")
@@ -986,9 +980,9 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 				// Valid kawpow block
 				return types.Block
 			}
-		case types.SHA:
+		case types.SHA_BCH, types.SHA_BTC:
 			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ShaDiffAndCount().Difficulty())
-			powHash := types.ShaPowHash(wo.AuxPow().Header())
+			powHash := wo.AuxPow().Header().PowHash()
 			powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
 			// Check if satisfies workShareTarget
@@ -999,13 +993,7 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 		case types.Scrypt:
 
 			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ShaDiffAndCount().Difficulty())
-			var powHash common.Hash
-			var err error
-			powHash, err = types.ScryptPowHash(wo.AuxPow().Header())
-			if err != nil {
-				return types.Invalid
-			}
-
+			powHash := wo.AuxPow().Header().PowHash()
 			powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
 			// Check if satisfies workShareTarget

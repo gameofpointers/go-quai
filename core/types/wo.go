@@ -55,6 +55,7 @@ type WorkObjectHeader struct {
 	auxPow              *AuxPow // New field for auxiliary proof-of-work
 	scryptDiffAndCount  *PowShareDiffAndCount
 	shaDiffAndCount     *PowShareDiffAndCount
+	shareTarget         [4]byte
 	PowHash             atomic.Value
 	PowDigest           atomic.Value
 }
@@ -759,6 +760,18 @@ func (wh *WorkObjectHeader) SetShaDiffAndCount(val *PowShareDiffAndCount) {
 	wh.shaDiffAndCount = val.Clone()
 }
 
+func (wh *WorkObjectHeader) ShareTarget() [4]byte {
+	return wh.shareTarget
+}
+
+func (wh *WorkObjectHeader) ShareTargetBytes() []byte {
+	return wh.shareTarget[:]
+}
+
+func (wh *WorkObjectHeader) SetShareTarget(val [4]byte) {
+	wh.shareTarget = val
+}
+
 type WorkObjectBody struct {
 	header          *Header
 	transactions    Transactions
@@ -1195,20 +1208,7 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
-		// Deep copy merkle branch
-		merkleBranch := make([][]byte, len(wh.auxPow.MerkleBranch()))
-		for i, hash := range wh.auxPow.MerkleBranch() {
-			merkleBranch[i] = append([]byte(nil), hash...)
-		}
-
-		cpy.auxPow = NewAuxPowWithFields(
-			wh.auxPow.PowID(),
-			append([]byte(nil), wh.auxPow.Header()...),
-			append([]byte(nil), wh.auxPow.Signature()...),
-			merkleBranch,
-			wh.auxPow.Transaction(),
-			wh.auxPow.SignatureTime(),
-		)
+		cpy.auxPow = CopyAuxPow(wh.auxPow)
 	}
 
 	return &cpy
@@ -1241,7 +1241,7 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		scryptResult := map[string]interface{}{
 			"count": scrypt.Count(),
 		}
-		if scrypt.Difficulty != nil {
+		if scrypt.Difficulty() != nil {
 			scryptResult["difficulty"] = (*hexutil.Big)(scrypt.Difficulty())
 		}
 		result["scryptDiffAndCount"] = scryptResult
@@ -1251,7 +1251,7 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		shaResult := map[string]interface{}{
 			"count": sha.Count(),
 		}
-		if sha.Difficulty != nil {
+		if sha.Difficulty() != nil {
 			shaResult["difficulty"] = (*hexutil.Big)(sha.Difficulty())
 		}
 		result["shaDiffAndCount"] = shaResult
@@ -1392,6 +1392,7 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 		}
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
+		protoWh.ShareTarget = wh.ShareTargetBytes()
 	}
 
 	return protoWh, nil
@@ -1438,6 +1439,11 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 			if err := wh.auxPow.ProtoDecode(data.AuxPow); err != nil {
 				return err
 			}
+		}
+
+		// Decode ShareTarget if present
+		if len(data.GetShareTarget()) == 4 {
+			copy(wh.shareTarget[:], data.GetShareTarget())
 		}
 	}
 

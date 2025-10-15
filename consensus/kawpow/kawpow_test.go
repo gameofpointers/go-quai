@@ -1,15 +1,35 @@
 package kawpow
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"testing"
 
+	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 )
+
+// Helper function to serialize TxOut to wire format
+func serializeKawpowTxOut(value int64, pkScript []byte) []byte {
+	txOut := wire.NewTxOut(value, pkScript)
+	var buf bytes.Buffer
+
+	// Write value (8 bytes, little-endian)
+	binary.Write(&buf, binary.LittleEndian, txOut.Value)
+
+	// Write script length (varint)
+	wire.WriteVarInt(&buf, 0, uint64(len(txOut.PkScript)))
+
+	// Write script
+	buf.Write(txOut.PkScript)
+
+	return buf.Bytes()
+}
 
 // TestKAWPOWImplementation tests our KAWPOW implementation with various scenarios
 func TestKAWPOWImplementation(t *testing.T) {
@@ -100,13 +120,13 @@ func TestKAWPOWImplementation(t *testing.T) {
 		}
 
 		headerBytes := header.EncodeBinaryRavencoinHeader()
+		coinbaseOut := serializeKawpowTxOut(2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
 		coinbaseTx := types.CreateCoinbaseTxWithNonce(
 			uint32(blockHeight),
 			uint32(nonce64>>32),
 			nonce64,
 			[]byte("Test"),
-			[]byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac},
-			2500000000,
+			coinbaseOut,
 		)
 
 		auxPow := types.NewAuxPowWithFields(

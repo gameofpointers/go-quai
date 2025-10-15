@@ -362,6 +362,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		Data hexutil.Bytes       `json:"data" gencoden:"required"`
 		ScryptDiffAndCount *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount    *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
+		ShareTarget        hexutil.Bytes         `json:"shareTarget,omitempty"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -387,6 +388,11 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		enc.ShaDiffAndCount = sha
 	}
 
+	// Include ShareTarget if it's non-zero
+	if wh.ShareTarget() != [4]byte{} {
+		enc.ShareTarget = hexutil.Bytes(wh.ShareTargetBytes())
+	}
+
 	raw, err := json.Marshal(&enc)
 	return raw, err
 }
@@ -409,6 +415,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		AuxPow     json.RawMessage `json:"auxpow"`
 		ScryptDiffAndCount *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount    *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
+		ShareTarget        hexutil.Bytes         `json:"shareTarget,omitempty"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -454,6 +461,13 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	// Handle ShaDiffAndCount if present
 	if dec.ShaDiffAndCount != nil {
 		wh.SetShaDiffAndCount(dec.ShaDiffAndCount)
+	}
+
+	// Handle ShareTarget if present
+	if len(dec.ShareTarget) == 4 {
+		var shareTarget [4]byte
+		copy(shareTarget[:], dec.ShareTarget)
+		wh.SetShareTarget(shareTarget)
 	}
 
 	return nil

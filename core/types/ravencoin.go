@@ -9,8 +9,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 
+	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 )
 
@@ -40,50 +40,16 @@ type RavencoinKAWPOWInput struct {
 	Height         uint32      `json:"height"         gencodec:"required"`
 }
 
-func EmptyRavencoinKAWPOWInput() *RavencoinKAWPOWInput {
-	return &RavencoinKAWPOWInput{
-		Version:        0,
-		HashPrevBlock:  common.Hash{},
-		HashMerkleRoot: common.Hash{},
-		Time:           0,
-		Bits:           0,
-		Height:         0,
-	}
-}
-
-// NewRavencoinBlockHeader creates a new Ravencoin block header
-func NewRavencoinBlockHeader() *RavencoinBlockHeader {
-	return &RavencoinBlockHeader{}
-}
-
-func EmptyRavencoinHeader() *RavencoinBlockHeader {
+// NewBlockHeader creates a new Ravencoin block header
+func NewRavencoinBlockHeader(version int32, prevBlockHash [32]byte, merkleRootHash [32]byte, time uint32, bits uint32, height uint32) *RavencoinBlockHeader {
 	return &RavencoinBlockHeader{
-		Version:        0,
-		HashPrevBlock:  common.Hash{},
-		HashMerkleRoot: common.Hash{},
-		Time:           0,
-		Bits:           0,
-		Height:         0,
-		Nonce64:        0,
-		MixHash:        common.Hash{},
+		Version:        version,
+		HashPrevBlock:  common.BytesToHash(prevBlockHash[:]),
+		HashMerkleRoot: common.BytesToHash(merkleRootHash[:]),
+		Time:           time,
+		Bits:           bits,
+		Height:         height,
 	}
-}
-
-// SetNull initializes the header with zero values
-func (h *RavencoinBlockHeader) SetNull() {
-	h.Version = 0
-	h.HashPrevBlock = common.Hash{}
-	h.HashMerkleRoot = common.Hash{}
-	h.Time = 0
-	h.Bits = 0
-	h.Height = 0
-	h.Nonce64 = 0
-	h.MixHash = common.Hash{}
-}
-
-// IsNull returns true if the header is in null state
-func (h *RavencoinBlockHeader) IsNull() bool {
-	return h.Bits == 0
 }
 
 // GetKAWPOWHeaderHash returns the header hash for KAWPOW input
@@ -105,30 +71,6 @@ func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	second := sha256.Sum256(first[:])
 
 	return common.BytesToHash(second[:])
-}
-
-// GetDifficulty calculates the difficulty from nBits
-func (h *RavencoinBlockHeader) GetDifficulty() *big.Int {
-	// Extract mantissa and exponent from nBits (compact format)
-	nBits := h.Bits
-	nShift := (nBits >> 24) & 0xff
-
-	target := big.NewInt(int64(nBits & 0x00ffffff))
-	if nShift <= 3 {
-		target.Rsh(target, uint(8*(3-nShift)))
-	} else {
-		target.Lsh(target, uint(8*(nShift-3)))
-	}
-
-	// Calculate difficulty = max_target / target
-	maxTarget := new(big.Int)
-	maxTarget.SetString("00000000FFFF0000000000000000000000000000000000000000000000000000", 16)
-
-	if target.Sign() <= 0 {
-		return big.NewInt(0)
-	}
-
-	return new(big.Int).Div(maxTarget, target)
 }
 
 // EncodeBinary encodes the header to Ravencoin's binary format
@@ -263,4 +205,124 @@ func (h *RavencoinBlockHeader) Size() int {
 
 	// KAWPOW: height(4) + nonce64(8) + mixHash(32) = 44 bytes
 	return baseSize + 44 // 76 + 44 = 120 bytes
+}
+
+func (h *RavencoinBlockHeader) PowHash() common.Hash {
+	// PowHash for the kawpow cannot be calculated from the standard header alone
+	return common.Hash{}
+}
+
+// Implement AuxHeaderData interface for RavencoinBlockHeader
+func (h *RavencoinBlockHeader) Serialize(w io.Writer) error {
+	data := h.EncodeBinaryRavencoinHeader()
+	_, err := w.Write(data)
+	return err
+}
+
+func (h *RavencoinBlockHeader) Deserialize(r io.Reader) error {
+	data := make([]byte, 120)
+	if _, err := io.ReadFull(r, data); err != nil {
+		return err
+	}
+	decoded, err := DecodeRavencoinHeader(data)
+	if err != nil {
+		return err
+	}
+	*h = *decoded
+	return nil
+}
+
+func (h *RavencoinBlockHeader) GetVersion() int32 {
+	return h.Version
+}
+
+func (h *RavencoinBlockHeader) GetPrevBlock() [32]byte {
+	var result [32]byte
+	copy(result[:], h.HashPrevBlock[:])
+	return result
+}
+
+func (h *RavencoinBlockHeader) GetMerkleRoot() [32]byte {
+	var result [32]byte
+	copy(result[:], h.HashMerkleRoot[:])
+	return result
+}
+
+func (h *RavencoinBlockHeader) GetTimestamp() uint32 {
+	return h.Time
+}
+
+func (h *RavencoinBlockHeader) GetBits() uint32 {
+	return h.Bits
+}
+
+func (h *RavencoinBlockHeader) GetNonce() uint32 {
+	// Standard 32-bit nonce is not used in KAWPOW
+	return 0
+}
+
+func (h *RavencoinBlockHeader) GetNonce64() uint64 {
+	return h.Nonce64
+}
+
+func (h *RavencoinBlockHeader) GetMixHash() common.Hash {
+	return h.MixHash
+}
+
+func (h *RavencoinBlockHeader) GetHeight() uint32 {
+	return h.Height
+}
+
+func (h *RavencoinBlockHeader) GetSealHash() common.Hash {
+	// The seal hash is the KAWPOW header hash used for PoW
+	return h.GetKAWPOWHeaderHash()
+}
+
+func (h *RavencoinBlockHeader) SetNonce(nonce uint32) {
+	// Standard 32-bit nonce is not used in KAWPOW, so this is a no-op
+}
+
+func (h *RavencoinBlockHeader) SetNonce64(nonce uint64) {
+	h.Nonce64 = nonce
+}
+
+func (h *RavencoinBlockHeader) SetMixHash(mixHash common.Hash) {
+	h.MixHash = mixHash
+}
+
+func (h *RavencoinBlockHeader) SetHeight(height uint32) {
+	h.Height = height
+}
+
+type RavencoinCoinbaseTx struct {
+	*btcdwire.MsgTx
+}
+
+func (rct *RavencoinCoinbaseTx) Copy() AuxPowCoinbaseTxData {
+	return &RavencoinCoinbaseTx{MsgTx: rct.MsgTx.Copy()}
+}
+
+func (rct *RavencoinCoinbaseTx) scriptSig() []byte {
+	if rct.MsgTx == nil || len(rct.MsgTx.TxIn) == 0 {
+		return nil
+	}
+	return rct.MsgTx.TxIn[0].SignatureScript
+}
+
+func (rct *RavencoinCoinbaseTx) DeserializeNoWitness(r io.Reader) error {
+	return rct.MsgTx.DeserializeNoWitness(r)
+}
+
+type RavencoinCoinbaseTxOut struct {
+	*btcdwire.TxOut
+}
+
+// Value implements AuxPowCoinbaseOutData interface
+func (rco *RavencoinCoinbaseTxOut) Value() int64 {
+	return rco.TxOut.Value
+}
+
+// PkScript implements AuxPowCoinbaseOutData interface
+func (rco *RavencoinCoinbaseTxOut) PkScript() []byte {
+	return rco.TxOut.PkScript
 }

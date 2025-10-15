@@ -9,13 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Helper function to serialize TxOut to wire format
+func serializeTestTxOut(value int64, pkScript []byte) []byte {
+	return serializeTxOut(wire.NewTxOut(value, pkScript))
+}
+
 func TestCreateCoinbaseTx(t *testing.T) {
 	blockHeight := uint32(680000)
 	extraData := []byte("Quai Network")
 	minerAddress, _ := hex.DecodeString("76a914" + "89abcdefabbaabbaabbaabbaabbaabbaabbaabba" + "88ac")
 	blockReward := int64(5000000000)
 
-	tx := CreateCoinbaseTxWithHeight(blockHeight, extraData, minerAddress, blockReward)
+	// Create wire-encoded TxOut
+	coinbaseOut := serializeTestTxOut(blockReward, minerAddress)
+	tx := CreateCoinbaseTxWithHeight(blockHeight, extraData, coinbaseOut)
 
 	require.NotNil(t, tx)
 	require.Equal(t, int32(1), tx.Version)
@@ -40,7 +47,8 @@ func TestMerkleRoot(t *testing.T) {
 	var txs []*wire.MsgTx
 
 	// Coinbase
-	coinbase := CreateCoinbaseTxWithHeight(1, []byte("test"), []byte{0x51}, 5000000000)
+	coinbaseOut := serializeTestTxOut(5000000000, []byte{0x51})
+	coinbase := CreateCoinbaseTxWithHeight(1, []byte("test"), coinbaseOut)
 	txs = append(txs, coinbase)
 
 	// Regular transaction
@@ -100,7 +108,8 @@ func TestMerkleProofVerification(t *testing.T) {
 
 func TestSingleTransactionMerkleRoot(t *testing.T) {
 	// Test edge case: single transaction (coinbase only)
-	coinbase := CreateCoinbaseTxWithHeight(1, []byte("solo"), []byte{0x51}, 5000000000)
+	coinbaseOut := serializeTestTxOut(5000000000, []byte{0x51})
+	coinbase := CreateCoinbaseTxWithHeight(1, []byte("solo"), coinbaseOut)
 	txs := []*wire.MsgTx{coinbase}
 
 	root := CalculateMerkleRootFromTxs(txs)
