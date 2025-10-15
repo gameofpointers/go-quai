@@ -3,9 +3,9 @@ package types
 import (
 	"io"
 
+	ltchash "github.com/btcsuite/btcd/chaincfg/chainhash"
+	ltcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
-	ltchash "github.com/ltcsuite/ltcd/chaincfg/chainhash"
-	ltcdwire "github.com/ltcsuite/ltcd/wire"
 )
 
 // LitecoinHeaderWrapper wraps ltcdwire.BlockHeader to implement AuxHeaderData
@@ -19,10 +19,6 @@ type LitecoinCoinbaseTxWrapper struct {
 
 type LitecoinCoinbaseTxOutWrapper struct {
 	*ltcdwire.TxOut
-}
-
-func NewLitecoinCoinbaseTx(version int32) *ltcdwire.MsgTx {
-	return ltcdwire.NewMsgTx(version)
 }
 
 func NewLitecoinCoinbaseTxOut(value int64, pkScript []byte) *LitecoinCoinbaseTxOutWrapper {
@@ -116,12 +112,44 @@ func (ltc *LitecoinHeaderWrapper) SetHeight(height uint32) {
 	// Standard Litecoin headers don't have a height, so this is a no-op
 }
 
-func (ltc *LitecoinHeaderWrapper) Copy() *LitecoinHeaderWrapper {
+func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 	copiedHeader := *ltc.BlockHeader
+	copiedHeader.Version = ltc.BlockHeader.Version
+	copiedHeader.PrevBlock = ltc.BlockHeader.PrevBlock
+	copiedHeader.MerkleRoot = ltc.BlockHeader.MerkleRoot
+	copiedHeader.Timestamp = ltc.BlockHeader.Timestamp
+	copiedHeader.Bits = ltc.BlockHeader.Bits
+	copiedHeader.Nonce = ltc.BlockHeader.Nonce
 	return &LitecoinHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
 // CoinbaseTx functions
+
+func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *LitecoinCoinbaseTxWrapper {
+	coinbaseTx := &LitecoinCoinbaseTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
+	// Create the coinbase input with height in scriptSig
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
+	coinbaseTx.AddTxIn(&ltcdwire.TxIn{
+		PreviousOutPoint: ltcdwire.OutPoint{
+			Hash:  ltchash.Hash{}, // Coinbase has no previous output
+			Index: 0xffffffff,     // Coinbase has no previous output
+		},
+		SignatureScript: scriptSig,
+		Sequence:        0xffffffff,
+	})
+
+	// Add the coinbase output
+	if coinbaseOut != nil {
+		value := coinbaseOut.Value()
+		pkScript := coinbaseOut.PkScript()
+		txOut := NewLitecoinCoinbaseTxOut(value, pkScript)
+		coinbaseTx.AddTxOut(txOut.TxOut)
+	}
+
+	return coinbaseTx
+
+}
+
 func (lct *LitecoinCoinbaseTxWrapper) Copy() AuxPowCoinbaseTxData {
 	return &LitecoinCoinbaseTxWrapper{MsgTx: lct.MsgTx.Copy()}
 }

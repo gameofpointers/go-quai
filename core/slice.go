@@ -1047,7 +1047,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 				// Create a properly configured Ravencoin header for KAWPOW mining
 				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), common.Hash{}, uint32(phCopy.Time()), auxTemplate.NBits(), 0, auxTemplate.Height())
 
-				coinbaseTransaction := types.NewAuxPowCoinbaseTx()
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash().Bytes())
 				// Dont have the actual hash of the block yet
 				auxPow := types.NewAuxPow(types.Kawpow, auxHeader, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 )
@@ -294,8 +295,46 @@ func (h *RavencoinBlockHeader) SetHeight(height uint32) {
 	h.Height = height
 }
 
+func (h *RavencoinBlockHeader) Copy() AuxHeaderData {
+	copiedHeader := *h
+	copiedHeader.Version = h.Version
+	copiedHeader.HashPrevBlock = h.HashPrevBlock
+	copiedHeader.HashMerkleRoot = h.HashMerkleRoot
+	copiedHeader.Time = h.Time
+	copiedHeader.Bits = h.Bits
+	copiedHeader.Nonce64 = h.Nonce64
+	copiedHeader.MixHash = h.MixHash
+	copiedHeader.Height = h.Height
+	return &copiedHeader
+}
+
 type RavencoinCoinbaseTx struct {
 	*btcdwire.MsgTx
+}
+
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *RavencoinCoinbaseTx {
+	coinbaseTx := &RavencoinCoinbaseTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
+
+	// Create the coinbase input
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
+	coinbaseTx.AddTxIn(&btcdwire.TxIn{
+		PreviousOutPoint: btcdwire.OutPoint{
+			Hash:  btchash.Hash{}, // Coinbase has no previous output
+			Index: 0xffffffff,     // Coinbase has no previous output
+		},
+		SignatureScript: scriptSig,
+		Sequence:        0xffffffff,
+	})
+
+	// Add the coinbase output
+	if coinbaseOut != nil {
+		value := coinbaseOut.Value()
+		pkScript := coinbaseOut.PkScript()
+		txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
+		coinbaseTx.AddTxOut(txOut.TxOut)
+	}
+
+	return coinbaseTx
 }
 
 func (rct *RavencoinCoinbaseTx) Copy() AuxPowCoinbaseTxData {
@@ -315,6 +354,10 @@ func (rct *RavencoinCoinbaseTx) DeserializeNoWitness(r io.Reader) error {
 
 type RavencoinCoinbaseTxOut struct {
 	*btcdwire.TxOut
+}
+
+func NewRavencoinCoinbaseTxOut(value int64, pkScript []byte) *RavencoinCoinbaseTxOut {
+	return &RavencoinCoinbaseTxOut{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
 }
 
 // Value implements AuxPowCoinbaseOutData interface

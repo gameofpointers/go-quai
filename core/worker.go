@@ -245,7 +245,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		logger:                         logger,
 		coinbaseLockup:                 config.CoinbaseLockup,
 		minerPreference:                config.MinerPreference,
-		auxpowCache:                    make(map[types.PowID]*types.AuxTemplate),
+		auxpowCache:                    CreateAuxPowCache(),
 	}
 	if worker.coinbaseLockup > uint8(len(params.LockupByteToBlockDepth))-1 {
 		logger.Errorf("Invalid coinbase lockup value %d, using default value %d", worker.coinbaseLockup, params.DefaultCoinbaseLockup)
@@ -288,6 +288,14 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 	worker.start()
 
 	return worker
+}
+
+func CreateAuxPowCache() map[types.PowID]*types.AuxTemplate {
+	auxCache := make(map[types.PowID]*types.AuxTemplate)
+
+	auxCache[types.Kawpow] = types.EmptyAuxTemplate()
+
+	return auxCache
 }
 
 func (w *worker) pickCoinbases() {
@@ -753,7 +761,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	}
 
 	// If there is no auxpow template, then just fill the pow id for now
-	auxPow := types.NewAuxPow(types.Kawpow, nil, []byte{}, nil, nil)
+	auxPow := types.NewAuxPow(types.Kawpow, &types.AuxPowHeader{}, []byte{}, nil, &types.AuxPowCoinbaseTx{})
 
 	// Setting the auxpow so that pow id is registered properly
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)

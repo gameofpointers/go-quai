@@ -21,11 +21,6 @@ type BitcoinCoinbaseTxOutWrapper struct {
 	*btcdwire.TxOut
 }
 
-func NewBitcoinCoinbaseTx(version int32) *BitcoinCoinbaseTxWrapper {
-	tx := btcdwire.NewMsgTx(version)
-	return &BitcoinCoinbaseTxWrapper{MsgTx: tx}
-}
-
 func NewBitcoinCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCoinbaseTxOutWrapper {
 	return &BitcoinCoinbaseTxOutWrapper{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
 }
@@ -115,11 +110,16 @@ func (bth *BitcoinHeaderWrapper) SetMixHash(mixHash common.Hash) {
 
 func (bth *BitcoinHeaderWrapper) SetHeight(height uint32) {
 	// Standard Bitcoin headers don't have a height, so this is a no-op
-	return
 }
 
-func (bth *BitcoinHeaderWrapper) Copy() *BitcoinHeaderWrapper {
+func (bth *BitcoinHeaderWrapper) Copy() AuxHeaderData {
 	copiedHeader := *bth.BlockHeader
+	copiedHeader.Version = bth.BlockHeader.Version
+	copiedHeader.PrevBlock = bth.BlockHeader.PrevBlock
+	copiedHeader.MerkleRoot = bth.BlockHeader.MerkleRoot
+	copiedHeader.Timestamp = bth.BlockHeader.Timestamp
+	copiedHeader.Bits = bth.BlockHeader.Bits
+	copiedHeader.Nonce = bth.BlockHeader.Nonce
 	return &BitcoinHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
@@ -129,6 +129,31 @@ func (bto *BitcoinCoinbaseTxOutWrapper) Value() int64 {
 
 func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
+}
+
+func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinCoinbaseTxWrapper {
+	coinbaseTx := &BitcoinCoinbaseTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
+
+	// Create the coinbase input with height in scriptSig
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
+	coinbaseTx.AddTxIn(&btcdwire.TxIn{
+		PreviousOutPoint: btcdwire.OutPoint{
+			Hash:  btchash.Hash{}, // Coinbase has no previous output
+			Index: 0xffffffff,     // Coinbase has no previous output
+		},
+		SignatureScript: scriptSig,
+		Sequence:        0xffffffff,
+	})
+
+	// Add the coinbase output
+	if coinbaseOut != nil {
+		value := coinbaseOut.Value()
+		pkScript := coinbaseOut.PkScript()
+		txOut := NewBitcoinCoinbaseTxOut(value, pkScript)
+		coinbaseTx.AddTxOut(txOut.TxOut)
+	}
+
+	return coinbaseTx
 }
 
 func (btt *BitcoinCoinbaseTxWrapper) Copy() AuxPowCoinbaseTxData {
