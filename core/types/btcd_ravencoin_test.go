@@ -5,8 +5,14 @@ import (
 	"testing"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/stretchr/testify/require"
 )
+
+// Helper function to serialize TxOut to wire format
+func serializeBtcdRavencoinTxOut(value int64, pkScript []byte) []byte {
+	return serializeTxOut(wire.NewTxOut(value, pkScript))
+}
 
 func TestBuildCoinbaseScriptSigRavencoinFormat(t *testing.T) {
 	tests := []struct {
@@ -155,8 +161,9 @@ func TestCreateCoinbaseTxWithNonce(t *testing.T) {
 	extraData := []byte("KAWPOW Test")
 	minerAddress, _ := hex.DecodeString("76a914" + "89abcdefabbaabbaabbaabbaabbaabbaabbaabba" + "88ac")
 	blockReward := int64(5000000000)
+	coinbaseOut := serializeBtcdRavencoinTxOut(blockReward, minerAddress)
 
-	tx := CreateCoinbaseTxWithNonce(blockHeight, extraNonce1, extraNonce2, extraData, minerAddress, blockReward)
+	tx := CreateCoinbaseTxWithNonce(blockHeight, extraNonce1, extraNonce2, extraData, coinbaseOut)
 
 	require.NotNil(t, tx)
 	require.Len(t, tx.TxIn, 1)

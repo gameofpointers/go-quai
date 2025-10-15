@@ -1041,79 +1041,23 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 		auxTemplate := sl.miner.worker.GetBestAuxTemplate(powId)
 		// If we have a KAWPOW template, we need to create a proper Ravencoin header
 		switch powId {
-		case types.Kawpow:
+		case types.Kawpow, types.SHA_BTC, types.SHA_BCH, types.Scrypt:
 			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 				// Create a properly configured Ravencoin header for KAWPOW mining
-				ravencoinHeader := types.EmptyRavencoinHeader()
-				// Use a reasonable height (KAWPOW activation or current block number)
-				// For now, use KAWPOW activation height as minimum
-				ravencoinHeader.Height = auxTemplate.Height()
-				ravencoinHeader.Bits = auxTemplate.NBits()
-				// Set version to KAWPOW version
-				ravencoinHeader.Version = int32(auxTemplate.Version())
-				// Set timestamp
-				ravencoinHeader.Time = uint32(phCopy.Time())
-				ravencoinHeader.HashPrevBlock = auxTemplate.PrevHash()
-				// TODO: need to calculate merkle root? not sure yet
+				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), common.Hash{}, uint32(phCopy.Time()), auxTemplate.NBits(), 0, auxTemplate.Height())
 
-				// Use the full 80-byte encoded header, not just the 32-byte hash
-				ravencoinHeaderBytes := ravencoinHeader.EncodeBinaryRavencoinHeader()
-
-				coinbaseTransaction := types.CreateCoinbaseTxWithHeight(ravencoinHeader.Height, []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
-				coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, phCopy.SealHash().Bytes())
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx()
 				// Dont have the actual hash of the block yet
-				auxPow := types.NewAuxPow(types.Kawpow, ravencoinHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+				auxPow := types.NewAuxPow(types.Kawpow, auxHeader, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
 
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
 			} else {
 				return nil, errors.New("no auxpow template available for KAWPOW mining")
 			}
-		case types.SHA:
-			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
-				shaHeader := types.NewShaHeader(
-					int32(auxTemplate.Version()),
-					auxTemplate.PrevHash(),
-					common.Hash{},
-					uint32(phCopy.Time()),
-					auxTemplate.NBits(),
-					0, // Nonce will be found by miner
-				)
-				// Use the full 80-byte encoded header, not just the 32-byte hash
-				shaHeaderBytes := shaHeader.EncodeBinary()
-
-				coinbaseTransaction := types.CreateCoinbaseTxWithHeight(auxTemplate.Height(), []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
-				coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, phCopy.SealHash().Bytes())
-				// Dont have the actual hash of the block yet
-				auxPow := types.NewAuxPow(types.SHA, shaHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
-
-				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
-			} else {
-				return nil, errors.New("no auxpow template available for SHA mining")
-			}
-		case types.Scrypt:
-			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
-				scryptHeader := types.NewShaHeader(
-					int32(auxTemplate.Version()),
-					auxTemplate.PrevHash(),
-					common.Hash{},
-					uint32(phCopy.Time()),
-					auxTemplate.NBits(),
-					0, // Nonce will be found by miner
-				)
-				// Use the full 80-byte encoded header, not just the 32-byte hash
-				scryptHeaderBytes := scryptHeader.EncodeBinary()
-
-				coinbaseTransaction := types.CreateCoinbaseTxWithHeight(auxTemplate.Height(), []byte{}, auxTemplate.PayoutScript(), int64(auxTemplate.CoinbaseValue()))
-				coinbaseTransaction = types.UpdateCoinbaseExtraData(coinbaseTransaction, phCopy.SealHash().Bytes())
-				// Dont have the actual hash of the block yet
-				auxPow := types.NewAuxPow(types.Scrypt, scryptHeaderBytes, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
-
-				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
-			} else {
-				return nil, errors.New("no auxpow template available for Scrypt mining")
-			}
+		default:
+			return nil, errors.New("pending header requested for unknown pow id")
 		}
 	}
 
@@ -1484,6 +1428,7 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.Header().SetExpansionNumber(header.ExpansionNumber())
 		combinedPendingHeader.Header().SetAvgTxFees(header.AvgTxFees())
 		combinedPendingHeader.Header().SetTotalFees(header.TotalFees())
+		combinedPendingHeader.WorkObjectHeader().SetShareTarget(header.WorkObjectHeader().ShareTarget())
 
 		combinedPendingHeader.Body().SetTransactions(header.Transactions())
 		combinedPendingHeader.Body().SetOutboundEtxs(header.OutboundEtxs())
@@ -2367,18 +2312,12 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		// If the workshares are from sha or scrypt, we have to validate them separately
 		var isWorkShare, isSubShare bool
 		if workShare.AuxPow() != nil {
-			if workShare.AuxPow().PowID() == types.SHA || workShare.AuxPow().PowID() == types.Scrypt {
+			if workShare.AuxPow().PowID() == types.SHA_BCH ||
+				workShare.AuxPow().PowID() == types.SHA_BTC ||
+				workShare.AuxPow().PowID() == types.Scrypt {
 
 				workShareTarget := new(big.Int).Div(common.Big2e256, workShare.ShaDiffAndCount().Difficulty())
-				var powHash common.Hash
-				if workShare.AuxPow().PowID() == types.Scrypt {
-					powHash, err = types.ScryptPowHash(workShare.AuxPow().Header())
-					if err != nil {
-						return nil, false, false, errors.New("failed to compute scrypt pow hash")
-					}
-				} else {
-					powHash = types.ShaPowHash(workShare.AuxPow().Header())
-				}
+				powHash := workShare.AuxPow().Header().PowHash()
 				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
 				// Check if satisfies workShareTarget

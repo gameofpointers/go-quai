@@ -377,15 +377,14 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
 			if block.WorkObject.WorkObjectHeader().KawpowActivationHappened() &&
 				block.WorkObject.AuxPow() != nil &&
-				(block.WorkObject.AuxPow().PowID() == types.SHA || block.WorkObject.AuxPow().PowID() == types.Scrypt) {
+				(block.WorkObject.AuxPow().PowID() == types.SHA_BCH ||
+					block.WorkObject.AuxPow().PowID() == types.SHA_BTC ||
+					block.WorkObject.AuxPow().PowID() == types.Scrypt) {
 
 				workShareTarget := new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 				var powHash common.Hash
 				if block.WorkObject.AuxPow().PowID() == types.Scrypt {
-					powHash, err = types.ScryptPowHash(block.WorkObject.AuxPow().Header())
-					if err != nil {
-						return pubsub.ValidationReject
-					}
+					powHash = block.WorkObject.AuxPow().Header().PowHash()
 					shareDiff := block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
@@ -399,7 +398,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 						return pubsub.ValidationReject
 					}
 				} else {
-					powHash = types.ShaPowHash(block.WorkObject.AuxPow().Header())
+					powHash = block.WorkObject.AuxPow().Header().PowHash()
 					shareDiff := block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))

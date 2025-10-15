@@ -47,23 +47,21 @@ func testAuxTemplate() *AuxTemplate {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{0x11}, 32))
 
+	// Create wire-encoded TxOut for coinbaseOut
+	coinbaseOut := serializeTxOut(wire.NewTxOut(625000000, []byte{0x76, 0xa9, 0x14}))
+
 	template := &AuxTemplate{}
 	template.SetPowID(1337)
 	template.SetPrevHash(prevHash)
-	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14}) // OP_DUP OP_HASH160 PUSH(20)
-	template.SetScriptSigMaxLen(100)
+	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
 	template.SetNBits(0x1d00ffff)
 	template.SetNTimeMask(0xffffffff)
 	template.SetHeight(12345)
-	template.SetCoinbaseValue(625000000)
-	template.SetCoinbaseOnly(false)
-	template.SetTxCount(5)
 	template.SetMerkleBranch([][]byte{
 		bytes.Repeat([]byte{0xaa}, 32),
 		bytes.Repeat([]byte{0xbb}, 32),
 	})
-	template.SetExtranonce2Size(8)
 	template.SetSigs([]SignerEnvelope{
 		NewSignerEnvelope("miner1", bytes.Repeat([]byte{0xcc}, 64)),
 		NewSignerEnvelope("miner2", bytes.Repeat([]byte{0xdd}, 64)),
@@ -151,17 +149,12 @@ func TestAuxTemplateProtoEncodeDecode(t *testing.T) {
 	// Verify all fields match
 	require.Equal(t, original.PowID(), decoded.PowID())
 	require.Equal(t, original.PrevHash(), decoded.PrevHash())
-	require.Equal(t, original.PayoutScript(), decoded.PayoutScript())
-	require.Equal(t, original.ScriptSigMaxLen(), decoded.ScriptSigMaxLen())
+	require.Equal(t, original.CoinbaseOut(), decoded.CoinbaseOut())
 	require.Equal(t, original.Version(), decoded.Version())
 	require.Equal(t, original.NBits(), decoded.NBits())
 	require.Equal(t, original.NTimeMask(), decoded.NTimeMask())
 	require.Equal(t, original.Height(), decoded.Height())
-	require.Equal(t, original.CoinbaseValue(), decoded.CoinbaseValue())
-	require.Equal(t, original.CoinbaseOnly(), decoded.CoinbaseOnly())
-	require.Equal(t, original.TxCount(), decoded.TxCount())
 	require.Equal(t, original.MerkleBranch(), decoded.MerkleBranch())
-	require.Equal(t, original.Extranonce2Size(), decoded.Extranonce2Size())
 
 	// Verify signatures
 	require.Len(t, decoded.Sigs(), len(original.Sigs()))
@@ -186,7 +179,7 @@ func TestAuxTemplateProtoDecodeNil(t *testing.T) {
 	// Template should remain in zero state
 	require.Equal(t, PowID(0), template.PowID())
 	require.Equal(t, [32]byte{}, template.PrevHash())
-	require.Nil(t, template.PayoutScript())
+	require.Nil(t, template.CoinbaseOut())
 }
 
 // TestAuxTemplateWithEmptySigs tests AuxTemplate with no signatures
@@ -216,11 +209,12 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{0x22}, 32))
 
+	coinbaseOut := serializeTxOut(wire.NewTxOut(625000000, []byte{0x51})) // OP_TRUE
+
 	original := &AuxTemplate{}
 	original.SetPowID(42)
 	original.SetPrevHash(prevHash)
-	original.SetPayoutScript([]byte{0x51}) // OP_TRUE
-	original.SetScriptSigMaxLen(50)
+	original.SetCoinbaseOut(coinbaseOut)
 	// Optional fields left at zero
 
 	// Encode and decode
@@ -239,18 +233,13 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	// Required fields should match
 	require.Equal(t, original.PowID(), decoded.PowID())
 	require.Equal(t, original.PrevHash(), decoded.PrevHash())
-	require.Equal(t, original.PayoutScript(), decoded.PayoutScript())
-	require.Equal(t, original.ScriptSigMaxLen(), decoded.ScriptSigMaxLen())
+	require.Equal(t, original.CoinbaseOut(), decoded.CoinbaseOut())
 
 	// Optional fields should be zero
-	require.Equal(t, uint8(0), decoded.Extranonce2Size())
 	require.Equal(t, uint32(0), decoded.NBits())
 	require.Equal(t, NTimeMask(0), decoded.NTimeMask())
 	require.Equal(t, uint32(0), decoded.Version())
 	require.Equal(t, uint32(0), decoded.Height())
-	require.Equal(t, uint64(0), decoded.CoinbaseValue())
-	require.Equal(t, false, decoded.CoinbaseOnly())
-	require.Equal(t, uint32(0), decoded.TxCount())
 	require.Empty(t, decoded.MerkleBranch())
 }
 
@@ -333,17 +322,12 @@ func TestAuxTemplateBroadcastFlow(t *testing.T) {
 	// Verify all fields survived the round trip
 	require.Equal(t, auxTemplate.PowID(), receivedTemplate.PowID())
 	require.Equal(t, auxTemplate.PrevHash(), receivedTemplate.PrevHash())
-	require.Equal(t, auxTemplate.PayoutScript(), receivedTemplate.PayoutScript())
-	require.Equal(t, auxTemplate.ScriptSigMaxLen(), receivedTemplate.ScriptSigMaxLen())
+	require.Equal(t, auxTemplate.CoinbaseOut(), receivedTemplate.CoinbaseOut())
 	require.Equal(t, auxTemplate.Version(), receivedTemplate.Version())
 	require.Equal(t, auxTemplate.NBits(), receivedTemplate.NBits())
 	require.Equal(t, auxTemplate.NTimeMask(), receivedTemplate.NTimeMask())
 	require.Equal(t, auxTemplate.Height(), receivedTemplate.Height())
-	require.Equal(t, auxTemplate.CoinbaseValue(), receivedTemplate.CoinbaseValue())
-	require.Equal(t, auxTemplate.CoinbaseOnly(), receivedTemplate.CoinbaseOnly())
-	require.Equal(t, auxTemplate.TxCount(), receivedTemplate.TxCount())
 	require.Equal(t, auxTemplate.MerkleBranch(), receivedTemplate.MerkleBranch())
-	require.Equal(t, auxTemplate.Extranonce2Size(), receivedTemplate.Extranonce2Size())
 	require.Len(t, receivedTemplate.Sigs(), len(auxTemplate.Sigs()))
 }
 
@@ -352,34 +336,22 @@ func TestAuxTemplateValidation(t *testing.T) {
 	// Test valid template
 	validTemplate := testAuxTemplate()
 
-	// Test ScriptSigMaxLen limit
-	require.LessOrEqual(t, validTemplate.ScriptSigMaxLen(), uint16(100), "ScriptSigMaxLen must be <= 100")
+	// Test that template has required fields
+	require.NotNil(t, validTemplate.CoinbaseOut(), "CoinbaseOut should not be nil")
+	require.NotEqual(t, [32]byte{}, validTemplate.PrevHash(), "PrevHash should not be empty")
 
-	// Test coinbase-only mode consistency
-	coinbaseOnlyTemplate := &AuxTemplate{}
-	coinbaseOnlyTemplate.SetPowID(1234)
-	coinbaseOnlyTemplate.SetCoinbaseOnly(true)
-	coinbaseOnlyTemplate.SetTxCount(1)        // Should be 1 for coinbase-only
-	coinbaseOnlyTemplate.SetMerkleBranch(nil) // Should be empty for coinbase-only
-
-	if coinbaseOnlyTemplate.CoinbaseOnly() {
-		require.Equal(t, uint32(1), coinbaseOnlyTemplate.TxCount(), "Coinbase-only mode should have TxCount = 1")
-		require.Empty(t, coinbaseOnlyTemplate.MerkleBranch(), "Coinbase-only mode should have empty MerkleBranch")
-	}
-
-	// Test locked tx set mode
-	lockedTxTemplate := testAuxTemplate()
-	lockedTxTemplate.SetCoinbaseOnly(false)
-	lockedTxTemplate.SetTxCount(5)
-	lockedTxTemplate.SetMerkleBranch([][]byte{
+	// Test template with merkle branch
+	templateWithBranch := testAuxTemplate()
+	templateWithBranch.SetMerkleBranch([][]byte{
 		bytes.Repeat([]byte{0x11}, 32),
 		bytes.Repeat([]byte{0x22}, 32),
 	})
+	require.NotEmpty(t, templateWithBranch.MerkleBranch(), "Template should have MerkleBranch")
 
-	if !lockedTxTemplate.CoinbaseOnly() {
-		require.Greater(t, lockedTxTemplate.TxCount(), uint32(0), "Locked tx mode should have TxCount > 0")
-		require.NotEmpty(t, lockedTxTemplate.MerkleBranch(), "Locked tx mode should have MerkleBranch")
-	}
+	// Test template without merkle branch
+	templateNoBranch := testAuxTemplate()
+	templateNoBranch.SetMerkleBranch(nil)
+	require.Empty(t, templateNoBranch.MerkleBranch(), "Template should have empty MerkleBranch")
 }
 
 // TestAuxTemplateGossipMessage tests the complete GossipAuxTemplate message flow
@@ -400,17 +372,12 @@ func TestAuxTemplateGossipMessage(t *testing.T) {
 	// 4. Verify ProtoAuxTemplate has all fields
 	require.NotNil(t, protoTemplate.ChainId)
 	require.NotNil(t, protoTemplate.PrevHash)
-	require.NotNil(t, protoTemplate.PayoutScript)
-	require.NotNil(t, protoTemplate.ScriptSigMaxLen)
+	require.NotNil(t, protoTemplate.CoinbaseOut)
 	require.NotNil(t, protoTemplate.Version)
 	require.NotNil(t, protoTemplate.Nbits)
 	require.NotNil(t, protoTemplate.NtimeMask)
 	require.NotNil(t, protoTemplate.Height)
-	require.NotNil(t, protoTemplate.CoinbaseValue)
-	require.NotNil(t, protoTemplate.CoinbaseOnly)
-	require.NotNil(t, protoTemplate.TxCount)
 	require.NotNil(t, protoTemplate.MerkleBranch)
-	require.NotNil(t, protoTemplate.Extranonce2Size)
 	require.NotNil(t, protoTemplate.Sigs)
 }
 

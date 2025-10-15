@@ -201,6 +201,7 @@ func EmptyWorkObject(nodeCtx int) *WorkObject {
 	wo.woHeader.SetTime(0)
 	wo.woHeader.SetShaDiffAndCount(NewPowShareDiffAndCount(params.MinShaDiff, 0))
 	wo.woHeader.SetScryptDiffAndCount(NewPowShareDiffAndCount(params.MinScryptDiff, 0))
+	wo.woHeader.SetShareTarget([4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget})
 	wo.woBody.SetHeader(h)
 	wo.woBody.SetUncles([]*WorkObjectHeader{})
 	wo.woBody.SetTransactions([]*Transaction{})

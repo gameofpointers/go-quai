@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"io"
 
-	"github.com/btcsuite/btcd/wire"
+	btcdwire "github.com/btcsuite/btcd/wire"
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/crypto/musig2"
+	bchdwire "github.com/gcash/bchd/wire"
+	ltcdwire "github.com/ltcsuite/ltcd/wire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -17,7 +22,8 @@ type PowID uint32
 const (
 	Progpow PowID = iota
 	Kawpow
-	SHA
+	SHA_BTC
+	SHA_BCH
 	Scrypt
 )
 
@@ -71,11 +77,9 @@ func (se *SignerEnvelope) ProtoDecode(data *ProtoSignerEnvelope) error {
 // AuxTemplate defines the template structure for auxiliary proof-of-work
 type AuxTemplate struct {
 	// === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
-	powID           PowID    // must match ap.Chain (RVN)
-	prevHash        [32]byte // must equal donor_header.hashPrevBlock
-	payoutScript    []byte   // must equal coinbase.outputs[0].scriptPubKey
-	scriptSigMaxLen uint16   // ≤ 100
-	auxPow2         []byte
+	powID    PowID    // must match ap.Chain (RVN)
+	prevHash [32]byte // must equal donor_header.hashPrevBlock
+	auxPow2  []byte
 
 	// === Header/DAA knobs for job construction (signed) ===
 	version   uint32    // header.nVersion to use
@@ -83,24 +87,14 @@ type AuxTemplate struct {
 	nTimeMask NTimeMask // allowed time range/step (e.g., {start, end, step})
 	height    uint32    // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
-	// === Coinbase economics (signed) ===
-	coinbaseValue uint64 // subsidy + fees for output[0] (in RVN sats)
-
-	// === Tx set commitment for Merkle root (signed) ===
-	// Choose ONE of the two modes below:
-
-	// Mode A: COINBASE-ONLY (simplest; smallest template)
-	coinbaseOnly bool // if true => MerkleBranch is empty; tx count = 1
+	// CoinbaseOut is the coinbase payout
+	coinbaseOut AuxPowCoinbaseOut // full coinbase output script (scriptPubKey)
 
 	// Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
-	txCount      uint32   // total txs INCLUDING coinbase (index 0)
 	merkleBranch [][]byte // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
 
-	// === Miner extranonce ergonomics (signed/advisory) ===
-	extranonce2Size uint8 // typical 4..8
-
 	// === Quorum signatures over CanonicalEncode(template WITHOUT Sigs) ===
-	sigs []SignerEnvelope
+	sigs []byte
 }
 
 func NewAuxTemplate() *AuxTemplate {
@@ -109,62 +103,20 @@ func NewAuxTemplate() *AuxTemplate {
 
 func EmptyAuxTemplate() *AuxTemplate {
 	return &AuxTemplate{
-		powID:           0,
-		prevHash:        [32]byte{},
-		payoutScript:    nil,
-		scriptSigMaxLen: 100,
-		auxPow2:         nil,
-		version:         536870912, // 0x20000000 (RVN)
-		nBits:           0,
-		nTimeMask:       0,
-		height:          0,
-		coinbaseValue:   0,
-		coinbaseOnly:    true,
-		txCount:         1,
-		merkleBranch:    nil,
-		extranonce2Size: 4,
-		sigs:            nil,
+		powID:        0,
+		prevHash:     [32]byte{},
+		auxPow2:      nil,
+		version:      536870912, // 0x20000000 (RVN)
+		nBits:        0,
+		nTimeMask:    0,
+		height:       0,
+		coinbaseOut:  NewAuxPowCoinbaseOut(nil),
+		merkleBranch: nil,
+		sigs:         nil,
 	}
 }
 
-// RPCMarshalAuxTemplate converts AuxTemplate to a map for RPC serialization
-func RPCMarshalAuxTemplate(at *AuxTemplate) map[string]interface{} {
-	if at == nil {
-		return nil
-	}
-
-	merkleBranch := make([]string, len(at.merkleBranch))
-	for i, hash := range at.merkleBranch {
-		merkleBranch[i] = hexutil.Encode(hash)
-	}
-
-	sigs := make([]map[string]interface{}, len(at.sigs))
-	for i, sig := range at.sigs {
-		sigs[i] = map[string]interface{}{
-			"signerId":  sig.SignerID(),
-			"signature": hexutil.Encode(sig.Signature()),
-		}
-	}
-
-	return map[string]interface{}{
-		"powId":           uint32(at.powID),
-		"prevHash":        hexutil.Encode(at.prevHash[:]),
-		"payoutScript":    hexutil.Encode(at.payoutScript),
-		"scriptSigMaxLen": at.scriptSigMaxLen,
-		"auxPow2":         hexutil.Encode(at.auxPow2),
-		"version":         at.version,
-		"nBits":           at.nBits,
-		"nTimeMask":       uint32(at.nTimeMask),
-		"height":          at.height,
-		"coinbaseValue":   at.coinbaseValue,
-		"coinbaseOnly":    at.coinbaseOnly,
-		"txCount":         at.txCount,
-		"merkleBranch":    merkleBranch,
-		"extranonce2Size": at.extranonce2Size,
-		"sigs":            sigs,
-	}
-}
-
+// This method is for the stratum interaction only
 // RPCMarshalAuxPowForKawPow converts AuxPow to a map for RPC serialization
 func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 	if ap == nil {
@@ -176,73 +128,76 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 		merkleBranch[i] = hexutil.Encode(hash)
 	}
 
-	ravencoinHeader, err := DecodeRavencoinHeader(ap.header)
-	if err != nil {
+	auxHeader := ap.header
+
+	// Get common header fields using the interface
+	version := auxHeader.Version()
+	height := auxHeader.Height()
+	bits := auxHeader.Bits()
+	prevBlock := auxHeader.PrevBlock()
+
+	return map[string]interface{}{
+		"version":           version,
+		"height":            hexutil.EncodeUint64(uint64(height)),
+		"bits":              hexutil.EncodeUint64(uint64(bits)),
+		"previousblockhash": hexutil.Encode(prevBlock[:]),
+		"target":            GetTargetInHex(bits),
+		"merkleBranch":      merkleBranch,
+	}
+}
+
+// RPCMarshalAuxPowForKawPow converts AuxPow to a map for RPC serialization
+func RPCMarshalAuxPow(ap *AuxPow) map[string]interface{} {
+	if ap == nil {
 		return nil
 	}
 
-	var (
-		coinbaseValue uint64
-		coinbaseAux   []byte
-		payoutScript  []byte
-	)
-
-	if tx := ap.transaction; tx != nil {
-		if len(tx.TxOut) > 0 && tx.TxOut[0].Value >= 0 {
-			coinbaseValue = uint64(tx.TxOut[0].Value)
-		}
-		if len(tx.TxIn) > 0 {
-			coinbaseAux = tx.TxIn[0].SignatureScript
-		}
-		payoutScript = ap.transaction.TxOut[0].PkScript
+	merkleBranch := make([]string, len(ap.merkleBranch))
+	for i, hash := range ap.merkleBranch {
+		merkleBranch[i] = hexutil.Encode(hash)
 	}
 
+	auxHeader := ap.header
+
+	// Get common header fields using the interface
+	version := auxHeader.Version()
+	height := auxHeader.Height()
+	bits := auxHeader.Bits()
+	prevBlock := auxHeader.PrevBlock()
+
 	return map[string]interface{}{
-		"version":           ravencoinHeader.Version,
-		"height":            hexutil.EncodeUint64(uint64(ravencoinHeader.Height)),
-		"bits":              hexutil.EncodeUint64(uint64(ravencoinHeader.Bits)),
-		"previousblockhash": hexutil.Encode(ravencoinHeader.HashPrevBlock.Bytes()),
-		"coinbasevalue":     coinbaseValue,
-		"target":            GetTargetInHex(ravencoinHeader.Bits),
-		"coinbaseaux":       hexutil.Encode(coinbaseAux),
-		"payoutscript":      hexutil.Encode(payoutScript),
+		"version":           version,
+		"height":            hexutil.EncodeUint64(uint64(height)),
+		"bits":              hexutil.EncodeUint64(uint64(bits)),
+		"previousblockhash": hexutil.Encode(prevBlock[:]),
+		"target":            GetTargetInHex(bits),
 		"merkleBranch":      merkleBranch,
 	}
 }
 
 // Getters for AuxTemplate fields
-func (at *AuxTemplate) PowID() PowID            { return at.powID }
-func (at *AuxTemplate) PrevHash() [32]byte      { return at.prevHash }
-func (at *AuxTemplate) PayoutScript() []byte    { return at.payoutScript }
-func (at *AuxTemplate) ScriptSigMaxLen() uint16 { return at.scriptSigMaxLen }
-func (at *AuxTemplate) AuxPow2() []byte         { return at.auxPow2 }
-func (at *AuxTemplate) Version() uint32         { return at.version }
-func (at *AuxTemplate) NBits() uint32           { return at.nBits }
-func (at *AuxTemplate) NTimeMask() NTimeMask    { return at.nTimeMask }
-func (at *AuxTemplate) Height() uint32          { return at.height }
-func (at *AuxTemplate) CoinbaseValue() uint64   { return at.coinbaseValue }
-func (at *AuxTemplate) CoinbaseOnly() bool      { return at.coinbaseOnly }
-func (at *AuxTemplate) TxCount() uint32         { return at.txCount }
-func (at *AuxTemplate) MerkleBranch() [][]byte  { return at.merkleBranch }
-func (at *AuxTemplate) Extranonce2Size() uint8  { return at.extranonce2Size }
-func (at *AuxTemplate) Sigs() []SignerEnvelope  { return at.sigs }
+func (at *AuxTemplate) PowID() PowID                   { return at.powID }
+func (at *AuxTemplate) PrevHash() [32]byte             { return at.prevHash }
+func (at *AuxTemplate) AuxPow2() []byte                { return at.auxPow2 }
+func (at *AuxTemplate) Version() uint32                { return at.version }
+func (at *AuxTemplate) NBits() uint32                  { return at.nBits }
+func (at *AuxTemplate) NTimeMask() NTimeMask           { return at.nTimeMask }
+func (at *AuxTemplate) Height() uint32                 { return at.height }
+func (at *AuxTemplate) CoinbaseOut() AuxPowCoinbaseOut { return at.coinbaseOut }
+func (at *AuxTemplate) MerkleBranch() [][]byte         { return at.merkleBranch }
+func (at *AuxTemplate) Sigs() []byte                   { return at.sigs }
 
 // Setters for AuxTemplate fields
-func (at *AuxTemplate) SetPowID(id PowID)               { at.powID = id }
-func (at *AuxTemplate) SetPrevHash(hash [32]byte)       { at.prevHash = hash }
-func (at *AuxTemplate) SetPayoutScript(script []byte)   { at.payoutScript = script }
-func (at *AuxTemplate) SetScriptSigMaxLen(len uint16)   { at.scriptSigMaxLen = len }
-func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)       { at.auxPow2 = auxPow2 }
-func (at *AuxTemplate) SetVersion(v uint32)             { at.version = v }
-func (at *AuxTemplate) SetNBits(bits uint32)            { at.nBits = bits }
-func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)     { at.nTimeMask = mask }
-func (at *AuxTemplate) SetHeight(h uint32)              { at.height = h }
-func (at *AuxTemplate) SetCoinbaseValue(val uint64)     { at.coinbaseValue = val }
-func (at *AuxTemplate) SetCoinbaseOnly(only bool)       { at.coinbaseOnly = only }
-func (at *AuxTemplate) SetTxCount(count uint32)         { at.txCount = count }
-func (at *AuxTemplate) SetMerkleBranch(branch [][]byte) { at.merkleBranch = branch }
-func (at *AuxTemplate) SetExtranonce2Size(size uint8)   { at.extranonce2Size = size }
-func (at *AuxTemplate) SetSigs(sigs []SignerEnvelope)   { at.sigs = sigs }
+func (at *AuxTemplate) SetPowID(id PowID)                    { at.powID = id }
+func (at *AuxTemplate) SetPrevHash(hash [32]byte)            { at.prevHash = hash }
+func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)            { at.auxPow2 = auxPow2 }
+func (at *AuxTemplate) SetVersion(v uint32)                  { at.version = v }
+func (at *AuxTemplate) SetNBits(bits uint32)                 { at.nBits = bits }
+func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)          { at.nTimeMask = mask }
+func (at *AuxTemplate) SetHeight(h uint32)                   { at.height = h }
+func (at *AuxTemplate) SetCoinbaseOut(out AuxPowCoinbaseOut) { at.coinbaseOut = out }
+func (at *AuxTemplate) SetMerkleBranch(branch [][]byte)      { at.merkleBranch = branch }
+func (at *AuxTemplate) SetSigs(sigs []byte)                  { at.sigs = sigs }
 
 // ProtoEncode converts AuxTemplate to its protobuf representation
 func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
@@ -251,42 +206,26 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 	}
 
 	powID := uint32(at.powID)
-	scriptSigMaxLen := uint32(at.scriptSigMaxLen)
 	version := at.version
 	nbits := at.nBits
 	ntimeMask := uint32(at.nTimeMask)
 	height := at.height
-	coinbaseValue := at.coinbaseValue
-	coinbaseOnly := at.coinbaseOnly
-	txCount := at.txCount
-	extranonce2Size := uint32(at.extranonce2Size)
 
 	// Convert merkle branch
 	merkleBranch := make([][]byte, len(at.merkleBranch))
 	copy(merkleBranch, at.merkleBranch)
 
-	// Convert signer envelopes
-	sigs := make([]*ProtoSignerEnvelope, len(at.sigs))
-	for i, sig := range at.sigs {
-		sigs[i] = sig.ProtoEncode()
-	}
-
 	return &ProtoAuxTemplate{
-		ChainId:         &powID,
-		PrevHash:        at.prevHash[:],
-		PayoutScript:    at.payoutScript,
-		ScriptSigMaxLen: &scriptSigMaxLen,
-		AuxPow2:         at.auxPow2,
-		Version:         &version,
-		Nbits:           &nbits,
-		NtimeMask:       &ntimeMask,
-		Height:          &height,
-		CoinbaseValue:   &coinbaseValue,
-		CoinbaseOnly:    &coinbaseOnly,
-		TxCount:         &txCount,
-		MerkleBranch:    merkleBranch,
-		Extranonce2Size: &extranonce2Size,
-		Sigs:            sigs,
+		ChainId:      &powID,
+		PrevHash:     at.prevHash[:],
+		AuxPow2:      at.auxPow2,
+		Version:      &version,
+		Nbits:        &nbits,
+		NtimeMask:    &ntimeMask,
+		Height:       &height,
+		CoinbaseOut:  at.coinbaseOut.ProtoEncode(),
+		MerkleBranch: merkleBranch,
+		Sigs:         at.Sigs(),
 	}
 }
 
@@ -303,16 +242,18 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 		copy(at.prevHash[:], data.GetPrevHash())
 	}
 
-	at.payoutScript = data.GetPayoutScript()
-	at.scriptSigMaxLen = uint16(data.GetScriptSigMaxLen())
 	at.auxPow2 = data.GetAuxPow2()
 	at.version = data.GetVersion()
 	at.nBits = data.GetNbits()
 	at.nTimeMask = NTimeMask(data.GetNtimeMask())
 	at.height = data.GetHeight()
-	at.coinbaseValue = data.GetCoinbaseValue()
-	at.coinbaseOnly = data.GetCoinbaseOnly()
-	at.txCount = data.GetTxCount()
+
+	var err error
+	at.coinbaseOut = AuxPowCoinbaseOut{}
+	err = at.coinbaseOut.ProtoDecode(data.GetCoinbaseOut(), at.powID)
+	if err != nil {
+		return err
+	}
 
 	// Copy merkle branch
 	at.merkleBranch = make([][]byte, len(data.GetMerkleBranch()))
@@ -321,15 +262,9 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 		copy(at.merkleBranch[i], hash)
 	}
 
-	at.extranonce2Size = uint8(data.GetExtranonce2Size())
-
 	// Decode signer envelopes
-	at.sigs = make([]SignerEnvelope, len(data.GetSigs()))
-	for i, sig := range data.GetSigs() {
-		if err := at.sigs[i].ProtoDecode(sig); err != nil {
-			return err
-		}
-	}
+	at.sigs = make([]byte, len(data.GetSigs()))
+	copy(at.sigs, data.GetSigs())
 
 	return nil
 }
@@ -363,7 +298,7 @@ func (at *AuxTemplate) VerifySignature() bool {
 	}
 
 	// Get the first signature (assuming single signature for now)
-	if len(at.sigs[0].Signature()) == 0 {
+	if len(at.sigs) == 0 {
 		return false
 	}
 
@@ -372,7 +307,7 @@ func (at *AuxTemplate) VerifySignature() bool {
 	message := messageHash[:]
 
 	// Get the signature
-	signature := at.sigs[0].Signature()
+	signature := at.Sigs()
 
 	// Try all possible 2-of-3 key combinations (including order variations)
 	// We have 3 keys (indices 0, 1, 2) and need to try all combinations of 2
@@ -400,62 +335,493 @@ func (at *AuxTemplate) VerifySignature() bool {
 	return false
 }
 
-// AuxPow represents auxiliary proof-of-work data
-type AuxPow struct {
-	powID         PowID       // PoW algorithm identifier
-	header        []byte      // 120B donor header for KAWPOW
-	signature     []byte      // Signature proving the work
-	merkleBranch  [][]byte    // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
-	transaction   *wire.MsgTx // Full coinbase transaction (contains value in TxOut[0])
-	signatureTime uint64      // Timestamp when signature was created
+type ChainHash struct {
+	inner ChainHashData
 }
 
-func NewAuxPow(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx) *AuxPow {
-	return &AuxPow{
-		powID:         powID,
-		header:        header,
-		signature:     signature,
-		merkleBranch:  merkleBranch,
-		transaction:   transaction,
-		signatureTime: 0,
+type ChainHashData interface {
+	CloneBytes() []byte
+}
+
+type AuxPowHeader struct {
+	inner AuxHeaderData
+}
+
+type AuxHeaderData interface {
+	Serialize(w io.Writer) error
+	Deserialize(r io.Reader) error
+	PowHash() common.Hash
+
+	// Common blockchain header fields
+	GetVersion() int32
+	GetPrevBlock() [32]byte
+	GetMerkleRoot() [32]byte
+	GetTimestamp() uint32
+	GetBits() uint32
+	GetNonce() uint32
+	GetHeight() uint32        // For chains that include height in header (e.g., KAWPOW)
+	GetNonce64() uint64       // Only implemented for kawpow
+	GetMixHash() common.Hash  // Only implemented for kawpow
+	GetSealHash() common.Hash // Only implemented for kawpow, this is the hash on which PoW is done
+
+	SetNonce(nonce uint32)
+
+	SetNonce64(nonce uint64)        // Only implemented for kawpow
+	SetMixHash(mixHash common.Hash) // Only implemented for kawpow
+	SetHeight(height uint32)        // Only implemented for kawpow
+}
+
+func NewBlockHeader(powid PowID, version int32, prevBlockHash [32]byte, merkleRootHash [32]byte, time uint32, bits uint32, nonce uint32, height uint32) *AuxPowHeader {
+	ah := &AuxPowHeader{}
+	switch powid {
+	case Kawpow:
+		ah.inner = NewRavencoinBlockHeader(version, prevBlockHash, merkleRootHash, time, bits, height)
+	case SHA_BTC:
+		ah.inner = NewBitcoinBlockHeader(version, prevBlockHash, merkleRootHash, time, bits, nonce)
+	case SHA_BCH:
+		ah.inner = NewBitcoinCashBlockHeader(version, prevBlockHash, merkleRootHash, time, bits, nonce)
+	case Scrypt:
+		ah.inner = NewLitecoinBlockHeader(version, prevBlockHash, merkleRootHash, time, bits, nonce)
+	default:
+		return nil
+	}
+	return ah
+}
+
+func (ah *AuxPowHeader) PowHash() common.Hash {
+	if ah.inner == nil {
+		return common.Hash{}
+	}
+	return ah.inner.PowHash()
+}
+
+// Accessor methods that delegate to the inner header
+func (ah *AuxPowHeader) Version() int32 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetVersion()
+}
+
+func (ah *AuxPowHeader) PrevBlock() [32]byte {
+	if ah.inner == nil {
+		return [32]byte{}
+	}
+	return ah.inner.GetPrevBlock()
+}
+
+func (ah *AuxPowHeader) MerkleRoot() [32]byte {
+	if ah.inner == nil {
+		return [32]byte{}
+	}
+	return ah.inner.GetMerkleRoot()
+}
+
+func (ah *AuxPowHeader) Timestamp() uint32 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetTimestamp()
+}
+
+func (ah *AuxPowHeader) Bits() uint32 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetBits()
+}
+
+func (ah *AuxPowHeader) Nonce() uint32 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetNonce()
+}
+
+func (ah *AuxPowHeader) Nonce64() uint64 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetNonce64()
+}
+
+func (ah *AuxPowHeader) SealHash() common.Hash {
+	if ah.inner == nil {
+		return common.Hash{}
+	}
+	return ah.inner.GetSealHash()
+}
+
+func (ah *AuxPowHeader) MixHash() common.Hash {
+	if ah.inner == nil {
+		return common.Hash{}
+	}
+	return ah.inner.GetMixHash()
+}
+
+func (ah *AuxPowHeader) Height() uint32 {
+	if ah.inner == nil {
+		return 0
+	}
+	return ah.inner.GetHeight()
+}
+
+func (ah *AuxPowHeader) Bytes() []byte {
+	if ah.inner == nil {
+		return nil
+	}
+	var buffer bytes.Buffer
+	ah.inner.Serialize(&buffer)
+	return buffer.Bytes()
+}
+
+func (ah *AuxPowHeader) SetNonce64(nonce uint64) {
+	if ah.inner == nil {
+		return
+	}
+	ah.inner.SetNonce64(nonce)
+}
+
+func (ah *AuxPowHeader) SetMixHash(mixHash common.Hash) {
+	if ah.inner == nil {
+		return
+	}
+	ah.inner.SetMixHash(mixHash)
+}
+
+func (ah *AuxPowHeader) SetHeight(height uint32) {
+	if ah.inner == nil {
+		return
+	}
+	ah.inner.SetHeight(height)
+}
+
+func (ah *AuxPowHeader) SetNonce(nonce uint32) {
+	if ah.inner == nil {
+		return
+	}
+	ah.inner.SetNonce(nonce)
+}
+
+func (ah *AuxPowHeader) setInner(inner AuxHeaderData) {
+	ah.inner = inner
+}
+
+func NewAuxPowHeader(inner AuxHeaderData) *AuxPowHeader {
+	auxHeader := new(AuxPowHeader)
+	auxHeader.setInner(inner)
+	return auxHeader
+}
+
+type AuxPowCoinbaseTx struct {
+	inner AuxPowCoinbaseTxData
+}
+
+type AuxPowCoinbaseTxData interface {
+	Serialize(w io.Writer) error
+	Deserialize(r io.Reader) error
+	DeserializeNoWitness(r io.Reader) error
+	Copy() AuxPowCoinbaseTxData
+
+	scriptSig() []byte
+}
+
+func NewAuxPowCoinbaseTx() *AuxPowCoinbaseTx {
+	return &AuxPowCoinbaseTx{}
+}
+
+func (ac *AuxPowCoinbaseTx) Bytes() []byte {
+	var buffer bytes.Buffer
+	ac.inner.Serialize(&buffer)
+	return buffer.Bytes()
+}
+
+func (ac *AuxPowCoinbaseTx) Copy() *AuxPowCoinbaseTx {
+	if ac.inner == nil {
+		return &AuxPowCoinbaseTx{}
+	}
+	return &AuxPowCoinbaseTx{inner: ac.inner.Copy()}
+}
+
+func (ac *AuxPowCoinbaseTx) Serialize(w io.Writer) error {
+	if ac.inner == nil {
+		return errors.New("inner transaction is nil")
+	}
+	return ac.inner.Serialize(w)
+}
+
+func (ac *AuxPowCoinbaseTx) Deserialize(r io.Reader) error {
+	if ac.inner == nil {
+		return errors.New("inner transaction is nil")
+	}
+	return ac.inner.Deserialize(r)
+}
+
+func (ac *AuxPowCoinbaseTx) DeserializeNoWitness(r io.Reader) error {
+	if ac.inner == nil {
+		return errors.New("inner transaction is nil")
+	}
+	return ac.inner.DeserializeNoWitness(r)
+}
+
+func (ac *AuxPowCoinbaseTx) ScriptSig() []byte {
+	if ac.inner == nil {
+		return nil
+	}
+	return ac.inner.scriptSig()
+}
+
+type AuxPowCoinbaseOut struct {
+	inner AuxPowCoinbaseOutData
+}
+
+type AuxPowCoinbaseOutData interface {
+	Value() int64
+	PkScript() []byte
+}
+
+func NewAuxPowCoinbaseOut(inner AuxPowCoinbaseOutData) AuxPowCoinbaseOut {
+	return AuxPowCoinbaseOut{inner: inner}
+}
+
+func (aco *AuxPowCoinbaseOut) Value() int64 {
+	if aco.inner == nil {
+		return 0
+	}
+	return aco.inner.Value()
+}
+
+func (aco *AuxPowCoinbaseOut) PkScript() []byte {
+	if aco.inner == nil {
+		return nil
+	}
+	return aco.inner.PkScript()
+}
+
+func (aco *AuxPowCoinbaseOut) RPCMarshal() map[string]interface{} {
+	if aco == nil || aco.inner == nil {
+		return nil
+	}
+
+	return map[string]interface{}{
+		"powid":        hexutil.Uint64(aco.PowId()),
+		"value":        hexutil.Uint64(aco.Value()),
+		"scriptPubKey": hexutil.Bytes(aco.inner.PkScript()),
 	}
 }
 
-// NewAuxPowWithFields creates a new AuxPow with all fields specified
-func NewAuxPowWithFields(powID PowID, header []byte, signature []byte, merkleBranch [][]byte, transaction *wire.MsgTx, signatureTime uint64) *AuxPow {
+func (aco *AuxPowCoinbaseOut) PowId() PowID {
+	if aco == nil || aco.inner == nil {
+		return 0
+	}
+
+	switch aco.inner.(type) {
+	case *RavencoinCoinbaseTxOut:
+		return Kawpow
+	case *BitcoinCoinbaseTxOutWrapper:
+		return SHA_BTC
+	case *BitcoinCashCoinbaseTxOutWrapper:
+		return SHA_BCH
+	case *LitecoinCoinbaseTxOutWrapper:
+		return Scrypt
+	default:
+		return 0
+	}
+}
+
+func (aco *AuxPowCoinbaseOut) MarshalJSON() ([]byte, error) {
+	return json.Marshal(aco.RPCMarshal())
+}
+
+func (aco *AuxPowCoinbaseOut) UnmarshalJSON(data []byte) error {
+
+	var dec struct {
+		PowId  *hexutil.Uint64 `json:"powid"`
+		Value  *hexutil.Uint64 `json:"value"`
+		Script hexutil.Bytes   `json:"scriptPubKey"`
+	}
+
+	if err := json.Unmarshal(data, &dec); err != nil {
+		return err
+	}
+
+	if dec.PowId == nil || dec.Value == nil || dec.Script == nil {
+		return errors.New("missing required fields in AuxPowCoinbaseOut")
+	}
+
+	powId := PowID(*dec.PowId)
+	value := *dec.Value
+	scriptHex := dec.Script
+
+	// Initialize inner
+	aco.inner = &AuxPowCoinbaseOut{}
+
+	switch powId {
+	case Kawpow:
+		txOut := *btcdwire.NewTxOut(int64(value), scriptHex)
+		// Here we assume RavencoinCoinbaseTxOut for simplicity; adapt as needed
+		aco.inner = &RavencoinCoinbaseTxOut{TxOut: &txOut}
+	case SHA_BTC:
+		txOut := *btcdwire.NewTxOut(int64(value), scriptHex)
+		// Here we assume BitcoinCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &BitcoinCoinbaseTxOutWrapper{TxOut: &txOut}
+	case SHA_BCH:
+		txOut := *bchdwire.NewTxOut(int64(value), scriptHex, bchdwire.TokenData{})
+		// Here we assume BitcoinCashCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &BitcoinCashCoinbaseTxOutWrapper{TxOut: &txOut}
+	case Scrypt:
+		txOut := *ltcdwire.NewTxOut(int64(value), scriptHex)
+		// Here we assume LitecoinCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &LitecoinCoinbaseTxOutWrapper{TxOut: &txOut}
+	}
+
+	return nil
+}
+
+func (aco *AuxPowCoinbaseOut) ProtoEncode() *ProtoCoinbaseTxOut {
+	if aco == nil || aco.inner == nil {
+		return nil
+	}
+
+	switch out := aco.inner.(type) {
+	case *RavencoinCoinbaseTxOut:
+		value := out.Value()
+		scriptPubKey := out.PkScript()
+		return &ProtoCoinbaseTxOut{
+			Value:        &value,
+			ScriptPubKey: scriptPubKey,
+		}
+	case *BitcoinCoinbaseTxOutWrapper:
+		value := out.Value()
+		scriptPubKey := out.PkScript()
+		return &ProtoCoinbaseTxOut{
+			Value:        &value,
+			ScriptPubKey: scriptPubKey,
+		}
+	case *BitcoinCashCoinbaseTxOutWrapper:
+		value := out.Value()
+		scriptPubKey := out.PkScript()
+		return &ProtoCoinbaseTxOut{
+			Value:        &value,
+			ScriptPubKey: scriptPubKey,
+		}
+	case *LitecoinCoinbaseTxOutWrapper:
+		value := out.Value()
+		scriptPubKey := out.PkScript()
+		return &ProtoCoinbaseTxOut{
+			Value:        &value,
+			ScriptPubKey: scriptPubKey,
+		}
+	default:
+		return nil
+	}
+}
+
+func (aco *AuxPowCoinbaseOut) ProtoDecode(data *ProtoCoinbaseTxOut, powId PowID) error {
+	if data == nil {
+		return nil
+	}
+
+	value := data.GetValue()
+	scriptPubKey := data.GetScriptPubKey()
+
+	switch powId {
+	case Kawpow:
+		txOut := *btcdwire.NewTxOut(value, scriptPubKey)
+		// Here we assume RavencoinCoinbaseTxOut for simplicity; adapt as needed
+		aco.inner = &RavencoinCoinbaseTxOut{TxOut: &txOut}
+	case SHA_BTC:
+		txOut := *btcdwire.NewTxOut(value, scriptPubKey)
+		// Here we assume BitcoinCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &BitcoinCoinbaseTxOutWrapper{TxOut: &txOut}
+	case SHA_BCH:
+		txOut := *bchdwire.NewTxOut(value, scriptPubKey, bchdwire.TokenData{})
+		// Here we assume BitcoinCashCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &BitcoinCashCoinbaseTxOutWrapper{TxOut: &txOut}
+	case Scrypt:
+		txOut := *ltcdwire.NewTxOut(value, scriptPubKey)
+		// Here we assume LitecoinCoinbaseTxOutWrapper for simplicity; adapt as needed
+		aco.inner = &LitecoinCoinbaseTxOutWrapper{TxOut: &txOut}
+	default:
+		return errors.New("unsupported powId for coinbaseOut")
+	}
+	return nil
+}
+
+// AuxPow represents auxiliary proof-of-work data
+type AuxPow struct {
+	powID        PowID             // PoW algorithm identifier
+	header       *AuxPowHeader     // 120B donor header for KAWPOW
+	signature    []byte            // Signature proving the work
+	merkleBranch [][]byte          // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
+	transaction  *AuxPowCoinbaseTx // Full coinbase transaction (contains value in TxOut[0])
+}
+
+func NewAuxPow(powID PowID, header *AuxPowHeader, signature []byte, merkleBranch [][]byte, transaction *AuxPowCoinbaseTx) *AuxPow {
 	return &AuxPow{
-		powID:         powID,
-		header:        header,
-		signature:     signature,
-		merkleBranch:  merkleBranch,
-		transaction:   transaction,
-		signatureTime: signatureTime,
+		powID:        powID,
+		header:       header,
+		signature:    signature,
+		merkleBranch: merkleBranch,
+		transaction:  transaction,
 	}
 }
 
 func (ap *AuxPow) PowID() PowID { return ap.powID }
 
-func (ap *AuxPow) Header() []byte { return ap.header }
+func (ap *AuxPow) Header() *AuxPowHeader { return ap.header }
 
 func (ap *AuxPow) Signature() []byte { return ap.signature }
 
 func (ap *AuxPow) MerkleBranch() [][]byte { return ap.merkleBranch }
 
-func (ap *AuxPow) Transaction() *wire.MsgTx { return ap.transaction }
-
-func (ap *AuxPow) SignatureTime() uint64 { return ap.signatureTime }
+func (ap *AuxPow) Transaction() *AuxPowCoinbaseTx { return ap.transaction }
 
 func (ap *AuxPow) SetPowID(id PowID) { ap.powID = id }
 
-func (ap *AuxPow) SetHeader(header []byte) { ap.header = header }
+func (ap *AuxPow) SetHeader(header *AuxPowHeader) { ap.header = header }
 
 func (ap *AuxPow) SetSignature(sig []byte) { ap.signature = sig }
 
 func (ap *AuxPow) SetMerkleBranch(branch [][]byte) { ap.merkleBranch = branch }
 
-func (ap *AuxPow) SetTransaction(tx *wire.MsgTx) { ap.transaction = tx }
+func (ap *AuxPow) SetTransaction(tx *AuxPowCoinbaseTx) { ap.transaction = tx }
 
-func (ap *AuxPow) SetSignatureTime(time uint64) { ap.signatureTime = time }
+func CopyAuxPow(ap *AuxPow) *AuxPow {
+	if ap == nil {
+		return nil
+	}
+
+	// Deep copy merkle branch
+	merkleBranch := make([][]byte, len(ap.merkleBranch))
+	for i, hash := range ap.merkleBranch {
+		merkleBranch[i] = make([]byte, len(hash))
+		copy(merkleBranch[i], hash)
+	}
+
+	// Deep copy signature
+	signature := make([]byte, len(ap.signature))
+	copy(signature, ap.signature)
+
+	// Deep copy transaction
+	var transaction *AuxPowCoinbaseTx
+	if ap.transaction != nil {
+		transaction = ap.transaction.Copy() // Assuming inner is immutable or handled elsewhere
+	}
+
+	var header *AuxPowHeader
+	if ap.header != nil {
+		header = &AuxPowHeader{inner: ap.header.inner}
+	}
+
+	return &AuxPow{
+		powID:        ap.powID,
+		header:       header,
+		signature:    signature,
+		merkleBranch: merkleBranch,
+		transaction:  transaction,
+	}
+}
 
 // RPCMarshal converts AuxPow to a map for RPC serialization
 func (ap *AuxPow) RPCMarshal() map[string]interface{} {
@@ -464,87 +830,110 @@ func (ap *AuxPow) RPCMarshal() map[string]interface{} {
 	}
 
 	// Convert merkle branch to hex strings
-	merkleBranch := make([]string, len(ap.merkleBranch))
+	merkleBranch := make([]hexutil.Bytes, len(ap.merkleBranch))
 	for i, hash := range ap.merkleBranch {
-		merkleBranch[i] = hexutil.Encode(hash)
-	}
-
-	// Serialize transaction to hex
-	var txHex string
-	if ap.transaction != nil {
-		var buf bytes.Buffer
-		if err := ap.transaction.Serialize(&buf); err == nil {
-			txHex = hexutil.Encode(buf.Bytes())
-		}
+		merkleBranch[i] = hexutil.Bytes(hash)
 	}
 
 	return map[string]interface{}{
-		"powId":         uint32(ap.powID),
-		"header":        hexutil.Encode(ap.header),
-		"signature":     hexutil.Encode(ap.signature),
-		"merkleBranch":  merkleBranch,
-		"transaction":   txHex,
-		"signatureTime": ap.signatureTime,
+		"powId":        hexutil.Uint64(ap.powID),
+		"header":       hexutil.Bytes(ap.header.Bytes()),
+		"signature":    hexutil.Bytes(ap.signature),
+		"merkleBranch": merkleBranch,
+		"transaction":  hexutil.Bytes(ap.transaction.Bytes()),
 	}
 }
 
 // UnmarshalJSON implements json.Unmarshaler for AuxPow
 func (ap *AuxPow) UnmarshalJSON(data []byte) error {
 	var dec struct {
-		PowID         uint32   `json:"powId"`
-		Header        string   `json:"header"`
-		Signature     string   `json:"signature"`
-		MerkleBranch  []string `json:"merkleBranch"`
-		Transaction   string   `json:"transaction"`
-		SignatureTime uint64   `json:"signatureTime"`
+		PowID        *hexutil.Uint64 `json:"powId"`
+		Header       *hexutil.Bytes  `json:"header"`
+		Signature    *hexutil.Bytes  `json:"signature"`
+		MerkleBranch []hexutil.Bytes `json:"merkleBranch"`
+		Transaction  *hexutil.Bytes  `json:"transaction"`
 	}
 
 	if err := json.Unmarshal(data, &dec); err != nil {
 		return err
 	}
 
-	// Decode header
-	header, err := hexutil.Decode(dec.Header)
-	if err != nil {
-		return err
+	if dec.PowID == nil {
+		return errors.New("missing required fields 'powId' in AuxPow")
 	}
 
+	if dec.Header == nil {
+		return errors.New("missing required fields 'header' in AuxPow")
+	}
+
+	if dec.Signature == nil {
+		return errors.New("missing required fields 'signature' in AuxPow")
+	}
+
+	if dec.MerkleBranch == nil {
+		return errors.New("missing required fields 'merkleBranch' in AuxPow")
+	}
+
+	ap.powID = PowID(*dec.PowID)
 	// Decode signature
-	signature, err := hexutil.Decode(dec.Signature)
-	if err != nil {
-		return err
-	}
-
+	ap.signature = *dec.Signature
 	// Decode merkle branch
 	merkleBranch := make([][]byte, len(dec.MerkleBranch))
-	for i, hashHex := range dec.MerkleBranch {
-		hash, err := hexutil.Decode(hashHex)
-		if err != nil {
-			return err
-		}
+	for i, hash := range dec.MerkleBranch {
 		merkleBranch[i] = hash
 	}
-
-	// Decode transaction
-	var tx *wire.MsgTx
-	if dec.Transaction != "" {
-		txBytes, err := hexutil.Decode(dec.Transaction)
-		if err != nil {
-			return err
-		}
-		tx = new(wire.MsgTx)
-		if err := tx.Deserialize(bytes.NewReader(txBytes)); err != nil {
-			return err
-		}
-	}
-
-	// Set fields
-	ap.powID = PowID(dec.PowID)
-	ap.header = header
-	ap.signature = signature
 	ap.merkleBranch = merkleBranch
-	ap.transaction = tx
-	ap.signatureTime = dec.SignatureTime
+
+	switch ap.PowID() {
+	case Kawpow:
+		header := &RavencoinBlockHeader{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+
+		coinbaseTx := &RavencoinCoinbaseTx{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(*dec.Transaction)); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case SHA_BTC:
+		header := &BitcoinCashHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+
+		coinbaseTx := &BitcoinCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(*dec.Transaction)); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case SHA_BCH:
+		header := &BitcoinCashHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+		coinbaseTx := &BitcoinCashCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(*dec.Transaction)); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case Scrypt:
+		header := &LitecoinHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+		coinbaseTx := &LitecoinCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(*dec.Transaction)); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	default:
+		return errors.New("unsupported powId for AuxPow header")
+	}
 
 	return nil
 }
@@ -561,22 +950,12 @@ func (ap *AuxPow) ProtoEncode() *ProtoAuxPow {
 	merkleBranch := make([][]byte, len(ap.MerkleBranch()))
 	copy(merkleBranch, ap.MerkleBranch())
 
-	// Serialize transaction to bytes
-	var txBytes []byte
-	if ap.transaction != nil {
-		var buf bytes.Buffer
-		if err := ap.transaction.Serialize(&buf); err == nil {
-			txBytes = buf.Bytes()
-		}
-	}
-
 	return &ProtoAuxPow{
-		ChainId:       &powID,
-		Header:        ap.Header(),
-		Signature:     ap.Signature(),
-		MerkleBranch:  merkleBranch,
-		Transaction:   txBytes,
-		SignatureTime: &ap.signatureTime,
+		ChainId:      &powID,
+		Header:       ap.Header().Bytes(),
+		Signature:    ap.Signature(),
+		MerkleBranch: merkleBranch,
+		Transaction:  ap.Transaction().Bytes(),
 	}
 }
 
@@ -587,7 +966,35 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 	}
 
 	ap.SetPowID(PowID(data.GetChainId()))
-	ap.SetHeader(data.GetHeader())
+
+	switch ap.PowID() {
+	case Kawpow:
+		header := &RavencoinBlockHeader{}
+		if err := header.Deserialize(bytes.NewReader(data.GetHeader())); err != nil {
+			return err
+		}
+		ap.SetHeader(NewAuxPowHeader(header))
+	case SHA_BTC:
+		header := &BitcoinCashHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(data.GetHeader())); err != nil {
+			return err
+		}
+		ap.SetHeader(NewAuxPowHeader(header))
+	case SHA_BCH:
+		header := &BitcoinCashHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(data.GetHeader())); err != nil {
+			return err
+		}
+		ap.SetHeader(NewAuxPowHeader(header))
+	case Scrypt:
+		header := &LitecoinHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(data.GetHeader())); err != nil {
+			return err
+		}
+		ap.SetHeader(NewAuxPowHeader(header))
+	default:
+		return errors.New("unsupported powId for AuxPow header")
+	}
 	ap.SetSignature(data.GetSignature())
 
 	// Decode merkle branch
@@ -597,16 +1004,34 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		copy(ap.merkleBranch[i], hash)
 	}
 
-	// Deserialize transaction from bytes
-	if txBytes := data.GetTransaction(); len(txBytes) > 0 {
-		ap.transaction = new(wire.MsgTx)
-		if err := ap.transaction.Deserialize(bytes.NewReader(txBytes)); err != nil {
+	switch ap.PowID() {
+	case Kawpow:
+		coinbaseTx := &RavencoinCoinbaseTx{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(data.GetTransaction())); err != nil {
 			return err
 		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case SHA_BTC:
+		coinbaseTx := &BitcoinCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(data.GetTransaction())); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case SHA_BCH:
+		coinbaseTx := &BitcoinCashCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(data.GetTransaction())); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	case Scrypt:
+		coinbaseTx := &LitecoinCoinbaseTxWrapper{}
+		if err := coinbaseTx.Deserialize(bytes.NewReader(data.GetTransaction())); err != nil {
+			return err
+		}
+		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
+	default:
+		return errors.New("unsupported powId for AuxPow transaction")
 	}
-
-	// Decode new fields
-	ap.SetSignatureTime(data.GetSignatureTime())
 
 	return nil
 }

@@ -26,8 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr/musig2"
 	"github.com/davecgh/go-spew/spew"
 	"google.golang.org/protobuf/proto"
@@ -1763,10 +1761,10 @@ func (s *PublicWorkSharesAPI) ReceiveSubWorkshare(ctx context.Context, input hex
 	workShareValidity := s.b.CheckIfValidWorkShare(workShare.WorkObjectHeader())
 	if workShareValidity == types.Valid {
 		s.b.Logger().WithField("number", workShare.WorkObjectHeader().NumberU64()).Info("Received Work Share")
-		
+
 		// Emit workshare event for real-time updates
 		s.b.SendNewWorkshareEvent(workShare)
-		
+
 		shareView := workShare.ConvertToWorkObjectShareView(workShare.Transactions())
 		err = s.b.BroadcastWorkShare(shareView, s.b.NodeLocation())
 		if err != nil {
@@ -1883,10 +1881,10 @@ func (s *PublicWorkSharesAPI) SignAuxTemplate(ctx context.Context, chainID strin
 	partialSigBytes := partialSig.S.Bytes()
 
 	response := map[string]interface{}{
-		"partialSignature":      hexutil.Bytes(partialSigBytes[:]),
-		"quaiParticipantIndex":  keyManager.ParticipantIndex,
-		"quaiNonce":             hexutil.Bytes(quaiPubNonce[:]),
-		"messageHash":           hexutil.Bytes(msgHash[:]), // Add hash for debugging
+		"partialSignature":     hexutil.Bytes(partialSigBytes[:]),
+		"quaiParticipantIndex": keyManager.ParticipantIndex,
+		"quaiNonce":            hexutil.Bytes(quaiPubNonce[:]),
+		"messageHash":          hexutil.Bytes(msgHash[:]), // Add hash for debugging
 	}
 
 	s.b.Logger().WithFields(log.Fields{
@@ -1922,73 +1920,72 @@ func (s *PublicWorkSharesAPI) SubmitAuxTemplate(ctx context.Context, chainID str
 	}
 
 	// Verify the MuSig2 signature if keys are configured and template has signatures
-	keyManager, _ := GetMuSig2Keys()
-	if keyManager != nil && len(auxTemplate.Sigs()) > 0 {
-		// Get the first signature (we expect one MuSig2 composite signature)
-		sigEnvelope := auxTemplate.Sigs()[0]
+	// keyManager, _ := GetMuSig2Keys()
+	// if keyManager != nil && len(auxTemplate.Sigs()) > 0 {
+	// 	// Get the first signature (we expect one MuSig2 composite signature)
+	// 	sigEnvelope := auxTemplate.Sigs()[0]
 
-		// Parse signer ID to extract indices (format: "musig2_idx1_idx2")
-		var signerIndices []int
-		if signerID := sigEnvelope.SignerID(); signerID != "" {
-			// Parse the signer ID to get indices
-			var idx1, idx2 int
-			if _, err := fmt.Sscanf(signerID, "musig2_%d_%d", &idx1, &idx2); err == nil {
-				signerIndices = []int{idx1, idx2}
-			}
-		}
+	// 	// Parse signer ID to extract indices (format: "musig2_idx1_idx2")
+	// 	var signerIndices []int
+	// 	if signerID := sigEnvelope.SignerID(); signerID != "" {
+	// 		// Parse the signer ID to get indices
+	// 		var idx1, idx2 int
+	// 		if _, err := fmt.Sscanf(signerID, "musig2_%d_%d", &idx1, &idx2); err == nil {
+	// 			signerIndices = []int{idx1, idx2}
+	// 		}
+	// 	}
 
-		if len(signerIndices) == 2 {
-			// Get the public keys of the signers
-			var signerKeys []*btcec.PublicKey
-			for _, idx := range signerIndices {
-				if idx < 0 || idx > 2 {
-					return fmt.Errorf("invalid signer index: %d", idx)
-				}
-				signerKeys = append(signerKeys, keyManager.AllPublicKeys[idx])
-			}
+	// 	if len(signerIndices) == 2 {
+	// 		// Get the public keys of the signers
+	// 		var signerKeys []*btcec.PublicKey
+	// 		for _, idx := range signerIndices {
+	// 			if idx < 0 || idx > 2 {
+	// 				return fmt.Errorf("invalid signer index: %d", idx)
+	// 			}
+	// 			signerKeys = append(signerKeys, keyManager.AllPublicKeys[idx])
+	// 		}
 
-			// Aggregate the public keys
-			aggKey, _, _, err := musig2.AggregateKeys(signerKeys, false)
-			if err != nil {
-				s.b.Logger().WithField("error", err).Error("API: Failed to aggregate signer keys")
-				return fmt.Errorf("failed to aggregate signer keys: %w", err)
-			}
+	// 		// Aggregate the public keys
+	// 		aggKey, _, _, err := musig2.AggregateKeys(signerKeys, false)
+	// 		if err != nil {
+	// 			s.b.Logger().WithField("error", err).Error("API: Failed to aggregate signer keys")
+	// 			return fmt.Errorf("failed to aggregate signer keys: %w", err)
+	// 		}
 
-			// Create template data for verification (template without signatures)
-			protoTemplateCopy := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
-			protoTemplateCopy.Sigs = nil
-			templateDataForSigning, err := proto.Marshal(protoTemplateCopy)
-			if err != nil {
-				return fmt.Errorf("failed to marshal template for verification: %w", err)
-			}
+	// 		// Create template data for verification (template without signatures)
+	// 		protoTemplateCopy := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
+	// 		protoTemplateCopy.Sigs = nil
+	// 		templateDataForSigning, err := proto.Marshal(protoTemplateCopy)
+	// 		if err != nil {
+	// 			return fmt.Errorf("failed to marshal template for verification: %w", err)
+	// 		}
 
-			// Verify the Schnorr signature
-			msgHash := sha256.Sum256(templateDataForSigning)
-			sig, err := schnorr.ParseSignature(sigEnvelope.Signature())
-			if err != nil {
-				s.b.Logger().WithField("error", err).Error("API: Failed to parse signature")
-				return fmt.Errorf("failed to parse signature: %w", err)
-			}
+	// 		// Verify the Schnorr signature
+	// 		msgHash := sha256.Sum256(templateDataForSigning)
+	// 		sig, err := schnorr.ParseSignature(sigEnvelope.Signature())
+	// 		if err != nil {
+	// 			s.b.Logger().WithField("error", err).Error("API: Failed to parse signature")
+	// 			return fmt.Errorf("failed to parse signature: %w", err)
+	// 		}
 
-			if !sig.Verify(msgHash[:], aggKey.FinalKey) {
-				s.b.Logger().Error("API: Invalid signature on AuxTemplate")
-				return fmt.Errorf("invalid signature on AuxTemplate")
-			}
+	// 		if !sig.Verify(msgHash[:], aggKey.FinalKey) {
+	// 			s.b.Logger().Error("API: Invalid signature on AuxTemplate")
+	// 			return fmt.Errorf("invalid signature on AuxTemplate")
+	// 		}
 
-			s.b.Logger().WithFields(log.Fields{
-				"signerIndices": signerIndices,
-			}).Info("Successfully verified MuSig2 signature")
-		}
-	}
+	// 		s.b.Logger().WithFields(log.Fields{
+	// 			"signerIndices": signerIndices,
+	// 		}).Info("Successfully verified MuSig2 signature")
+	// 	}
+	// }
 
 	// Log the received template for debugging
 	s.b.Logger().WithFields(log.Fields{
-		"chain":         chainID,
-		"powID":         auxTemplate.PowID(),
-		"height":        auxTemplate.Height(),
-		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
-		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
-		"coinbaseValue": auxTemplate.CoinbaseValue(),
+		"chain":    chainID,
+		"powID":    auxTemplate.PowID(),
+		"height":   auxTemplate.Height(),
+		"nBits":    fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"prevHash": fmt.Sprintf("%x", auxTemplate.PrevHash()),
 	}).Info("Received AuxTemplate from subsidy chain")
 
 	// Broadcast the template to the network

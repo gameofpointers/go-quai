@@ -297,9 +297,9 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 
 				if header.AuxPow() != nil {
 					switch header.AuxPow().PowID() {
-					case types.SHA:
+					case types.SHA_BCH, types.SHA_BTC:
 						target := new(big.Int).Div(common.Big2e256, header.ShaDiffAndCount().Difficulty())
-						powHash := types.ShaPowHash(header.AuxPow().Header())
+						powHash := header.AuxPow().Header().PowHash()
 						// If it meets the full difficulty target, it's a block, not a workshare
 						if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) >= 0 {
 							api.backend.Logger().Error("Skipping block in workshare subscription", "hash", w.Hash().Hex())
@@ -307,11 +307,7 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 						}
 					case types.Scrypt:
 						target := new(big.Int).Div(common.Big2e256, header.ScryptDiffAndCount().Difficulty())
-						powHash, err := types.ScryptPowHash(header.AuxPow().Header())
-						if err != nil {
-							api.backend.Logger().Error("Failed to compute scrypt PoW hash for workshare", "hash", w.Hash().Hex(), "err", err)
-							continue
-						}
+						powHash := header.AuxPow().Header().PowHash()
 						// If it meets the full difficulty target, it's a block, not a workshare
 						if new(big.Int).SetBytes(powHash.Bytes()).Cmp(target) >= 0 {
 							api.backend.Logger().Error("Skipping block in workshare subscription", "hash", w.Hash().Hex())

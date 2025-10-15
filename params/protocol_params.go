@@ -263,6 +263,13 @@ var (
 	AuxTemplateLivenessTime    uint64 = 15
 	ShareDiffRelativeThreshold        = big.NewInt(90) // 90% of the current header diff
 
+	// Share Targets are expected number of workshares for each of these pow
+	// algorithms in a block
+	ProgpowShareTarget uint8 = 3
+	KawpowShareTarget  uint8 = 3
+	ShaShareTarget     uint8 = 3
+	ScryptShareTarget  uint8 = 3
+
 	// PoW share difficulty parameters
 	MinShaDiff    = big.NewInt(10000000) // Minimum difficulty for a SHA work share
 	MinScryptDiff = big.NewInt(1000)     // Minimum difficulty for a Scrypt work share

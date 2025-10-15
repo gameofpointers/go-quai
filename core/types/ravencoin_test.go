@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Helper function to serialize TxOut to wire format
+func serializeRavencoinTxOut(value int64, pkScript []byte) []byte {
+	return serializeTxOut(wire.NewTxOut(value, pkScript))
+}
+
 type ravencoinValidationTestCase struct {
 	Name              string
 	BlockHeight       uint32
@@ -139,7 +144,8 @@ func TestRavencoinCoinbaseFormat(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			coinbase := CreateCoinbaseTxWithNonce(tc.height, tc.extraNonce1, tc.extraNonce2, tc.extraData, []byte{0x76, 0xa9, 0x14}, 2500000000)
+			coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14})
+			coinbase := CreateCoinbaseTxWithNonce(tc.height, tc.extraNonce1, tc.extraNonce2, tc.extraData, coinbaseOut)
 			require.NotNil(t, coinbase)
 
 			height, nonce1, nonce2, extra := ExtractNoncesFromCoinbase(coinbase.TxIn[0].SignatureScript)
@@ -153,7 +159,8 @@ func TestRavencoinCoinbaseFormat(t *testing.T) {
 
 func TestRavencoinEngineSelection(t *testing.T) {
 	workHeader := &WorkObjectHeader{}
-	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x12345678, 0x123456789ABCDEF0, []byte("Ravencoin Engine"), []byte{0x76, 0xa9, 0x14}, 2500000000)
+	coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14})
+	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x12345678, 0x123456789ABCDEF0, []byte("Ravencoin Engine"), coinbaseOut)
 	auxPow := NewAuxPow(Kawpow, make([]byte, 80), nil, nil, coinbase)
 	workHeader.auxPow = auxPow
 
@@ -178,7 +185,8 @@ func TestRavencoinProgpowDisambiguation(t *testing.T) {
 }
 
 func TestRavencoinCoinbaseEncoding(t *testing.T) {
-	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x00000001, 0x0000000000000001, []byte("RVN"), []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}, 2500000000)
+	coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x00000001, 0x0000000000000001, []byte("RVN"), coinbaseOut)
 	height, nonce1, nonce2, extra := ExtractNoncesFromCoinbase(coinbase.TxIn[0].SignatureScript)
 	require.Equal(t, uint32(1219736), height)
 	require.Equal(t, uint32(0x00000001), nonce1)
@@ -191,7 +199,8 @@ func TestRavencoinCoinbaseEncoding(t *testing.T) {
 }
 
 func TestRavencoinMerkleIntegration(t *testing.T) {
-	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x11111111, 0x2222222233333333, []byte("Ravencoin Merkle"), []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}, 2500000000)
+	coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+	coinbase := CreateCoinbaseTxWithNonce(1219736, 0x11111111, 0x2222222233333333, []byte("Ravencoin Merkle"), coinbaseOut)
 	tx2 := wire.NewMsgTx(2)
 	tx2.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{}, Index: 0}, []byte{0x01, 0x02}, nil))
 	tx2.AddTxOut(wire.NewTxOut(100000000, []byte{0x51}))
@@ -232,7 +241,8 @@ func TestRavencoinBlockValidation(t *testing.T) {
 }
 
 func TestRavencoinCoinbaseNonceExtraction(t *testing.T) {
-	coinbase := CreateCoinbaseTxWithNonce(1219736, 0xDEADBEEF, 0x1234567890ABCDEF, []byte("Ravencoin Test Block"), []byte{0x76, 0xa9, 0x14}, 2500000000)
+	coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14})
+	coinbase := CreateCoinbaseTxWithNonce(1219736, 0xDEADBEEF, 0x1234567890ABCDEF, []byte("Ravencoin Test Block"), coinbaseOut)
 	height, nonce1, nonce2, extra := ExtractNoncesFromCoinbase(coinbase.TxIn[0].SignatureScript)
 	require.Equal(t, uint32(1219736), height)
 	require.Equal(t, uint32(0xDEADBEEF), nonce1)
@@ -245,7 +255,8 @@ func TestRavencoinCoinbaseNonceExtraction(t *testing.T) {
 }
 
 func TestRavencoinMerkleRootCalculation(t *testing.T) {
-	coinbase := CreateCoinbaseTxWithHeight(1219736, []byte("Ravencoin Genesis"), []byte{0x76, 0xa9, 0x14}, 2500000000)
+	coinbaseOut := serializeRavencoinTxOut(2500000000, []byte{0x76, 0xa9, 0x14})
+	coinbase := CreateCoinbaseTxWithHeight(1219736, []byte("Ravencoin Genesis"), coinbaseOut)
 	tx2 := wire.NewMsgTx(2)
 	tx2.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: chainhash.Hash{}, Index: 0}, []byte{}, nil))
 	tx2.AddTxOut(wire.NewTxOut(100000000, []byte{0x51}))

@@ -1720,12 +1720,11 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 
 	// Log the received template
 	s.b.Logger().WithFields(log.Fields{
-		"powID":         auxTemplate.PowID(),
-		"height":        auxTemplate.Height(),
-		"nBits":         fmt.Sprintf("0x%08x", auxTemplate.NBits()),
-		"prevHash":      fmt.Sprintf("%x", auxTemplate.PrevHash()),
-		"coinbaseValue": auxTemplate.CoinbaseValue(),
-		"hasSigs":       len(protoTemplate.Sigs) > 0,
+		"powID":    auxTemplate.PowID(),
+		"height":   auxTemplate.Height(),
+		"nBits":    fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"prevHash": fmt.Sprintf("%x", auxTemplate.PrevHash()),
+		"hasSigs":  len(protoTemplate.Sigs) > 0,
 	}).Info("Received signed AuxTemplate")
 
 	// Broadcast the template to the network

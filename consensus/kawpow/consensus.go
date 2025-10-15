@@ -600,18 +600,14 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 		return common.Hash{}, common.Hash{}
 	}
 
-	ravencoinHeader, err := types.DecodeRavencoinHeader(header.AuxPow().Header())
-	if err != nil {
-		kawpow.logger.WithField("err", err).Error("Error decoding Ravencoin header")
-		return common.Hash{}, common.Hash{}
-	}
+	ravencoinHeader := header.AuxPow().Header()
 
 	// For KAWPOW, the nonce is stored directly in the Ravencoin header
-	nonce64 := ravencoinHeader.Nonce64
+	nonce64 := ravencoinHeader.Nonce64()
 
 	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
-	kawpowHeaderHash := ravencoinHeader.GetKAWPOWHeaderHash()
-	blockNumber := uint64(ravencoinHeader.Height)
+	kawpowHeaderHash := ravencoinHeader.SealHash()
+	blockNumber := uint64(ravencoinHeader.Height())
 
 	// Create a unique cache key using kawpowHeaderHash + nonce
 	// This ensures different nonces for the same block template have separate cache entries
@@ -689,15 +685,12 @@ func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Has
 		return common.Hash{}, fmt.Errorf("AuxPow is nil for KAWPOW")
 	}
 
-	ravencoinHeader, err := types.DecodeRavencoinHeader(auxPow.Header())
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to decode Ravencoin header: %v", err)
-	}
+	ravencoinHeader := auxPow.Header()
 
 	// Verify the calculated values against the ones provided in the Ravencoin header
-	if !bytes.Equal(ravencoinHeader.MixHash.Bytes(), mixHash.Bytes()) {
+	if !bytes.Equal(ravencoinHeader.MixHash().Bytes(), mixHash.Bytes()) {
 		kawpow.logger.WithFields(log.Fields{
-			"receivedMixHash":   ravencoinHeader.MixHash.Hex(),
+			"receivedMixHash":   ravencoinHeader.MixHash().Hex(),
 			"calculatedMixHash": mixHash.Hex(),
 		}).Error("MixHash mismatch in ComputePowHash")
 		return common.Hash{}, consensus.ErrInvalidMixHash
