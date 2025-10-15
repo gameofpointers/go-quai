@@ -203,13 +203,13 @@ search:
 				workObject = types.CopyWorkObject(workObject)
 
 				// Update the Ravencoin header with the found nonce and mix hash
-				header.SetNonce64(nonce)
-				header.SetMixHash(common.BytesToHash(digest))
+				workObject.WorkObjectHeader().AuxPow().Header().SetNonce64(nonce)
+				workObject.WorkObjectHeader().AuxPow().Header().SetMixHash(common.BytesToHash(digest))
 
 				// Create a new AuxPow with the updated header and coinbase
 				updatedAuxPow := types.NewAuxPow(
 					auxPow.PowID(),
-					header,
+					workObject.WorkObjectHeader().AuxPow().Header(),
 					auxPow.Signature(),
 					auxPow.MerkleBranch(),
 					auxPow.Transaction(),
