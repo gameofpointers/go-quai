@@ -3,9 +3,9 @@ package types
 import (
 	"io"
 
-	ltchash "github.com/btcsuite/btcd/chaincfg/chainhash"
-	ltcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
+	ltchash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
 
 // LitecoinHeaderWrapper wraps ltcdwire.BlockHeader to implement AuxHeaderData

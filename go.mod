@@ -33,8 +33,6 @@ require (
 	github.com/ledgerwatch/secp256k1 v1.0.0
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
-	github.com/ltcsuite/ltcd v0.23.6
-	github.com/ltcsuite/ltcd/chaincfg/chainhash v1.0.2
 	github.com/multiformats/go-multiaddr v0.12.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/olekukonko/tablewriter v0.0.5
@@ -74,6 +72,8 @@ require (
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dominant-strategies/ltcd/ltcutil v0.0.0-20251016174055-4ac338381b32 // indirect
+	github.com/dominant-strategies/ltcd/secp256k1_ltc v0.0.0-20251016174055-4ac338381b32 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
@@ -117,8 +117,6 @@ require (
 	github.com/libp2p/go-netroute v0.2.1 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
 	github.com/libp2p/go-yamux/v4 v4.0.1 // indirect
-	github.com/ltcsuite/ltcd/ltcutil v1.1.4-0.20250505084124-c37ac1524e04 // indirect
-	github.com/ltcsuite/secp256k1 v0.1.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -193,6 +191,8 @@ require (
 )
 
 require (
+	github.com/dominant-strategies/ltcd v0.0.0-20251016174055-4ac338381b32
+	github.com/dominant-strategies/ltcd/chaincfg/chainhash v0.0.0-20251016174055-4ac338381b32
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/libp2p/go-libp2p v0.32.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
