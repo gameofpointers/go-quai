@@ -2127,9 +2127,36 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	}
 
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-		// Need to calculate the long term average count for the number of shares
-		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(params.MinShaDiff, 0))
-		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(params.MinScryptDiff, 0))
+
+		// Get the sha and scrypt share counts from the tx pool
+		_, countSha, countScrypt := w.hc.CountWorkSharesByAlgo(parent)
+
+		//Convert counts to 2^32 base
+		bigCountSha := new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
+		bigCountScrypt := new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
+
+		var newShaDiff *big.Int
+		var newScryptDiff *big.Int
+		var newShaCount *big.Int
+		var newScryptCount *big.Int
+		// Check if shares is nil
+		if newWo.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock { //parent.WorkObjectHeader().ScryptDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ScryptDiffAndCount().Count() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Count() == nil {
+
+			//Initialize the diff and count values
+			newShaDiff = params.InitialShaDiff
+			newShaCount = params.TargetShaShares
+			newScryptDiff = params.InitialScryptDiff
+			newScryptCount = params.TargetScryptShares
+
+		} else {
+			//Calculate the new diff and count values
+			newShaDiff, newShaCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ScryptDiffAndCount(), bigCountSha, types.SHA_BTC)
+			newScryptDiff, newScryptCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ShaDiffAndCount(), bigCountScrypt, types.Scrypt)
+		}
+
+		// Set the new diff and count values
+		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
+		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount))
 	}
 
 	// Only zone should calculate state
