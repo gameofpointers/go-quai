@@ -10,10 +10,16 @@ import (
 	"fmt"
 	"io"
 
+	btcdutil "github.com/btcsuite/btcd/btcutil"
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 )
+
+type RavencoinBlockWrapper struct {
+	BlockHeader  *RavencoinBlockHeader
+	Transactions []*btcdwire.MsgTx
+}
 
 // RavencoinBlockHeader represents the Ravencoin KAWPOW block header structure
 type RavencoinBlockHeader struct {
@@ -39,6 +45,71 @@ type RavencoinKAWPOWInput struct {
 	Time           uint32      `json:"time"           gencodec:"required"`
 	Bits           uint32      `json:"bits"           gencodec:"required"`
 	Height         uint32      `json:"height"         gencodec:"required"`
+}
+
+type RavencoinAddress struct {
+	Address btcdutil.Address
+}
+
+func NewRavencoinBlock(header *RavencoinBlockHeader) *RavencoinBlockWrapper {
+	return &RavencoinBlockWrapper{BlockHeader: header}
+}
+
+func (rb *RavencoinBlockWrapper) Header() AuxHeaderData {
+	return rb.BlockHeader
+}
+
+func (rb *RavencoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
+	if tx == nil || tx.inner == nil {
+		return fmt.Errorf("cannot add transaction: tx is nil")
+	}
+
+	switch inner := tx.inner.(type) {
+	case *RavencoinTx:
+		if inner.MsgTx == nil {
+			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
+		}
+		rb.Transactions = append(rb.Transactions, inner.MsgTx.Copy())
+		return nil
+	default:
+		return fmt.Errorf("unsupported transaction type %T for Ravencoin block", inner)
+	}
+}
+
+func (rb *RavencoinBlockWrapper) Copy() AuxPowBlockData {
+	block := &RavencoinBlockWrapper{
+		BlockHeader:  rb.BlockHeader,
+		Transactions: make([]*btcdwire.MsgTx, len(rb.Transactions)),
+	}
+
+	for i, tx := range rb.Transactions {
+		block.Transactions[i] = tx.Copy()
+	}
+	return block
+}
+
+func (rb *RavencoinBlockWrapper) Serialize(w io.Writer) error {
+	if rb.BlockHeader == nil {
+		return fmt.Errorf("cannot serialize Ravencoin block: header is nil")
+	}
+	if err := rb.BlockHeader.Serialize(w); err != nil {
+		return err
+	}
+
+	// Write the number of transactions as a VarInt
+	txCount := uint64(len(rb.Transactions))
+	if err := btcdwire.WriteVarInt(w, 0, txCount); err != nil {
+		return err
+	}
+
+	// Write each transaction
+	for _, tx := range rb.Transactions {
+		if err := tx.SerializeNoWitness(w); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // NewBlockHeader creates a new Ravencoin block header
@@ -308,12 +379,12 @@ func (h *RavencoinBlockHeader) Copy() AuxHeaderData {
 	return &copiedHeader
 }
 
-type RavencoinCoinbaseTx struct {
+type RavencoinTx struct {
 	*btcdwire.MsgTx
 }
 
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *RavencoinCoinbaseTx {
-	coinbaseTx := &RavencoinCoinbaseTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *RavencoinTx {
+	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
 
 	// Create the coinbase input
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
@@ -337,18 +408,18 @@ func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extra
 	return coinbaseTx
 }
 
-func (rct *RavencoinCoinbaseTx) Copy() AuxPowCoinbaseTxData {
-	return &RavencoinCoinbaseTx{MsgTx: rct.MsgTx.Copy()}
+func (rct *RavencoinTx) Copy() AuxPowTxData {
+	return &RavencoinTx{MsgTx: rct.MsgTx.Copy()}
 }
 
-func (rct *RavencoinCoinbaseTx) scriptSig() []byte {
+func (rct *RavencoinTx) scriptSig() []byte {
 	if rct.MsgTx == nil || len(rct.MsgTx.TxIn) == 0 {
 		return nil
 	}
 	return rct.MsgTx.TxIn[0].SignatureScript
 }
 
-func (rct *RavencoinCoinbaseTx) DeserializeNoWitness(r io.Reader) error {
+func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
 	return rct.MsgTx.DeserializeNoWitness(r)
 }
 

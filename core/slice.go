@@ -860,12 +860,6 @@ func (sl *Slice) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
 	if err != nil {
 		return err
 	}
-	// Read back the bestPh and set it again to make sure that any changes to
-	// the auxpow is picked up
-	bestPh := sl.ReadBestPh()
-	if bestPh != nil {
-		sl.SetBestPh(bestPh)
-	}
 	return nil
 }
 

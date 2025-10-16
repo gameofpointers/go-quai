@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"io"
 
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -8,12 +9,16 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 )
 
+type BitcoinBlockWrapper struct {
+	Block *btcdwire.MsgBlock
+}
+
 // BitcoinHeaderWrapper wraps btcdwire.BlockHeader to implement AuxHeaderData
 type BitcoinHeaderWrapper struct {
 	*btcdwire.BlockHeader
 }
 
-type BitcoinCoinbaseTxWrapper struct {
+type BitcoinTxWrapper struct {
 	*btcdwire.MsgTx
 }
 
@@ -21,12 +26,60 @@ type BitcoinCoinbaseTxOutWrapper struct {
 	*btcdwire.TxOut
 }
 
-func NewBitcoinCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCoinbaseTxOutWrapper {
-	return &BitcoinCoinbaseTxOutWrapper{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
+func NewBitcoinBlockWrapper(header *btcdwire.BlockHeader) *BitcoinBlockWrapper {
+	return &BitcoinBlockWrapper{Block: &btcdwire.MsgBlock{Header: *header}}
 }
 
 func NewBitcoinHeaderWrapper(header *btcdwire.BlockHeader) *BitcoinHeaderWrapper {
 	return &BitcoinHeaderWrapper{BlockHeader: header}
+}
+
+func NewBitcoinCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCoinbaseTxOutWrapper {
+	return &BitcoinCoinbaseTxOutWrapper{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
+}
+
+func (btb *BitcoinBlockWrapper) Header() AuxHeaderData {
+	return &BitcoinHeaderWrapper{BlockHeader: &btb.Block.Header}
+}
+
+func (btb *BitcoinBlockWrapper) Copy() AuxPowBlockData {
+
+	copyBlock := &btcdwire.MsgBlock{
+		Header:       btb.Block.Header,
+		Transactions: make([]*btcdwire.MsgTx, len(btb.Block.Transactions)),
+	}
+
+	for i, tx := range btb.Block.Transactions {
+		if tx == nil {
+			continue
+		}
+		copyBlock.Transactions[i] = tx.Copy()
+	}
+
+	return &BitcoinBlockWrapper{Block: copyBlock}
+}
+
+func (btb *BitcoinBlockWrapper) Serialize(w io.Writer) error {
+	return btb.Block.Serialize(w)
+}
+
+func (btb *BitcoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
+	if tx == nil || tx.inner == nil {
+		return fmt.Errorf("cannot add transaction: tx is nil")
+	}
+
+	switch inner := tx.inner.(type) {
+	case *BitcoinTxWrapper:
+		if inner.MsgTx == nil {
+			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
+		}
+		if btb.Block == nil {
+			return fmt.Errorf("cannot add transaction: block is nil")
+		}
+		return btb.Block.AddTransaction(inner.MsgTx.Copy())
+	default:
+		return fmt.Errorf("unsupported transaction type %T for Bitcoin block", inner)
+	}
 }
 
 func (bth *BitcoinHeaderWrapper) PowHash() common.Hash {
@@ -131,8 +184,8 @@ func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
 }
 
-func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinCoinbaseTxWrapper {
-	coinbaseTx := &BitcoinCoinbaseTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
+func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinTxWrapper {
+	coinbaseTx := &BitcoinTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
 
 	// Create the coinbase input with height in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
@@ -156,11 +209,11 @@ func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, 
 	return coinbaseTx
 }
 
-func (btt *BitcoinCoinbaseTxWrapper) Copy() AuxPowCoinbaseTxData {
-	return &BitcoinCoinbaseTxWrapper{MsgTx: btt.MsgTx.Copy()}
+func (btt *BitcoinTxWrapper) Copy() AuxPowTxData {
+	return &BitcoinTxWrapper{MsgTx: btt.MsgTx.Copy()}
 }
 
-func (btt *BitcoinCoinbaseTxWrapper) scriptSig() []byte {
+func (btt *BitcoinTxWrapper) scriptSig() []byte {
 	if btt.MsgTx == nil || len(btt.MsgTx.TxIn) == 0 {
 		return nil
 	}

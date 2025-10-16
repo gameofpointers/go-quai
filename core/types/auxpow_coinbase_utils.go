@@ -6,11 +6,17 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/btcsuite/btcd/blockchain"
-	"github.com/btcsuite/btcd/btcutil"
+	btcblockchain "github.com/btcsuite/btcd/blockchain"
+	btcutil "github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
+	ltcblockchain "github.com/dominant-strategies/ltcd/blockchain"
+	ltcchainhash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
+	ltcutil "github.com/dominant-strategies/ltcd/ltcutil"
+	bchblockchain "github.com/gcash/bchd/blockchain"
+	bchchainhash "github.com/gcash/bchd/chaincfg/chainhash"
+	bchutil "github.com/gcash/bchutil"
 )
 
 // ExtractSealHashFromCoinbase scans a Ravencoin coinbase scriptSig and returns the
@@ -169,7 +175,7 @@ func CalculateMerkleRootFromTxs(txs []*wire.MsgTx) common.Hash {
 	}
 
 	// Use btcd's CalcMerkleRoot function
-	root := blockchain.CalcMerkleRoot(btcTxs, false) // false = not witness
+	root := btcblockchain.CalcMerkleRoot(btcTxs, false) // false = not witness
 	return common.BytesToHash(root[:])
 }
 
@@ -186,11 +192,91 @@ func VerifyMerkleProof(txHash chainhash.Hash, merkleBranch [][]byte, merkleRoot 
 		copy(sibling[:], siblingBytes)
 
 		// Since we're at index 0 (coinbase), we're always the left child
-		currentHash = blockchain.HashMerkleBranches(&currentHash, &sibling)
+		currentHash = btcblockchain.HashMerkleBranches(&currentHash, &sibling)
 	}
 
 	// Compare with expected merkle root
 	return bytes.Equal(currentHash[:], merkleRoot[:])
+}
+
+func BuildMerkleTreeStore(powID PowID, txs []*AuxPowTx, witness bool) []*chainhash.Hash {
+	switch powID {
+	case Kawpow:
+		transactions := make([]*btcutil.Tx, len(txs))
+		for i, tx := range txs {
+			ravenTx, ok := tx.inner.(*RavencoinTx)
+			if !ok || ravenTx == nil || ravenTx.MsgTx == nil {
+				return nil
+			}
+			transactions[i] = btcutil.NewTx(ravenTx.MsgTx)
+		}
+		return btcblockchain.BuildMerkleTreeStore(transactions, witness)
+	case Scrypt:
+		transactions := make([]*ltcutil.Tx, len(txs))
+		for i, tx := range txs {
+			litecoinTx, ok := tx.inner.(*LitecoinTxWrapper)
+			if !ok || litecoinTx == nil || litecoinTx.MsgTx == nil {
+				return nil
+			}
+			transactions[i] = ltcutil.NewTx(litecoinTx.MsgTx)
+		}
+		ltcTree := ltcblockchain.BuildMerkleTreeStore(transactions, witness)
+		return convertLTCChainhashSlice(ltcTree)
+	case SHA_BTC:
+		transactions := make([]*btcutil.Tx, len(txs))
+		for i, tx := range txs {
+			bitcoinTx, ok := tx.inner.(*BitcoinTxWrapper)
+			if !ok || bitcoinTx == nil || bitcoinTx.MsgTx == nil {
+				return nil
+			}
+			transactions[i] = btcutil.NewTx(bitcoinTx.MsgTx)
+		}
+		return btcblockchain.BuildMerkleTreeStore(transactions, witness)
+	case SHA_BCH:
+		transactions := make([]*bchutil.Tx, len(txs))
+		for i, tx := range txs {
+			bitcoinCashTx, ok := tx.inner.(*BitcoinCashTxWrapper)
+			if !ok || bitcoinCashTx == nil || bitcoinCashTx.MsgTx == nil {
+				return nil
+			}
+			transactions[i] = bchutil.NewTx(bitcoinCashTx.MsgTx)
+		}
+		bchTree := bchblockchain.BuildMerkleTreeStore(transactions)
+		return convertBCHChainhashSlice(bchTree)
+	}
+	return nil
+}
+
+func convertLTCChainhashSlice(input []*ltcchainhash.Hash) []*chainhash.Hash {
+	if input == nil {
+		return nil
+	}
+	out := make([]*chainhash.Hash, len(input))
+	for i, h := range input {
+		if h == nil {
+			continue
+		}
+		converted := new(chainhash.Hash)
+		copy(converted[:], h[:])
+		out[i] = converted
+	}
+	return out
+}
+
+func convertBCHChainhashSlice(input []*bchchainhash.Hash) []*chainhash.Hash {
+	if input == nil {
+		return nil
+	}
+	out := make([]*chainhash.Hash, len(input))
+	for i, h := range input {
+		if h == nil {
+			continue
+		}
+		converted := new(chainhash.Hash)
+		copy(converted[:], h[:])
+		out[i] = converted
+	}
+	return out
 }
 
 // ExtractMerkleBranch extracts the merkle branch for the coinbase (index 0)

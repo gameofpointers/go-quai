@@ -593,7 +593,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 
 	extra := data[ravencoinHeaderSize:]
 
-	auxCoinbaseTx := &types.AuxPowCoinbaseTx{}
+	auxCoinbaseTx := &types.AuxPowTx{}
 	auxCoinbaseTx.DeserializeNoWitness(bytes.NewReader(extra))
 
 	sealHash, err := types.ExtractSealHashFromCoinbase(auxCoinbaseTx.ScriptSig())

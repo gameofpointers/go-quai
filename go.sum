@@ -117,6 +117,7 @@ github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0/go.mod h1:7SFka0XMvUgj3hfZtyd
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
 github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
+github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd h1:R/opQEbFEy9JGkIguV40SvRY1uliPX8ifOvi6ICsFCw=
 github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd/go.mod h1:HHNXQzUsZCxOoE+CPiyCTO6x34Zs86zZUiwtpXoGdtg=
 github.com/btcsuite/goleveldb v0.0.0-20160330041536-7834afc9e8cd/go.mod h1:F+uVaaLLH7j4eDXPRvw78tMflu7Ie2bzYOH4Y8rRKBY=
 github.com/btcsuite/goleveldb v1.0.0/go.mod h1:QiK9vBlgftBg6rWQIj6wFzbPfRjiykIEhBH4obrXJ/I=
@@ -209,6 +210,8 @@ github.com/dominant-strategies/bn256 v0.0.0-20250117181620-a3c0ff77c445 h1:AQ0Od
 github.com/dominant-strategies/bn256 v0.0.0-20250117181620-a3c0ff77c445/go.mod h1:ldZpUYGUtD9ZvZmaQKYEbh1DTH8aNzCWDE90YCAlmvc=
 github.com/dominant-strategies/ltcd v0.0.0-20251016174055-4ac338381b32 h1:wIU/84CO8XucwaUhzY9zxKVN8+d77s3MDijhWZ65RWE=
 github.com/dominant-strategies/ltcd v0.0.0-20251016174055-4ac338381b32/go.mod h1:Z71A0FxfvG/Ra2l4DqhrjhFFDuAxcApeUQo/timcYlA=
+github.com/dominant-strategies/ltcd/btcec/v2 v2.0.0-20251016174055-4ac338381b32 h1:NBog/i06Z/mKVoRVijRq7a8yItaybGscqmwhCa8ybKs=
+github.com/dominant-strategies/ltcd/btcec/v2 v2.0.0-20251016174055-4ac338381b32/go.mod h1:1iGdZwM7wjJ0W9OyC9ix7TwWJ8FI2LBe+f0jP9gYseo=
 github.com/dominant-strategies/ltcd/chaincfg/chainhash v0.0.0-20251016174055-4ac338381b32 h1:4gMIxvQl5JiAvmjiiWYZpt7grw/pabnJetrFLkVj2vM=
 github.com/dominant-strategies/ltcd/chaincfg/chainhash v0.0.0-20251016174055-4ac338381b32/go.mod h1:z6/WgszpjrmpT4M6IRml/aivix3WhTmDrb1SXp3kXx8=
 github.com/dominant-strategies/ltcd/ltcutil v0.0.0-20251016174055-4ac338381b32 h1:zrMw9WzwqsOMFrSWls8cq9G98YApDvnhx8bo6oPGyi4=
@@ -256,6 +259,10 @@ github.com/fsnotify/fsnotify v1.6.0/go.mod h1:sl3t1tCWJFWoRz9R8WJCbQihKKwmorjAbS
 github.com/gavv/httpexpect v2.0.0+incompatible/go.mod h1:x+9tiU1YnrOvnB725RkpoLv1M62hOWzwo5OXotisrKc=
 github.com/gcash/bchd v0.21.1 h1:YTFdypPLIF6vfEyzUXoGCQVg+8JmneZIwb9SYlk5YcE=
 github.com/gcash/bchd v0.21.1/go.mod h1:Zco1+b37+qx7xmy+rwFn4XWlbD7PP5z63NBNtrSBfEQ=
+github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6 h1:3pZvWJ8MSfWstGrb8Hfh4ZpLyZNcXypcGx2Ju4ZibVM=
+github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6/go.mod h1:PpfmXTLfjRp7Tf6v/DCGTRXHz+VFbiRcsoUxi7HvwlQ=
+github.com/gcash/bchutil v0.0.0-20250513235300-39ac514d072b h1:2jMtYvmzwzNGcRF/UnZwQJ+ss3+fa9rwaWFzRyk5c8U=
+github.com/gcash/bchutil v0.0.0-20250513235300-39ac514d072b/go.mod h1:cbex4ExcZ7sTzvi/ZRpHBTlDKFd4duEuAjuhPfgvv90=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gin-contrib/sse v0.0.0-20190301062529-5545eab6dad3/go.mod h1:VJ0WA2NBN22VlZ2dKZQPAPnyWw5XTlK1KymzLKsr59s=
 github.com/gin-gonic/gin v1.4.0/go.mod h1:OW2EZn3DO8Ln9oIKOvM++LBO+5UPHJJDH72/q/3rZdM=
@@ -943,6 +950,8 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yusufpapurcu/wmi v1.2.3 h1:E1ctvB7uKFMOJw3fdOW32DwGE9I7t++CRUEMKvFoFiw=
 github.com/yusufpapurcu/wmi v1.2.3/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
+github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1 h1:1qKTeMTSIEvRIjvVYzgcRp0xVp0eoiRTTiHSncb5gD8=
+github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1/go.mod h1:bslhAiUxakrA6z6CHmVyvkfpnxx18RJBwVyx2TluJWw=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738/go.mod h1:dnLIgRNXwCJa5e+c6mIZCrds/GIG4ncV9HhK5PX7jPg=
 go.opencensus.io v0.18.0/go.mod h1:vKdFvxhtzZ9onBp9VKHK8z/sRpBMnKAsufL7wlDrCOA=
@@ -1449,6 +1458,8 @@ honnef.co/go/tools v0.0.1-2020.1.3/go.mod h1:X/FiERA/W4tHapMX5mGpAtMSVEeEUOyHaw9
 honnef.co/go/tools v0.0.1-2020.1.4/go.mod h1:X/FiERA/W4tHapMX5mGpAtMSVEeEUOyHaw9vFzvIQ3k=
 lukechampine.com/blake3 v1.2.1 h1:YuqqRuaqsGV71BV/nm9xlI0MKUv4QC54jQnBChWbGnI=
 lukechampine.com/blake3 v1.2.1/go.mod h1:0OFRp7fBtAylGVCO40o87sbupkyIGgbpv1+M1k1LM6k=
+lukechampine.com/uint128 v1.3.0 h1:cDdUVfRwDUDovz610ABgFD17nXD4/uDgVHl2sC3+sbo=
+lukechampine.com/uint128 v1.3.0/go.mod h1:c4eWIwlEGaxC/+H1VguhU4PHXNWDCDMUlWdIWl2j1gk=
 modernc.org/mathutil v1.6.0 h1:fRe9+AmYlaej+64JsEEhoWuAYBkOtQiMEU7n/XgfYi4=
 modernc.org/mathutil v1.6.0/go.mod h1:Ui5Q9q1TR2gFm0AQRqQUaBWFLAhQpCwNcuhBOSedWPo=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
