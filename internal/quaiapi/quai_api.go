@@ -18,6 +18,7 @@ package quaiapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -28,6 +29,8 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	schnorrMusig2 "github.com/btcsuite/btcd/btcec/v2/schnorr/musig2"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
@@ -1670,7 +1673,7 @@ func (s *PublicBlockChainQuaiAPI) SignAuxTemplate(ctx context.Context, templateD
 }
 
 // SubmitAuxTemplate receives and processes a fully signed AuxTemplate
-func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templateData hexutil.Bytes) error {
+func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templateData hexutil.Bytes, signerEnvelope hexutil.Bytes) error {
 	s.b.Logger().WithFields(log.Fields{
 		"dataSize": len(templateData),
 	}).Debug("API: SubmitAuxTemplate called")
@@ -1711,6 +1714,78 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 			"messageHash": messageHashHex,
 		}).Error("Signature verification failed")
 		return fmt.Errorf("signature verification failed")
+	}
+
+	ProtoSignerEnvelope := &types.ProtoSignerEnvelope{}
+	err = proto.Unmarshal(signerEnvelope, ProtoSignerEnvelope)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to unmarshal signer envelope protobuf")
+		return fmt.Errorf("failed to unmarshal signer envelope: %w", err)
+	}
+
+	sigEnvelope := &types.SignerEnvelope{}
+	err = sigEnvelope.ProtoDecode(ProtoSignerEnvelope)
+	if err != nil {
+		s.b.Logger().WithField("error", err).Error("API: Failed to decode signer envelope")
+		return fmt.Errorf("failed to decode signer envelope: %w", err)
+	}
+
+	// Verify the MuSig2 signature if keys are configured and template has signatures
+	keyManager, _ := GetMuSig2Keys()
+	if keyManager != nil && len(auxTemplate.Sigs()) > 0 {
+
+		// Parse signer ID to extract indices (format: "musig2_idx1_idx2")
+		var signerIndices []int
+		if signerID := sigEnvelope.SignerID(); signerID != "" {
+			// Parse the signer ID to get indices
+			var idx1, idx2 int
+			if _, err := fmt.Sscanf(signerID, "musig2_%d_%d", &idx1, &idx2); err == nil {
+				signerIndices = []int{idx1, idx2}
+			}
+		}
+
+		if len(signerIndices) == 2 {
+			// Get the public keys of the signers
+			var signerKeys []*btcec.PublicKey
+			for _, idx := range signerIndices {
+				if idx < 0 || idx > 2 {
+					return fmt.Errorf("invalid signer index: %d", idx)
+				}
+				signerKeys = append(signerKeys, keyManager.AllPublicKeys[idx])
+			}
+
+			// Aggregate the public keys
+			aggKey, _, _, err := schnorrMusig2.AggregateKeys(signerKeys, false)
+			if err != nil {
+				s.b.Logger().WithField("error", err).Error("API: Failed to aggregate signer keys")
+				return fmt.Errorf("failed to aggregate signer keys: %w", err)
+			}
+
+			// Create template data for verification (template without signatures)
+			protoTemplateCopy := proto.Clone(protoTemplate).(*types.ProtoAuxTemplate)
+			protoTemplateCopy.Sigs = nil
+			templateDataForSigning, err := proto.Marshal(protoTemplateCopy)
+			if err != nil {
+				return fmt.Errorf("failed to marshal template for verification: %w", err)
+			}
+
+			// Verify the Schnorr signature
+			msgHash := sha256.Sum256(templateDataForSigning)
+			sig, err := schnorr.ParseSignature(sigEnvelope.Signature())
+			if err != nil {
+				s.b.Logger().WithField("error", err).Error("API: Failed to parse signature")
+				return fmt.Errorf("failed to parse signature: %w", err)
+			}
+
+			if !sig.Verify(msgHash[:], aggKey.FinalKey) {
+				s.b.Logger().Error("API: Invalid signature on AuxTemplate")
+				return fmt.Errorf("invalid signature on AuxTemplate")
+			}
+
+			s.b.Logger().WithFields(log.Fields{
+				"signerIndices": signerIndices,
+			}).Info("Successfully verified MuSig2 signature")
+		}
 	}
 
 	s.b.Logger().WithFields(log.Fields{
