@@ -343,39 +343,74 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 	}
 }
 
-func (hc *HeaderChain) CalculatePowDiff(prevDiff *big.Int, numShares uint16) *big.Int {
-	var minSrc *big.Int
-	if params.MinShaDiff.Cmp(params.MinScryptDiff) <= 0 {
-		minSrc = params.MinShaDiff
-	} else {
-		minSrc = params.MinScryptDiff
-	}
-	minDiff := new(big.Int).Set(minSrc)
+func (hc *HeaderChain) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (newDiff, newAverageShares *big.Int) {
 
-	if prevDiff == nil || prevDiff.Sign() <= 0 {
-		return minDiff
+	// numShares is the EMA of the number of work shares over last N blocks * 2^32
+	// calculate the error between the target and actual number of work shares
+	var error *big.Int
+	if hc.NodeCtx() == common.PRIME_CTX {
+		fmt.Printf("CalculatePowDiffAndCount")
 	}
-
-	diff := new(big.Int).Set(prevDiff)
-	if diff.Cmp(minDiff) < 0 {
-		diff.Set(minDiff)
-	}
-
-	targetShares := params.MaxWorkShareCount
-	if targetShares == 0 {
-		return diff
+	switch powId {
+	case types.SHA_BTC, types.SHA_BCH:
+		error = new(big.Int).Sub(shares.Count(), params.TargetShaShares)
+	case types.Scrypt:
+		error = new(big.Int).Sub(shares.Count(), params.TargetScryptShares)
+	default:
+		return big.NewInt(0), big.NewInt(0)
 	}
 
-	if numShares == 0 {
-		return minDiff
+	// Calculate the new difficulty based on the error
+	// newDiff = prevDiff + (error * prevDiff)/(2^32 * c_difficultyAdjustDivisor)
+	newDiff = new(big.Int).Mul(error, shares.Difficulty())
+	newDiff = newDiff.Div(newDiff, params.WorkShareEmaBlocks)
+	newDiff = newDiff.Div(newDiff, common.Big2e32)
+	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
+
+	// Calculate the new workshares
+	newAverageShares = new(big.Int).Mul(numShares, params.WorkShareEmaBlocks)
+	newAverageShares = newAverageShares.Add(newAverageShares, numShares)
+	newAverageShares = newAverageShares.Div(newAverageShares, params.WorkShareEmaBlocks)
+
+	// Ensure the new difficulty is within bounds
+	var lowerBound *big.Int
+	switch powId {
+	case types.SHA_BTC, types.SHA_BCH:
+		lowerBound = new(big.Int).Div(params.InitialShaDiff, params.MinPowDivisor)
+	case types.Scrypt:
+		lowerBound = new(big.Int).Div(params.InitialScryptDiff, params.MinPowDivisor)
+	default:
+		return big.NewInt(0), big.NewInt(0)
 	}
 
-	result := new(big.Int).Mul(diff, big.NewInt(int64(numShares)))
-	result.Quo(result, big.NewInt(int64(targetShares)))
-	if result.Cmp(minDiff) < 0 {
-		result.Set(minDiff)
+	if newDiff.Cmp(lowerBound) < 0 {
+		newDiff = lowerBound
 	}
-	return result
+	return newDiff, newAverageShares
+}
+
+// CountWorkSharesByAlgo counts the number of work shares by each algo in the given block
+func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount, shaCount, scryptCount int) {
+	// Need to calculate the long term average count for the number of shares
+	uncles := wo.Body().Uncles()
+	countKawPow := 0
+	countSha := 0
+	countScrypt := 0
+	for _, uncle := range uncles {
+		if uncle.AuxPow() != nil {
+			switch uncle.AuxPow().PowID() {
+			case types.Progpow:
+				countKawPow++ //Note we are counting progpow as kawpow
+			case types.Kawpow:
+				countKawPow++
+			case types.SHA_BTC, types.SHA_BCH:
+				countSha++
+			case types.Scrypt:
+				countScrypt++
+			}
+		}
+	}
+	return countKawPow, countSha, countScrypt
 }
 
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
@@ -964,7 +999,7 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 			// Valid progpow block
 			return types.Block
 		}
-	} else {
+	} else if wo.AuxPow() != nil {
 		powId := wo.AuxPow().PowID()
 		switch powId {
 		case types.Kawpow:

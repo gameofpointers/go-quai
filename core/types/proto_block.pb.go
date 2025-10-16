@@ -1078,7 +1078,7 @@ func (x *ProtoCoinbaseTxOut) GetScriptPubKey() []byte {
 type ProtoPowShareDiffAndCount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Difficulty    []byte                 `protobuf:"bytes,1,opt,name=difficulty,proto3,oneof" json:"difficulty,omitempty"`
-	Count         *uint32                `protobuf:"varint,2,opt,name=count,proto3,oneof" json:"count,omitempty"`
+	Count         []byte                 `protobuf:"bytes,2,opt,name=count,proto3,oneof" json:"count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1120,11 +1120,11 @@ func (x *ProtoPowShareDiffAndCount) GetDifficulty() []byte {
 	return nil
 }
 
-func (x *ProtoPowShareDiffAndCount) GetCount() uint32 {
-	if x != nil && x.Count != nil {
-		return *x.Count
+func (x *ProtoPowShareDiffAndCount) GetCount() []byte {
+	if x != nil {
+		return x.Count
 	}
-	return 0
+	return nil
 }
 
 type ProtoWorkObjectHeader struct {
@@ -3632,7 +3632,7 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\n" +
 	"difficulty\x18\x01 \x01(\fH\x00R\n" +
 	"difficulty\x88\x01\x01\x12\x19\n" +
-	"\x05count\x18\x02 \x01(\rH\x01R\x05count\x88\x01\x01B\r\n" +
+	"\x05count\x18\x02 \x01(\fH\x01R\x05count\x88\x01\x01B\r\n" +
 	"\v_difficultyB\b\n" +
 	"\x06_count\"\xc8\b\n" +
 	"\x15ProtoWorkObjectHeader\x127\n" +

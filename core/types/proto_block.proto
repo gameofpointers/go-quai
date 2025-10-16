@@ -127,7 +127,7 @@ message ProtoCoinbaseTxOut {
 
 message ProtoPowShareDiffAndCount {
   optional bytes difficulty = 1;
-  optional uint32 count = 2;
+  optional bytes count = 2;
 }
 
 message ProtoWorkObjectHeader {

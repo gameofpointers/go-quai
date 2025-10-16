@@ -271,8 +271,16 @@ var (
 	ScryptShareTarget  uint8 = 3
 
 	// PoW share difficulty parameters
-	MinShaDiff    = big.NewInt(10000000) // Minimum difficulty for a SHA work share
-	MinScryptDiff = big.NewInt(10000)    // Minimum difficulty for a Scrypt work share
+	InitialShaDiff    = big.NewInt(10000000) // Minimum difficulty for a SHA work share
+	InitialScryptDiff = big.NewInt(10000)    // Minimum difficulty for a Scrypt work share
+	MinPowDivisor     = big.NewInt(2)        // Minimum multiple of the target difficulty that a share must meet to be valid
+
+	// Target number of shares per algo times 2^32
+	TargetShaShares    = big.NewInt(12884901888)
+	TargetScryptShares = big.NewInt(12884901888)
+
+	// The number of blocks to use in the exponential moving average
+	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go

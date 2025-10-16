@@ -76,10 +76,10 @@ const (
 
 type PowShareDiffAndCount struct {
 	difficulty *big.Int
-	count      uint16
+	count      *big.Int
 }
 
-func NewPowShareDiffAndCount(difficulty *big.Int, count uint16) *PowShareDiffAndCount {
+func NewPowShareDiffAndCount(difficulty *big.Int, count *big.Int) *PowShareDiffAndCount {
 	return &PowShareDiffAndCount{
 		difficulty: difficulty,
 		count:      count,
@@ -101,7 +101,7 @@ func (p *PowShareDiffAndCount) Difficulty() *big.Int {
 	return p.difficulty
 }
 
-func (p *PowShareDiffAndCount) Count() uint16 {
+func (p *PowShareDiffAndCount) Count() *big.Int {
 	return p.count
 }
 
@@ -109,15 +109,14 @@ func (p *PowShareDiffAndCount) ProtoEncode() *ProtoPowShareDiffAndCount {
 	if p == nil {
 		return nil
 	}
-	if p.difficulty == nil && p.count == 0 {
+	if p.difficulty == nil || p.count == nil {
 		return nil
 	}
 	protoShare := &ProtoPowShareDiffAndCount{}
-	if p.difficulty != nil {
-		protoShare.Difficulty = p.difficulty.Bytes()
-	}
-	count := uint32(p.count)
-	protoShare.Count = &count
+
+	protoShare.Difficulty = p.difficulty.Bytes()
+	protoShare.Count = p.count.Bytes()
+
 	return protoShare
 }
 
@@ -127,15 +126,19 @@ func (p *PowShareDiffAndCount) ProtoDecode(protoShare *ProtoPowShareDiffAndCount
 	}
 	if protoShare == nil {
 		p.difficulty = nil
-		p.count = 0
+		p.count = nil
 		return
 	}
-	if len(protoShare.GetDifficulty()) > 0 {
+	if protoShare.GetDifficulty() != nil {
 		p.difficulty = new(big.Int).SetBytes(protoShare.GetDifficulty())
 	} else {
 		p.difficulty = nil
 	}
-	p.count = uint16(protoShare.GetCount())
+	if protoShare.GetCount() != nil {
+		p.count = new(big.Int).SetBytes(protoShare.GetCount())
+	} else {
+		p.count = nil
+	}
 }
 
 type WorkShareValidity int
@@ -1237,9 +1240,9 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		result["auxpow"] = wh.AuxPow().RPCMarshal()
 	}
 
-	if scrypt := wh.ScryptDiffAndCount(); scrypt.Difficulty() != nil || scrypt.Count() != 0 {
+	if scrypt := wh.ScryptDiffAndCount(); scrypt.Difficulty() != nil || scrypt.Count() != nil {
 		scryptResult := map[string]interface{}{
-			"count": scrypt.Count(),
+			"count": (*hexutil.Big)(scrypt.Count()),
 		}
 		if scrypt.Difficulty() != nil {
 			scryptResult["difficulty"] = (*hexutil.Big)(scrypt.Difficulty())
@@ -1247,9 +1250,9 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		result["scryptDiffAndCount"] = scryptResult
 	}
 
-	if sha := wh.ShaDiffAndCount(); sha.Difficulty() != nil || sha.Count() != 0 {
+	if sha := wh.ShaDiffAndCount(); sha.Difficulty() != nil || sha.Count() != nil {
 		shaResult := map[string]interface{}{
-			"count": sha.Count(),
+			"count": (*hexutil.Big)(sha.Count()),
 		}
 		if sha.Difficulty() != nil {
 			shaResult["difficulty"] = (*hexutil.Big)(sha.Difficulty())
