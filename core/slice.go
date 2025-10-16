@@ -1043,7 +1043,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 
 				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash().Bytes())
 				// Dont have the actual hash of the block yet
-				auxPow := types.NewAuxPow(types.Kawpow, auxHeader, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+				auxPow := types.NewAuxPow(powId, auxHeader, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
 
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
@@ -2310,7 +2310,12 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 				workShare.AuxPow().PowID() == types.SHA_BTC ||
 				workShare.AuxPow().PowID() == types.Scrypt {
 
-				workShareTarget := new(big.Int).Div(common.Big2e256, workShare.ShaDiffAndCount().Difficulty())
+				var workShareTarget *big.Int
+				if workShare.AuxPow().PowID() == types.Scrypt {
+					workShareTarget = new(big.Int).Div(common.Big2e256, workShare.ScryptDiffAndCount().Difficulty())
+				} else {
+					workShareTarget = new(big.Int).Div(common.Big2e256, workShare.ShaDiffAndCount().Difficulty())
+				}
 				powHash := workShare.AuxPow().Header().PowHash()
 				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
