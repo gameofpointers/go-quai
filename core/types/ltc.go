@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -8,12 +9,16 @@ import (
 	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
 
+type LitecoinBlockWrapper struct {
+	Block *ltcdwire.MsgBlock
+}
+
 // LitecoinHeaderWrapper wraps ltcdwire.BlockHeader to implement AuxHeaderData
 type LitecoinHeaderWrapper struct {
 	*ltcdwire.BlockHeader
 }
 
-type LitecoinCoinbaseTxWrapper struct {
+type LitecoinTxWrapper struct {
 	*ltcdwire.MsgTx
 }
 
@@ -21,12 +26,69 @@ type LitecoinCoinbaseTxOutWrapper struct {
 	*ltcdwire.TxOut
 }
 
-func NewLitecoinCoinbaseTxOut(value int64, pkScript []byte) *LitecoinCoinbaseTxOutWrapper {
-	return &LitecoinCoinbaseTxOutWrapper{TxOut: &ltcdwire.TxOut{Value: value, PkScript: pkScript}}
+func NewLitecoinBlockWrapper(header *ltcdwire.BlockHeader) *LitecoinBlockWrapper {
+	return &LitecoinBlockWrapper{Block: &ltcdwire.MsgBlock{Header: *header}}
 }
 
 func NewLitecoinHeaderWrapper(header *ltcdwire.BlockHeader) *LitecoinHeaderWrapper {
 	return &LitecoinHeaderWrapper{BlockHeader: header}
+}
+
+func NewLitecoinCoinbaseTxOut(value int64, pkScript []byte) *LitecoinCoinbaseTxOutWrapper {
+	return &LitecoinCoinbaseTxOutWrapper{TxOut: &ltcdwire.TxOut{Value: value, PkScript: pkScript}}
+}
+
+func (ltb *LitecoinBlockWrapper) Header() AuxHeaderData {
+	if ltb.Block == nil {
+		return &LitecoinHeaderWrapper{}
+	}
+	return &LitecoinHeaderWrapper{BlockHeader: &ltb.Block.Header}
+}
+
+func (ltb *LitecoinBlockWrapper) Serialize(w io.Writer) error {
+	if ltb.Block == nil {
+		return fmt.Errorf("cannot serialize Litecoin block: block is nil")
+	}
+	return ltb.Block.Serialize(w)
+}
+
+func (ltb *LitecoinBlockWrapper) Copy() AuxPowBlockData {
+	if ltb.Block == nil {
+		return &LitecoinBlockWrapper{}
+	}
+
+	copyBlock := &ltcdwire.MsgBlock{
+		Header:       ltb.Block.Header,
+		Transactions: make([]*ltcdwire.MsgTx, len(ltb.Block.Transactions)),
+	}
+
+	for i, tx := range ltb.Block.Transactions {
+		if tx == nil {
+			continue
+		}
+		copyBlock.Transactions[i] = tx.Copy()
+	}
+
+	return &LitecoinBlockWrapper{Block: copyBlock}
+}
+
+func (ltb *LitecoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
+	if tx == nil || tx.inner == nil {
+		return fmt.Errorf("cannot add transaction: tx is nil")
+	}
+
+	switch inner := tx.inner.(type) {
+	case *LitecoinTxWrapper:
+		if inner.MsgTx == nil {
+			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
+		}
+		if ltb.Block == nil {
+			return fmt.Errorf("cannot add transaction: block is nil")
+		}
+		return ltb.Block.AddTransaction(inner.MsgTx.Copy())
+	default:
+		return fmt.Errorf("cannot add transaction: unknown tx type %T", inner)
+	}
 }
 
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {
@@ -125,8 +187,8 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 
 // CoinbaseTx functions
 
-func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *LitecoinCoinbaseTxWrapper {
-	coinbaseTx := &LitecoinCoinbaseTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
+func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *LitecoinTxWrapper {
+	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
 	// Create the coinbase input with height in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
 	coinbaseTx.AddTxIn(&ltcdwire.TxIn{
@@ -150,11 +212,11 @@ func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut,
 
 }
 
-func (lct *LitecoinCoinbaseTxWrapper) Copy() AuxPowCoinbaseTxData {
-	return &LitecoinCoinbaseTxWrapper{MsgTx: lct.MsgTx.Copy()}
+func (lct *LitecoinTxWrapper) Copy() AuxPowTxData {
+	return &LitecoinTxWrapper{MsgTx: lct.MsgTx.Copy()}
 }
 
-func (lct *LitecoinCoinbaseTxWrapper) scriptSig() []byte {
+func (lct *LitecoinTxWrapper) scriptSig() []byte {
 	if lct.MsgTx == nil || len(lct.MsgTx.TxIn) == 0 {
 		return nil
 	}

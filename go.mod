@@ -17,8 +17,10 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/dominant-strategies/bn256 v0.0.0-20250117181620-a3c0ff77c445
+	github.com/dominant-strategies/ltcd/ltcutil v0.0.0-20251016174055-4ac338381b32
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/gcash/bchd v0.21.1
+	github.com/gcash/bchutil v0.0.0-20250513235300-39ac514d072b
 	github.com/golang/snappy v0.0.4
 	github.com/google/gofuzz v1.2.0
 	github.com/gorilla/websocket v1.5.0
@@ -60,6 +62,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
+	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.8.1 // indirect
@@ -72,12 +75,13 @@ require (
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dominant-strategies/ltcd/ltcutil v0.0.0-20251016174055-4ac338381b32 // indirect
+	github.com/dominant-strategies/ltcd/btcec/v2 v2.0.0-20251016174055-4ac338381b32 // indirect
 	github.com/dominant-strategies/ltcd/secp256k1_ltc v0.0.0-20251016174055-4ac338381b32 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/gcash/bchlog v0.0.0-20180913005452-b4f036f92fa6 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -169,6 +173,7 @@ require (
 	github.com/tklauser/numcpus v0.7.0 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
+	github.com/zquestz/grab v0.0.0-20190224022517-abcee96e61b1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
@@ -188,6 +193,7 @@ require (
 	gonum.org/v1/gonum v0.14.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+	lukechampine.com/uint128 v1.3.0 // indirect
 )
 
 require (

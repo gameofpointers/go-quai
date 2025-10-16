@@ -9,12 +9,16 @@ import (
 	bchdwire "github.com/gcash/bchd/wire"
 )
 
+type BitcoinCashBlockWrapper struct {
+	Block *bchdwire.MsgBlock
+}
+
 // BitcoinCashHeaderWrapper wraps bchdwire.BlockHeader to implement AuxHeaderData
 type BitcoinCashHeaderWrapper struct {
 	*bchdwire.BlockHeader
 }
 
-type BitcoinCashCoinbaseTxWrapper struct {
+type BitcoinCashTxWrapper struct {
 	*bchdwire.MsgTx
 }
 
@@ -22,12 +26,63 @@ type BitcoinCashCoinbaseTxOutWrapper struct {
 	*bchdwire.TxOut
 }
 
-func NewBitcoinCashCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCashCoinbaseTxOutWrapper {
-	return &BitcoinCashCoinbaseTxOutWrapper{TxOut: &bchdwire.TxOut{Value: value, PkScript: pkScript}}
+func NewBitcoinCashBlockWrapper(header *bchdwire.BlockHeader) *BitcoinCashBlockWrapper {
+	return &BitcoinCashBlockWrapper{&bchdwire.MsgBlock{Header: *header}}
 }
 
 func NewBitcoinCashHeaderWrapper(header *bchdwire.BlockHeader) *BitcoinCashHeaderWrapper {
 	return &BitcoinCashHeaderWrapper{BlockHeader: header}
+}
+
+func NewBitcoinCashCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCashCoinbaseTxOutWrapper {
+	return &BitcoinCashCoinbaseTxOutWrapper{TxOut: &bchdwire.TxOut{Value: value, PkScript: pkScript}}
+}
+
+func (bcb *BitcoinCashBlockWrapper) Header() AuxHeaderData {
+	if bcb.Block == nil {
+		return &BitcoinCashHeaderWrapper{}
+	}
+	return &BitcoinCashHeaderWrapper{BlockHeader: &bcb.Block.Header}
+}
+
+func (bcb *BitcoinCashBlockWrapper) Serialize(w io.Writer) error {
+	return bcb.Block.Serialize(w)
+}
+
+func (bcb *BitcoinCashBlockWrapper) Copy() AuxPowBlockData {
+
+	copyBlock := &bchdwire.MsgBlock{
+		Header:       bcb.Block.Header,
+		Transactions: make([]*bchdwire.MsgTx, len(bcb.Block.Transactions)),
+	}
+
+	for i, tx := range bcb.Block.Transactions {
+		if tx == nil {
+			continue
+		}
+		copyBlock.Transactions[i] = tx.Copy()
+	}
+
+	return &BitcoinCashBlockWrapper{copyBlock}
+}
+
+func (bcb *BitcoinCashBlockWrapper) AddTransaction(tx *AuxPowTx) error {
+	if tx == nil || tx.inner == nil {
+		return errors.New("cannot add transaction: tx is nil")
+	}
+
+	switch inner := tx.inner.(type) {
+	case *BitcoinCashTxWrapper:
+		if inner.MsgTx == nil {
+			return errors.New("cannot add transaction: underlying MsgTx is nil")
+		}
+		if bcb.Block == nil {
+			return errors.New("cannot add transaction: block is nil")
+		}
+		return bcb.Block.AddTransaction(inner.MsgTx.Copy())
+	default:
+		return errors.New("unsupported transaction type for Bitcoin Cash block")
+	}
 }
 
 func NewBitcoinCashBlockHeader(version int32, prevBlockHash [32]byte, merkleRootHash [32]byte, time uint32, bits uint32, nonce uint32) *BitcoinCashHeaderWrapper {
@@ -124,8 +179,8 @@ func (bch *BitcoinCashHeaderWrapper) Copy() AuxHeaderData {
 	return &BitcoinCashHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
-func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinCashCoinbaseTxWrapper {
-	coinbaseTx := &BitcoinCashCoinbaseTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
+func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinCashTxWrapper {
+	coinbaseTx := &BitcoinCashTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
 
 	// Create the coinbase input with height in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
@@ -149,18 +204,18 @@ func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseO
 	return coinbaseTx
 }
 
-func (bct *BitcoinCashCoinbaseTxWrapper) Copy() AuxPowCoinbaseTxData {
-	return &BitcoinCashCoinbaseTxWrapper{MsgTx: bct.MsgTx.Copy()}
+func (bct *BitcoinCashTxWrapper) Copy() AuxPowTxData {
+	return &BitcoinCashTxWrapper{MsgTx: bct.MsgTx.Copy()}
 }
 
-func (bct *BitcoinCashCoinbaseTxWrapper) scriptSig() []byte {
+func (bct *BitcoinCashTxWrapper) scriptSig() []byte {
 	if bct.MsgTx == nil || len(bct.MsgTx.TxIn) == 0 {
 		return nil
 	}
 	return bct.MsgTx.TxIn[0].SignatureScript
 }
 
-func (bct *BitcoinCashCoinbaseTxWrapper) DeserializeNoWitness(r io.Reader) error {
+func (bct *BitcoinCashTxWrapper) DeserializeNoWitness(r io.Reader) error {
 	return errors.New("DeserializeNoWitness not supported for Bitcoin Cash")
 }
 
