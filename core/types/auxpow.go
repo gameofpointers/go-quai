@@ -12,6 +12,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/crypto/musig2"
 	bchdwire "github.com/gcash/bchd/wire"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -691,7 +692,7 @@ func (aco *AuxPowCoinbaseOut) UnmarshalJSON(data []byte) error {
 		// Here we assume BitcoinCashCoinbaseTxOutWrapper for simplicity; adapt as needed
 		aco.inner = &BitcoinCashCoinbaseTxOutWrapper{TxOut: &txOut}
 	case Scrypt:
-		txOut := *btcdwire.NewTxOut(int64(value), scriptHex)
+		txOut := *ltcdwire.NewTxOut(int64(value), scriptHex)
 		// Here we assume LitecoinCoinbaseTxOutWrapper for simplicity; adapt as needed
 		aco.inner = &LitecoinCoinbaseTxOutWrapper{TxOut: &txOut}
 	}
@@ -760,7 +761,7 @@ func (aco *AuxPowCoinbaseOut) ProtoDecode(data *ProtoCoinbaseTxOut, powId PowID)
 		// Here we assume BitcoinCashCoinbaseTxOutWrapper for simplicity; adapt as needed
 		aco.inner = &BitcoinCashCoinbaseTxOutWrapper{TxOut: &txOut}
 	case Scrypt:
-		txOut := *btcdwire.NewTxOut(value, scriptPubKey)
+		txOut := *ltcdwire.NewTxOut(value, scriptPubKey)
 		// Here we assume LitecoinCoinbaseTxOutWrapper for simplicity; adapt as needed
 		aco.inner = &LitecoinCoinbaseTxOutWrapper{TxOut: &txOut}
 	default:
@@ -947,7 +948,7 @@ func (ap *AuxPow) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		ap.header = NewAuxPowHeader(header)
-		coinbaseTx := &LitecoinCoinbaseTxWrapper{btcdwire.NewMsgTx(1)}
+		coinbaseTx := &LitecoinCoinbaseTxWrapper{ltcdwire.NewMsgTx(1)}
 		if err := coinbaseTx.Deserialize(bytes.NewReader(*dec.Transaction)); err != nil {
 			return err
 		}
@@ -1045,7 +1046,7 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 		}
 		ap.transaction = &AuxPowCoinbaseTx{inner: coinbaseTx}
 	case Scrypt:
-		coinbaseTx := &LitecoinCoinbaseTxWrapper{btcdwire.NewMsgTx(1)}
+		coinbaseTx := &LitecoinCoinbaseTxWrapper{ltcdwire.NewMsgTx(1)}
 		if err := coinbaseTx.Deserialize(bytes.NewReader(data.GetTransaction())); err != nil {
 			return err
 		}
