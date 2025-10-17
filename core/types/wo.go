@@ -1437,7 +1437,7 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 		wh.scryptDiffAndCount.ProtoDecode(data.GetScryptDiffAndCount())
 
 		// Decode AuxPow if present
-		if data.AuxPow != nil {
+		if data.AuxPow != nil && data.AuxPow.GetHeader() != nil && data.AuxPow.GetTransaction() != nil {
 			wh.auxPow = &AuxPow{}
 			if err := wh.auxPow.ProtoDecode(data.AuxPow); err != nil {
 				return err
