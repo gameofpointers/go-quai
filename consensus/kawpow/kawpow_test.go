@@ -118,24 +118,22 @@ func TestKAWPOWImplementation(t *testing.T) {
 			Nonce64:        nonce64,
 			MixHash:        common.Hash{},
 		}
+		auxHeader := types.NewAuxPowHeader(header)
 
-		headerBytes := header.EncodeBinaryRavencoinHeader()
-		coinbaseOut := serializeKawpowTxOut(2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
-		coinbaseTx := types.CreateCoinbaseTxWithNonce(
+		coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseTx := types.NewAuxPowCoinbaseTx(
+			types.Kawpow,
 			uint32(blockHeight),
-			uint32(nonce64>>32),
-			nonce64,
-			[]byte("Test"),
 			coinbaseOut,
+			[]byte("Test"),
 		)
 
-		auxPow := types.NewAuxPowWithFields(
+		auxPow := types.NewAuxPow(
 			types.Kawpow,
-			headerBytes,
+			auxHeader,
 			[]byte{},
 			[][]byte{},
 			coinbaseTx,
-			0,
 		)
 
 		workHeader := &types.WorkObjectHeader{}

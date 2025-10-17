@@ -223,6 +223,13 @@ func (bct *BitcoinCashTxWrapper) value() int64 {
 	return totalValue
 }
 
+func (bct *BitcoinCashTxWrapper) version() int32 {
+	if bct.MsgTx == nil {
+		return 0
+	}
+	return bct.MsgTx.Version
+}
+
 func (bct *BitcoinCashTxWrapper) DeserializeNoWitness(r io.Reader) error {
 	return errors.New("DeserializeNoWitness not supported for Bitcoin Cash")
 }

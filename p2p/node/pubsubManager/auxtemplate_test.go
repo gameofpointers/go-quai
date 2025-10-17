@@ -59,33 +59,27 @@ func createTestAuxTemplate(nonce uint64) *types.AuxTemplate {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{byte(nonce % 256)}, 32))
 
+	coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 1000022, []byte{0x76, 0xa9, 0x14, byte(nonce)})
+
 	template := &types.AuxTemplate{}
 	template.SetPowID(types.PowID(1000 + nonce))
 	template.SetPrevHash(prevHash)
-	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14, byte(nonce)}) // Sample script with nonce
-	template.SetScriptSigMaxLen(100)
+	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
 	template.SetNBits(0x1d00ffff)
 	template.SetNTimeMask(0xffffffff)
 	template.SetHeight(uint32(12345 + nonce))
-	template.SetCoinbaseValue(625000000 + nonce*1000)
-	template.SetCoinbaseOnly(nonce%2 == 0) // Alternate between coinbase-only and locked tx set
 
 	if nonce%2 != 0 { // If not coinbase-only, add merkle branch
-		template.SetTxCount(5)
 		template.SetMerkleBranch([][]byte{
 			bytes.Repeat([]byte{0xaa}, 32),
 			bytes.Repeat([]byte{0xbb}, 32),
 		})
 	} else {
-		template.SetTxCount(1)
 		template.SetMerkleBranch(nil)
 	}
 
-	template.SetExtranonce2Size(8)
-	template.SetSigs([]types.SignerEnvelope{
-		types.NewSignerEnvelope("validator1", bytes.Repeat([]byte{0xcc}, 64)),
-	})
+	template.SetSigs(make([]byte, 64)) // Dummy signature
 
 	return template
 }
@@ -147,10 +141,8 @@ func TestAuxTemplatePubsubManager(t *testing.T) {
 		// Verify equality of the sent and received templates
 		require.Equal(t, auxTemplate.PowID(), recvdAuxTemplate.PowID())
 		require.Equal(t, auxTemplate.PrevHash(), recvdAuxTemplate.PrevHash())
-		require.Equal(t, auxTemplate.PayoutScript(), recvdAuxTemplate.PayoutScript())
+		require.Equal(t, auxTemplate.CoinbaseOut(), recvdAuxTemplate.CoinbaseOut())
 		require.Equal(t, auxTemplate.Height(), recvdAuxTemplate.Height())
-		require.Equal(t, auxTemplate.CoinbaseValue(), recvdAuxTemplate.CoinbaseValue())
-		require.Equal(t, auxTemplate.CoinbaseOnly(), recvdAuxTemplate.CoinbaseOnly())
 	})
 
 	t.Run("Unsubscribe from AuxTemplate", func(t *testing.T) {

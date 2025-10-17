@@ -427,6 +427,13 @@ func (rct *RavencoinTx) value() int64 {
 	return totalValue
 }
 
+func (rct *RavencoinTx) version() int32 {
+	if rct.MsgTx == nil {
+		return 0
+	}
+	return rct.MsgTx.Version
+}
+
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
 	return rct.MsgTx.DeserializeNoWitness(r)
 }
