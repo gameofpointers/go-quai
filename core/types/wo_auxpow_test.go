@@ -6,11 +6,61 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"google.golang.org/protobuf/proto"
 	"lukechampine.com/blake3"
 )
+
+var (
+	c_version int32  = 10
+	c_time    uint32 = 1610000000
+	c_bits    uint32 = 0x1d00ffff
+	c_height  uint32 = 298899
+)
+
+func auxPowTestData(powID PowID) *AuxPow {
+	auxPow := &AuxPow{}
+	auxPow.SetPowID(powID)
+	auxPow.SetSignature([]byte{})
+	auxPow.SetMerkleBranch([][]byte{})
+	switch powID {
+	case Kawpow:
+		ravencoinHeader := &RavencoinBlockHeader{
+			// Set fields for Ravencoin header
+			Version:        c_version,
+			HashPrevBlock:  EmptyRootHash,
+			HashMerkleRoot: EmptyRootHash,
+			Time:           c_time,
+			Bits:           c_bits,
+			Nonce64:        367899,
+			Height:         c_height,
+			MixHash:        EmptyRootHash,
+		}
+		coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseTx := NewAuxPowCoinbaseTx(Kawpow, 100, coinbaseOut, []byte("Test"))
+		auxPow.SetHeader(NewAuxPowHeader(ravencoinHeader))
+		auxPow.SetTransaction(coinbaseTx)
+	case SHA_BTC:
+		bitcoinHeader := NewBitcoinBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
+		coinbaseOut := NewAuxPowCoinbaseOut(powID, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseTx := NewAuxPowCoinbaseTx(powID, 100, coinbaseOut, []byte("Test"))
+		auxPow.SetHeader(NewAuxPowHeader(bitcoinHeader))
+		auxPow.SetTransaction(coinbaseTx)
+	case SHA_BCH:
+		bitcoinCashHeader := NewBitcoinCashBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
+		coinbaseOut := NewAuxPowCoinbaseOut(SHA_BCH, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseTx := NewAuxPowCoinbaseTx(SHA_BCH, 100, coinbaseOut, []byte("Test"))
+		auxPow.SetHeader(NewAuxPowHeader(bitcoinCashHeader))
+		auxPow.SetTransaction(coinbaseTx)
+	case Scrypt:
+		litecoinHeader := NewLitecoinBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
+		coinbaseOut := NewAuxPowCoinbaseOut(Scrypt, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseTx := NewAuxPowCoinbaseTx(Scrypt, 100, coinbaseOut, []byte("Test"))
+		auxPow.SetHeader(NewAuxPowHeader(litecoinHeader))
+		auxPow.SetTransaction(coinbaseTx)
+	}
+	return auxPow
+}
 
 // TestWorkObjectHashWithoutAuxPow tests the hash computation of a WorkObject
 // before adding the AuxPow field (with nil AuxPow)
@@ -103,15 +153,7 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	testTx := wire.NewMsgTx(1)
-	auxPow := NewAuxPow(
-		1234,
-		bytes.Repeat([]byte{0xaa}, 120),
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-		[][]byte{},
-		testTx,
-	)
-
+	auxPow := auxPowTestData(SHA_BTC)
 	// Create WorkObjectHeader with AuxPow
 	woHeader := &WorkObjectHeader{
 		headerHash:          headerHash,
@@ -152,7 +194,6 @@ func TestWorkObjectHashWithAuxPow(t *testing.T) {
 	fmt.Printf("Mix Hash:              %s\n", mixHash.Hex())
 	fmt.Printf("AuxPow:\n")
 	fmt.Printf("  ChainID:             %d\n", auxPow.PowID())
-	fmt.Printf("  Header (len):        %d bytes\n", len(auxPow.Header()))
 	fmt.Printf("  Signature:           %x\n", auxPow.Signature())
 	fmt.Printf("=====================================\n")
 	fmt.Printf("Seal Hash:             %s\n", sealHash.Hex())
@@ -203,14 +244,7 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	}
 
 	// Create AuxPow data
-	testTx := wire.NewMsgTx(1)
-	auxPow := NewAuxPow(
-		1234,
-		bytes.Repeat([]byte{0xaa}, 120),
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-		[][]byte{},
-		testTx,
-	)
+	auxPow := auxPowTestData(Scrypt)
 
 	// Create WorkObjectHeader with AuxPow
 	woHeaderWithAuxPow := &WorkObjectHeader{
@@ -280,14 +314,7 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 
 	// Create AuxPow data
-	testTx := wire.NewMsgTx(1)
-	auxPow := NewAuxPow(
-		1234,
-		bytes.Repeat([]byte{0xaa}, 120),
-		[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-		[][]byte{},
-		testTx,
-	)
+	auxPow := auxPowTestData(Kawpow)
 
 	// Create original WorkObjectHeader
 	original := &WorkObjectHeader{
@@ -341,7 +368,7 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	if decoded.AuxPow().PowID() != original.AuxPow().PowID() {
 		t.Error("AuxPow.ChainID mismatch")
 	}
-	if !bytes.Equal(decoded.AuxPow().Header(), original.AuxPow().Header()) {
+	if !bytes.Equal(decoded.AuxPow().Header().Bytes(), original.AuxPow().Header().Bytes()) {
 		t.Error("AuxPow.Header mismatch")
 	}
 	if !bytes.Equal(decoded.AuxPow().Signature(), original.AuxPow().Signature()) {
@@ -499,14 +526,7 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
-	testTx := wire.NewMsgTx(1)
-	auxPow := NewAuxPow(
-		1234,
-		bytes.Repeat([]byte{0xaa}, 120),
-		bytes.Repeat([]byte{0xbb}, 64),
-		[][]byte{},
-		testTx,
-	)
+	auxPow := auxPowTestData(SHA_BCH)
 
 	newHeaderWithAux := &WorkObjectHeader{
 		headerHash:          headerHash,

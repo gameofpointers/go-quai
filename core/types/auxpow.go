@@ -581,6 +581,7 @@ type AuxPowTxData interface {
 
 	scriptSig() []byte
 	value() int64
+	version() int32
 }
 
 func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *AuxPowTx {
@@ -647,6 +648,13 @@ func (ac *AuxPowTx) Value() int64 {
 		return 0
 	}
 	return ac.inner.value()
+}
+
+func (ac *AuxPowTx) Version() int32 {
+	if ac.inner == nil {
+		return 0
+	}
+	return ac.inner.version()
 }
 
 type AuxPowCoinbaseOut struct {

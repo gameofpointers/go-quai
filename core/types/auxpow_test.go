@@ -6,49 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-// Test data generators
-func testAuxPow() *AuxPow {
-	// Create a simple test coinbase transaction using btcd wire.MsgTx
-	testTx := wire.NewMsgTx(1)
-
-	// Add coinbase input (previous output is null)
-	prevOut := wire.NewOutPoint(&chainhash.Hash{}, 0xFFFFFFFF)
-	txIn := wire.NewTxIn(prevOut, []byte{0x01, 0x02, 0x03}, nil)
-	testTx.AddTxIn(txIn)
-
-	// Add output
-	pkScript := []byte{0x76, 0xa9, 0x14} // OP_DUP OP_HASH160 PUSH(20)
-	txOut := wire.NewTxOut(5000000000, pkScript)
-	testTx.AddTxOut(txOut)
-
-	merkleBranch := [][]byte{
-		bytes.Repeat([]byte{0xcc}, 32),
-		bytes.Repeat([]byte{0xdd}, 32),
-	}
-
-	return NewAuxPow(
-		1337,                           // chainID
-		bytes.Repeat([]byte{0xaa}, 120), // header (KAWPOW is 120 bytes)
-		bytes.Repeat([]byte{0xbb}, 64),  // signature
-		merkleBranch,                     // merkle branch
-		testTx,                           // transaction
-	)
-}
-
 func testAuxTemplate() *AuxTemplate {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{0x11}, 32))
 
 	// Create wire-encoded TxOut for coinbaseOut
-	coinbaseOut := serializeTxOut(wire.NewTxOut(625000000, []byte{0x76, 0xa9, 0x14}))
+	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x76, 0xa9, 0x14})
 
 	template := &AuxTemplate{}
 	template.SetPowID(1337)
@@ -62,16 +31,13 @@ func testAuxTemplate() *AuxTemplate {
 		bytes.Repeat([]byte{0xaa}, 32),
 		bytes.Repeat([]byte{0xbb}, 32),
 	})
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("miner1", bytes.Repeat([]byte{0xcc}, 64)),
-		NewSignerEnvelope("miner2", bytes.Repeat([]byte{0xdd}, 64)),
-	})
+	template.SetSigs([]byte{0x01, 0x03, 0x0a})
 	return template
 }
 
 // TestAuxPowProtoEncodeDecode tests protobuf encoding and decoding of AuxPow
 func TestAuxPowProtoEncodeDecode(t *testing.T) {
-	original := testAuxPow()
+	original := auxPowTestData(Kawpow)
 
 	// Encode to protobuf
 	protoAuxPow := original.ProtoEncode()
@@ -102,7 +68,7 @@ func TestAuxPowProtoEncodeDecode(t *testing.T) {
 	}
 	// Verify transaction was properly serialized/deserialized
 	require.NotNil(t, decoded.Transaction())
-	require.Equal(t, original.Transaction().Version, decoded.Transaction().Version)
+	require.Equal(t, original.Transaction().Version(), decoded.Transaction().Version())
 }
 
 // TestAuxPowProtoEncodeNil tests encoding nil AuxPow
@@ -159,8 +125,7 @@ func TestAuxTemplateProtoEncodeDecode(t *testing.T) {
 	// Verify signatures
 	require.Len(t, decoded.Sigs(), len(original.Sigs()))
 	for i, sig := range original.Sigs() {
-		require.Equal(t, sig.SignerID(), decoded.Sigs()[i].SignerID())
-		require.Equal(t, sig.Signature(), decoded.Sigs()[i].Signature())
+		require.Equal(t, sig, decoded.Sigs()[i])
 	}
 }
 
@@ -209,7 +174,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{0x22}, 32))
 
-	coinbaseOut := serializeTxOut(wire.NewTxOut(625000000, []byte{0x51})) // OP_TRUE
+	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x51}) // OP_TRUE
 
 	original := &AuxTemplate{}
 	original.SetPowID(42)
@@ -274,7 +239,7 @@ func TestSignerEnvelopeProtoEncodeDecode(t *testing.T) {
 func TestAuxPowInWorkObjectHeader(t *testing.T) {
 	// Create a WorkObjectHeader with AuxPow
 	header := &WorkObjectHeader{}
-	auxPow := testAuxPow()
+	auxPow := auxPowTestData(Kawpow)
 	header.SetAuxPow(auxPow)
 
 	// Verify getter
@@ -451,7 +416,7 @@ type AuxTemplateEvent struct {
 
 // Benchmarks
 func BenchmarkAuxPowProtoEncode(b *testing.B) {
-	auxPow := testAuxPow()
+	auxPow := auxPowTestData(Kawpow)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = auxPow.ProtoEncode()
@@ -478,28 +443,25 @@ func BenchmarkAuxTemplateMarshal(b *testing.B) {
 func TestAuxTemplateVerifySignature(t *testing.T) {
 	// Create a test AuxTemplate
 	template := testAuxTemplate()
-	
+
 	// Test with no signatures - should return false
 	if template.VerifySignature() {
 		t.Error("Expected VerifySignature to return false for template with no signatures")
 	}
-	
+
 	// Add an empty signature - should return false
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test", []byte{}),
-	})
+	template.SetSigs([]byte{0x01, 0x02})
 	if template.VerifySignature() {
 		t.Error("Expected VerifySignature to return false for template with empty signature")
 	}
-	
+
 	// Test with invalid signature data - should return false
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test", []byte("invalid signature data")),
-	})
+	template.SetSigs([]byte("invalid signature data"))
+
 	if template.VerifySignature() {
 		t.Error("Expected VerifySignature to return false for template with invalid signature")
 	}
-	
+
 	// Note: For a complete test with a valid signature, we would need to:
 	// 1. Create a proper MuSig2 signature using the protocol keys
 	// 2. Add it to the template
@@ -511,20 +473,18 @@ func TestAuxTemplateVerifySignature(t *testing.T) {
 func TestAuxTemplateVerifySignatureOrderDependency(t *testing.T) {
 	// This test verifies that the VerifySignature method tries both order combinations
 	// by checking that it attempts all 6 combinations (3 pairs × 2 orders each)
-	
+
 	// Create a test AuxTemplate with a dummy signature
 	template := testAuxTemplate()
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test", make([]byte, 64)), // 64-byte dummy signature
-	})
-	
+	template.SetSigs(make([]byte, 64)) // 64-byte dummy signature
+
 	// The method should try all combinations and return false for invalid signature
 	// This tests that the method doesn't crash and properly handles invalid signatures
 	result := template.VerifySignature()
 	if result {
 		t.Error("Expected VerifySignature to return false for template with dummy signature")
 	}
-	
+
 	// The test passes if no panic occurs, meaning all 6 combinations were tried
 	t.Log("✅ VerifySignature method successfully tried all 6 key combinations (3 pairs × 2 orders)")
 }
@@ -532,15 +492,13 @@ func TestAuxTemplateVerifySignatureOrderDependency(t *testing.T) {
 func TestAuxTemplateVerifySignatureMessageHashConsistency(t *testing.T) {
 	// This test verifies that the message hash calculation in VerifySignature
 	// matches the same logic used in the signing process
-	
+
 	// Create a test AuxTemplate
 	template := testAuxTemplate()
-	
+
 	// Add a signature to the template
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test", make([]byte, 64)),
-	})
-	
+	template.SetSigs(make([]byte, 64)) // Dummy signature
+
 	// Calculate message hash using the same logic as the signing process
 	protoTemplate := template.ProtoEncode()
 	tempTemplate := proto.Clone(protoTemplate).(*ProtoAuxTemplate)
@@ -550,7 +508,7 @@ func TestAuxTemplateVerifySignatureMessageHashConsistency(t *testing.T) {
 		t.Fatalf("Failed to marshal template: %v", err)
 	}
 	expectedMessageHash := sha256.Sum256(tempData)
-	
+
 	// The VerifySignature method should use the same message hash calculation
 	// We can't directly test this without a valid signature, but we can verify
 	// that the method doesn't crash and uses the correct logic
@@ -558,7 +516,7 @@ func TestAuxTemplateVerifySignatureMessageHashConsistency(t *testing.T) {
 	if result {
 		t.Error("Expected VerifySignature to return false for template with dummy signature")
 	}
-	
+
 	t.Logf("✅ Message hash calculation is consistent: %x", expectedMessageHash)
 	t.Log("✅ VerifySignature method uses the same message hash logic as signing process")
 }
@@ -566,36 +524,33 @@ func TestAuxTemplateVerifySignatureMessageHashConsistency(t *testing.T) {
 func TestAuxTemplateHash(t *testing.T) {
 	// Create a test AuxTemplate
 	template := testAuxTemplate()
-	
+
 	// Test hash calculation without signatures
 	hash1 := template.Hash()
 	if hash1 == [32]byte{} {
 		t.Error("Expected non-zero hash for template without signatures")
 	}
-	
+
 	// Add a signature and test that hash remains the same
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test", make([]byte, 64)),
-	})
+	template.SetSigs(make([]byte, 64)) // Dummy signature
+
 	hash2 := template.Hash()
-	
+
 	// Hash should be the same regardless of signature content
 	if hash1 != hash2 {
 		t.Error("Hash should be the same with or without signatures")
 	}
-	
+
 	// Test with multiple signatures
-	template.SetSigs([]SignerEnvelope{
-		NewSignerEnvelope("test1", make([]byte, 64)),
-		NewSignerEnvelope("test2", make([]byte, 64)),
-	})
+	template.SetSigs(make([]byte, 128)) // Two dummy signatures
+
 	hash3 := template.Hash()
-	
+
 	// Hash should still be the same
 	if hash1 != hash3 {
 		t.Error("Hash should be the same regardless of number of signatures")
 	}
-	
+
 	t.Logf("✅ Hash method works correctly: %x", hash1)
 	t.Log("✅ Hash is consistent regardless of signature content")
 }

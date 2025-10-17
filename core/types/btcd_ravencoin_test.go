@@ -4,15 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper function to serialize TxOut to wire format
-func serializeBtcdRavencoinTxOut(value int64, pkScript []byte) []byte {
-	return serializeTxOut(wire.NewTxOut(value, pkScript))
-}
 
 func TestBuildCoinbaseScriptSigRavencoinFormat(t *testing.T) {
 	tests := []struct {
@@ -43,7 +36,7 @@ func TestBuildCoinbaseScriptSigRavencoinFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scriptSig := BuildCoinbaseScriptSig(tt.blockHeight, tt.extraData)
+			scriptSig := BuildCoinbaseScriptSigWithNonce(tt.blockHeight, 0, 0, tt.extraData)
 
 			// Check the height encoding prefix
 			hexStr := hex.EncodeToString(scriptSig)
@@ -79,7 +72,7 @@ func TestBuildCoinbaseScriptSigLargeData(t *testing.T) {
 		largeData[i] = byte(i % 256)
 	}
 
-	scriptSig := BuildCoinbaseScriptSig(blockHeight, largeData)
+	scriptSig := BuildCoinbaseScriptSigWithNonce(blockHeight, 0, 0, largeData)
 
 	// Should be: 5 (height) + 1 (OP_PUSHDATA1) + 1 (length) + 100 (data) = 107 bytes
 	require.Equal(t, 107, len(scriptSig))
@@ -94,7 +87,7 @@ func TestBuildCoinbaseScriptSigLargeData(t *testing.T) {
 		veryLargeData[i] = byte(i % 256)
 	}
 
-	scriptSig2 := BuildCoinbaseScriptSig(blockHeight, veryLargeData)
+	scriptSig2 := BuildCoinbaseScriptSigWithNonce(blockHeight, 0, 0, veryLargeData)
 
 	// Should be: 5 (height) + 1 (OP_PUSHDATA2) + 2 (length) + 300 (data) = 308 bytes
 	require.Equal(t, 308, len(scriptSig2))
@@ -152,62 +145,4 @@ func TestBuildCoinbaseScriptSigWithPartialNonces(t *testing.T) {
 	require.Equal(t, byte(0x04), scriptSig[5], "ExtraNonce1 OP_PUSH4")
 	require.Equal(t, byte(0x04), scriptSig[10], "Extra data length")
 	require.Equal(t, []byte("Quai"), scriptSig[11:15], "Extra data")
-}
-
-func TestCreateCoinbaseTxWithNonce(t *testing.T) {
-	blockHeight := uint32(680000)
-	extraNonce1 := uint32(0xdeadbeef)
-	extraNonce2 := uint64(0xcafebabecafebabe)
-	extraData := []byte("KAWPOW Test")
-	minerAddress, _ := hex.DecodeString("76a914" + "89abcdefabbaabbaabbaabbaabbaabbaabbaabba" + "88ac")
-	blockReward := int64(5000000000)
-	coinbaseOut := serializeBtcdRavencoinTxOut(blockReward, minerAddress)
-
-	tx := CreateCoinbaseTxWithNonce(blockHeight, extraNonce1, extraNonce2, extraData, coinbaseOut)
-
-	require.NotNil(t, tx)
-	require.Len(t, tx.TxIn, 1)
-	require.Len(t, tx.TxOut, 1)
-
-	// Check coinbase input scriptSig contains our nonces
-	scriptSig := tx.TxIn[0].SignatureScript
-	require.True(t, len(scriptSig) > 20, "ScriptSig should contain height + nonces + data")
-
-	// Verify it's a proper coinbase
-	require.Equal(t, chainhash.Hash{}, tx.TxIn[0].PreviousOutPoint.Hash)
-	require.Equal(t, uint32(0xFFFFFFFF), tx.TxIn[0].PreviousOutPoint.Index)
-
-	// Verify output
-	require.Equal(t, blockReward, tx.TxOut[0].Value)
-	require.Equal(t, minerAddress, tx.TxOut[0].PkScript)
-}
-
-func TestExtractNoncesFromCoinbase(t *testing.T) {
-	blockHeight := uint32(680000)
-	extraNonce1 := uint32(0x12345678)
-	extraNonce2 := uint64(0x123456789abcdef0)
-	extraData := []byte("Test")
-
-	// Create scriptSig with nonces
-	scriptSig := BuildCoinbaseScriptSigWithNonce(blockHeight, extraNonce1, extraNonce2, extraData)
-
-	// Extract nonces back
-	extractedHeight, extractedNonce1, extractedNonce2, extractedData := ExtractNoncesFromCoinbase(scriptSig)
-
-	// Verify all values match
-	require.Equal(t, blockHeight, extractedHeight, "Height should match")
-	require.Equal(t, extraNonce1, extractedNonce1, "ExtraNonce1 should match")
-	require.Equal(t, extraNonce2, extractedNonce2, "ExtraNonce2 should match")
-	require.Equal(t, extraData, extractedData, "Extra data should match")
-}
-
-func TestExtractHeightFromCoinbase(t *testing.T) {
-	blockHeight := uint32(1000000)
-	extraData := []byte("Height test")
-
-	scriptSig := BuildCoinbaseScriptSig(blockHeight, extraData)
-	extractedHeight, offset := ExtractHeightFromCoinbase(scriptSig)
-
-	require.Equal(t, blockHeight, extractedHeight, "Height should match")
-	require.Equal(t, 5, offset, "Offset should be 5 (after OP_PUSH4 + 4 bytes)")
 }

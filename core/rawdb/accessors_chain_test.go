@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -19,22 +18,35 @@ import (
 
 // testAuxPow creates a test AuxPow with default values
 func testAuxPow() *types.AuxPow {
-	testTx := wire.NewMsgTx(1)
+	ravencoinHeader := &types.RavencoinBlockHeader{
+		Version:        4,
+		HashPrevBlock:  types.EmptyRootHash,
+		HashMerkleRoot: types.EmptyRootHash,
+		Time:           34545,
+		Bits:           0x1d00ffff,
+		Nonce64:        367899,
+		Height:         298899,
+		MixHash:        types.EmptyRootHash,
+	}
+	header := types.NewAuxPowHeader(ravencoinHeader)
+	coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+	coinbaseTx := types.NewAuxPowCoinbaseTx(types.Kawpow, 100, coinbaseOut, []byte("Test"))
+
 	return types.NewAuxPow(
 		100,
-		[]byte{0x01, 0x02},
+		header,
 		[]byte{0x03, 0x04},
 		[][]byte{},
-		testTx,
+		coinbaseTx,
 	)
 }
 
 func testScryptPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return types.NewPowShareDiffAndCount(big.NewInt(1000), 20)
+	return types.NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(20))
 }
 
 func testShaPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return types.NewPowShareDiffAndCount(big.NewInt(2000), 30)
+	return types.NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(29))
 }
 
 func TestCanonicalHashStorage(t *testing.T) {

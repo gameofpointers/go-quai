@@ -227,3 +227,7 @@ func (btt *BitcoinTxWrapper) value() int64 {
 	}
 	return totalValue
 }
+
+func (btt *BitcoinTxWrapper) version() int32 {
+	return btt.MsgTx.Version
+}

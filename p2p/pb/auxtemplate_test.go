@@ -10,26 +10,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Helper to create test AuxTemplate
+// createTestAuxTemplate creates a test AuxTemplate with sample data
 func createTestAuxTemplate() *types.AuxTemplate {
 	var prevHash [32]byte
-	copy(prevHash[:], bytes.Repeat([]byte{0xaa}, 32))
+	copy(prevHash[:], types.EmptyRootHash[:])
+
+	nonce := uint32(42) // Sample nonce to vary data
+
+	coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 1000022, []byte{0x76, 0xa9, 0x14, byte(nonce)})
 
 	template := &types.AuxTemplate{}
-	template.SetPowID(9999)
+	template.SetPowID(types.PowID(1000 + nonce))
 	template.SetPrevHash(prevHash)
-	template.SetPayoutScript([]byte{0x76, 0xa9, 0x14, 0x89}) // Sample script
-	template.SetScriptSigMaxLen(95)
+	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
-	template.SetNBits(0x1a00ffff)
-	template.SetNTimeMask(0xffff0000)
-	template.SetHeight(54321)
-	template.SetCoinbaseValue(312500000)
-	template.SetCoinbaseOnly(true)
-	template.SetExtranonce2Size(4)
-	template.SetSigs([]types.SignerEnvelope{
-		types.NewSignerEnvelope("validator1", bytes.Repeat([]byte{0x01}, 65)),
-	})
+	template.SetNBits(0x1d00ffff)
+	template.SetNTimeMask(0xffffffff)
+	template.SetHeight(uint32(12345 + nonce))
+
+	if nonce%2 != 0 { // If not coinbase-only, add merkle branch
+		template.SetMerkleBranch([][]byte{
+			bytes.Repeat([]byte{0xaa}, 32),
+			bytes.Repeat([]byte{0xbb}, 32),
+		})
+	} else {
+		template.SetMerkleBranch(nil)
+	}
+
+	template.SetSigs(make([]byte, 64)) // Dummy signature
+
 	return template
 }
 
@@ -61,8 +70,8 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.NotNil(t, decoded.AuxTemplate)
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.AuxTemplate.GetChainId())
 	require.Equal(t, protoAuxTemplate.GetPrevHash(), decoded.AuxTemplate.GetPrevHash())
-	require.Equal(t, protoAuxTemplate.GetPayoutScript(), decoded.AuxTemplate.GetPayoutScript())
-	require.Equal(t, protoAuxTemplate.GetScriptSigMaxLen(), decoded.AuxTemplate.GetScriptSigMaxLen())
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut(), decoded.AuxTemplate.GetCoinbaseOut())
+	require.Equal(t, protoAuxTemplate.GetMerkleBranch(), decoded.AuxTemplate.GetMerkleBranch())
 
 	// Decode back to types.AuxTemplate
 	decodedTemplate := &types.AuxTemplate{}
@@ -72,18 +81,14 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	// Verify all fields match original
 	require.Equal(t, auxTemplate.PowID(), decodedTemplate.PowID())
 	require.Equal(t, auxTemplate.PrevHash(), decodedTemplate.PrevHash())
-	require.Equal(t, auxTemplate.PayoutScript(), decodedTemplate.PayoutScript())
-	require.Equal(t, auxTemplate.ScriptSigMaxLen(), decodedTemplate.ScriptSigMaxLen())
-	require.Equal(t, auxTemplate.Extranonce2Size(), decodedTemplate.Extranonce2Size())
+	require.Equal(t, auxTemplate.CoinbaseOut(), decodedTemplate.CoinbaseOut())
+	require.Equal(t, auxTemplate.MerkleBranch(), decodedTemplate.MerkleBranch())
 	require.Equal(t, auxTemplate.Version(), decodedTemplate.Version())
 	require.Equal(t, auxTemplate.NBits(), decodedTemplate.NBits())
 	require.Equal(t, auxTemplate.NTimeMask(), decodedTemplate.NTimeMask())
 	require.Equal(t, auxTemplate.Height(), decodedTemplate.Height())
-	require.Equal(t, auxTemplate.CoinbaseValue(), decodedTemplate.CoinbaseValue())
-	require.Equal(t, auxTemplate.CoinbaseOnly(), decodedTemplate.CoinbaseOnly())
 	require.Len(t, decodedTemplate.Sigs(), 1)
-	require.Equal(t, auxTemplate.Sigs()[0].SignerID(), decodedTemplate.Sigs()[0].SignerID())
-	require.Equal(t, auxTemplate.Sigs()[0].Signature(), decodedTemplate.Sigs()[0].Signature())
+	require.Equal(t, auxTemplate.Sigs(), decodedTemplate.Sigs())
 }
 
 // TestQuaiRequestMessageWithAuxTemplate tests AuxTemplate in request messages
@@ -150,7 +155,7 @@ func TestQuaiResponseMessageWithAuxTemplate(t *testing.T) {
 	require.Equal(t, uint32(5678), decoded.GetId())
 	require.NotNil(t, decoded.GetAuxTemplate())
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.GetAuxTemplate().GetChainId())
-	require.Equal(t, protoAuxTemplate.GetPayoutScript(), decoded.GetAuxTemplate().GetPayoutScript())
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut(), decoded.GetAuxTemplate().GetCoinbaseOut())
 }
 
 // TestEmptyGossipAuxTemplate tests encoding/decoding of empty GossipAuxTemplate
