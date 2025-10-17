@@ -419,6 +419,14 @@ func (rct *RavencoinTx) scriptSig() []byte {
 	return rct.MsgTx.TxIn[0].SignatureScript
 }
 
+func (rct *RavencoinTx) value() int64 {
+	var totalValue int64
+	for _, txOut := range rct.MsgTx.TxOut {
+		totalValue += txOut.Value
+	}
+	return totalValue
+}
+
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
 	return rct.MsgTx.DeserializeNoWitness(r)
 }

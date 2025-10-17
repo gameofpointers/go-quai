@@ -144,6 +144,8 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 		"previousblockhash": hexutil.Encode(prevBlock[:]),
 		"target":            GetTargetInHex(bits),
 		"merkleBranch":      merkleBranch,
+		"coinbaseaux":       hexutil.Bytes(ap.Transaction().ScriptSig()),            // Added coinbaseaux field
+		"coinbasevalue":     hexutil.EncodeUint64(uint64(ap.Transaction().Value())), // Added coinbasevalue field
 	}
 }
 
@@ -578,6 +580,7 @@ type AuxPowTxData interface {
 	Copy() AuxPowTxData
 
 	scriptSig() []byte
+	value() int64
 }
 
 func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *AuxPowTx {
@@ -637,6 +640,13 @@ func (ac *AuxPowTx) ScriptSig() []byte {
 		return nil
 	}
 	return ac.inner.scriptSig()
+}
+
+func (ac *AuxPowTx) Value() int64 {
+	if ac.inner == nil {
+		return 0
+	}
+	return ac.inner.value()
 }
 
 type AuxPowCoinbaseOut struct {
