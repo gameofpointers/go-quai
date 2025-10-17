@@ -215,6 +215,14 @@ func (bct *BitcoinCashTxWrapper) scriptSig() []byte {
 	return bct.MsgTx.TxIn[0].SignatureScript
 }
 
+func (bct *BitcoinCashTxWrapper) value() int64 {
+	var totalValue int64
+	for _, txOut := range bct.MsgTx.TxOut {
+		totalValue += txOut.Value
+	}
+	return totalValue
+}
+
 func (bct *BitcoinCashTxWrapper) DeserializeNoWitness(r io.Reader) error {
 	return errors.New("DeserializeNoWitness not supported for Bitcoin Cash")
 }

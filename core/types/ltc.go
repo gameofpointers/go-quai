@@ -223,6 +223,14 @@ func (lct *LitecoinTxWrapper) scriptSig() []byte {
 	return lct.MsgTx.TxIn[0].SignatureScript
 }
 
+func (lct *LitecoinTxWrapper) value() int64 {
+	var totalValue int64
+	for _, txOut := range lct.MsgTx.TxOut {
+		totalValue += txOut.Value
+	}
+	return totalValue
+}
+
 // CoinbaseTxOut functions
 func (lco *LitecoinCoinbaseTxOutWrapper) Value() int64 {
 	return lco.TxOut.Value

@@ -219,3 +219,11 @@ func (btt *BitcoinTxWrapper) scriptSig() []byte {
 	}
 	return btt.MsgTx.TxIn[0].SignatureScript
 }
+
+func (btt *BitcoinTxWrapper) value() int64 {
+	var totalValue int64
+	for _, txOut := range btt.MsgTx.TxOut {
+		totalValue += txOut.Value
+	}
+	return totalValue
+}
