@@ -374,6 +374,11 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				return pubsub.ValidationIgnore
 			}
 
+			if len(block.WorkObject.Transactions()) > int(backend.GetMaxTxInWorkShare()) {
+				backend.Logger().Errorf("workshare contains more transactions than allowed. Max allowed: %d, actual: %d", backend.GetMaxTxInWorkShare(), len(block.WorkObject.Transactions()))
+				return pubsub.ValidationReject
+			}
+
 			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
 			if block.WorkObject.WorkObjectHeader().KawpowActivationHappened() &&
 				block.WorkObject.AuxPow() != nil &&
@@ -431,11 +436,6 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				// transactions then throw an error
 				isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), params.WorkSharesThresholdDiff)
 				if !isWorkShare && len(block.WorkObject.Transactions()) == 0 {
-					return pubsub.ValidationReject
-				}
-
-				if len(block.WorkObject.Transactions()) > int(backend.GetMaxTxInWorkShare()) {
-					backend.Logger().Errorf("workshare contains more transactions than allowed. Max allowed: %d, actual: %d", backend.GetMaxTxInWorkShare(), len(block.WorkObject.Transactions()))
 					return pubsub.ValidationReject
 				}
 

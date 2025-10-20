@@ -389,7 +389,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 	}
 
 	// Include ShareTarget if it's non-zero
-	if wh.ShareTarget() != [4]byte{} {
+	if wh.ShareTarget() != [4]byte{0,0,0,0} {
 		enc.ShareTarget = hexutil.Bytes(wh.ShareTargetBytes())
 	}
 
@@ -465,9 +465,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 
 	// Handle ShareTarget if present
 	if len(dec.ShareTarget) == 4 {
-		var shareTarget [4]byte
-		copy(shareTarget[:], dec.ShareTarget)
-		wh.SetShareTarget(shareTarget)
+		wh.SetShareTarget([4]byte(dec.ShareTarget))
 	}
 
 	return nil
