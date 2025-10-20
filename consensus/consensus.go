@@ -105,6 +105,10 @@ type ChainHeaderReader interface {
 
 	WorkShareLogEntropy(block *types.WorkObject) (*big.Int, error)
 
+	CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (*big.Int, *big.Int)
+
+	CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int)
+
 	BlockReader
 }
 

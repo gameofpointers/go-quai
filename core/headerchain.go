@@ -348,9 +348,6 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCou
 	// numShares is the EMA of the number of work shares over last N blocks * 2^32
 	// calculate the error between the target and actual number of work shares
 	var error *big.Int
-	if hc.NodeCtx() == common.PRIME_CTX {
-		fmt.Printf("CalculatePowDiffAndCount")
-	}
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
 		error = new(big.Int).Sub(shares.Count(), params.TargetShaShares)
@@ -399,8 +396,6 @@ func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount,
 	for _, uncle := range uncles {
 		if uncle.AuxPow() != nil {
 			switch uncle.AuxPow().PowID() {
-			case types.Progpow:
-				countKawPow++ //Note we are counting progpow as kawpow
 			case types.Kawpow:
 				countKawPow++
 			case types.SHA_BTC, types.SHA_BCH:
@@ -408,6 +403,8 @@ func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount,
 			case types.Scrypt:
 				countScrypt++
 			}
+		} else {
+			countKawPow++ // Progpow doesnt have the auxpow field
 		}
 	}
 	return countKawPow, countSha, countScrypt

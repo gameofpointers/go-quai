@@ -838,6 +838,14 @@ func (b *QuaiAPIBackend) CheckPowIdValidityForWorkshare(header *types.WorkObject
 	return b.quai.core.CheckPowIdValidityForWorkshare(header)
 }
 
+func (b *QuaiAPIBackend) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (*big.Int, *big.Int) {
+	return b.quai.core.CalculatePowDiffAndCount(shares, numShares, powId)
+}
+
+func (b *QuaiAPIBackend) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int) {
+	return b.quai.core.CountWorkSharesByAlgo(wo)
+}
+
 func (b *QuaiAPIBackend) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
 	return b.quai.core.SendAuxPowTemplate(auxTemplate)
 }

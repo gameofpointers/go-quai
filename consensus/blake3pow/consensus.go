@@ -484,6 +484,62 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		if header.PrimeTerminusNumber().Cmp(expectedPrimeTerminusNumber) != 0 {
 			return fmt.Errorf("invalid primeTerminusNumber: have %v, want %v", header.PrimeTerminusNumber(), expectedPrimeTerminusNumber)
 		}
+
+		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+
+			// Get the sha and scrypt share counts from the tx pool
+			_, countSha, countScrypt := chain.CountWorkSharesByAlgo(parent)
+
+			//Convert counts to 2^32 base
+			bigCountSha := new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
+			bigCountScrypt := new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
+
+			var newShaDiff *big.Int
+			var newScryptDiff *big.Int
+			var newShaCount *big.Int
+			var newScryptCount *big.Int
+			// Check if shares is nil
+			if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock { //parent.WorkObjectHeader().ScryptDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ScryptDiffAndCount().Count() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Count() == nil {
+
+				//Initialize the diff and count values
+				newShaDiff = params.InitialShaDiff
+				newShaCount = params.TargetShaShares
+				newScryptDiff = params.InitialScryptDiff
+				newScryptCount = params.TargetScryptShares
+
+			} else {
+				//Calculate the new diff and count values
+				newShaDiff, newShaCount = chain.CalculatePowDiffAndCount(parent.WorkObjectHeader().ScryptDiffAndCount(), bigCountSha, types.SHA_BTC)
+				newScryptDiff, newScryptCount = chain.CalculatePowDiffAndCount(parent.WorkObjectHeader().ShaDiffAndCount(), bigCountScrypt, types.Scrypt)
+			}
+
+			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty().Cmp(newShaDiff) != 0 {
+				return fmt.Errorf("invalid sha difficulty: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Difficulty(), newShaDiff)
+			}
+			if header.WorkObjectHeader().ShaDiffAndCount().Count().Cmp(newShaCount) != 0 {
+				return fmt.Errorf("invalid sha count: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Count(), newShaCount)
+			}
+			if header.WorkObjectHeader().ScryptDiffAndCount().Difficulty().Cmp(newScryptDiff) != 0 {
+				return fmt.Errorf("invalid scrypt difficulty: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Difficulty(), newScryptDiff)
+			}
+			if header.WorkObjectHeader().ScryptDiffAndCount().Count().Cmp(newScryptCount) != 0 {
+				return fmt.Errorf("invalid scrypt count: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Count(), newScryptCount)
+			}
+		} else {
+			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ShaDiffAndCount().Count() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Count() != nil {
+				return fmt.Errorf("sha and scrypt diff and count must be nil before kawpow fork block")
+			}
+		}
+
+		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+			if header.WorkObjectHeader().ShareTarget() != [4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget} {
+				return fmt.Errorf("invalid share target: have %v, want %v", header.WorkObjectHeader().ShareTarget(), [4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget})
+			}
+		} else {
+			if header.WorkObjectHeader().ShareTarget() != [4]byte{0, 0, 0, 0} {
+				return fmt.Errorf("share target must be nil before kawpow fork block")
+			}
+		}
 	}
 	// Verify that the block number is parent's +1
 	parentNumber := parent.Number(nodeCtx)
