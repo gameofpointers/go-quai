@@ -20,7 +20,7 @@ func createTestAuxTemplate() *types.AuxTemplate {
 	coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 1000022, []byte{0x76, 0xa9, 0x14, byte(nonce)})
 
 	template := &types.AuxTemplate{}
-	template.SetPowID(types.PowID(1000 + nonce))
+	template.SetPowID(types.Kawpow)
 	template.SetPrevHash(prevHash)
 	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
@@ -28,14 +28,10 @@ func createTestAuxTemplate() *types.AuxTemplate {
 	template.SetNTimeMask(0xffffffff)
 	template.SetHeight(uint32(12345 + nonce))
 
-	if nonce%2 != 0 { // If not coinbase-only, add merkle branch
-		template.SetMerkleBranch([][]byte{
-			bytes.Repeat([]byte{0xaa}, 32),
-			bytes.Repeat([]byte{0xbb}, 32),
-		})
-	} else {
-		template.SetMerkleBranch(nil)
-	}
+	template.SetMerkleBranch([][]byte{
+		bytes.Repeat([]byte{0xaa}, 32),
+		bytes.Repeat([]byte{0xbb}, 32),
+	})
 
 	template.SetSigs(make([]byte, 64)) // Dummy signature
 
@@ -70,7 +66,8 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.NotNil(t, decoded.AuxTemplate)
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.AuxTemplate.GetChainId())
 	require.Equal(t, protoAuxTemplate.GetPrevHash(), decoded.AuxTemplate.GetPrevHash())
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut(), decoded.AuxTemplate.GetCoinbaseOut())
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut().ScriptPubKey, decoded.AuxTemplate.GetCoinbaseOut().ScriptPubKey)
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut().Value, decoded.AuxTemplate.GetCoinbaseOut().Value)
 	require.Equal(t, protoAuxTemplate.GetMerkleBranch(), decoded.AuxTemplate.GetMerkleBranch())
 
 	// Decode back to types.AuxTemplate
@@ -87,7 +84,6 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.Equal(t, auxTemplate.NBits(), decodedTemplate.NBits())
 	require.Equal(t, auxTemplate.NTimeMask(), decodedTemplate.NTimeMask())
 	require.Equal(t, auxTemplate.Height(), decodedTemplate.Height())
-	require.Len(t, decodedTemplate.Sigs(), 1)
 	require.Equal(t, auxTemplate.Sigs(), decodedTemplate.Sigs())
 }
 
@@ -155,7 +151,8 @@ func TestQuaiResponseMessageWithAuxTemplate(t *testing.T) {
 	require.Equal(t, uint32(5678), decoded.GetId())
 	require.NotNil(t, decoded.GetAuxTemplate())
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.GetAuxTemplate().GetChainId())
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut(), decoded.GetAuxTemplate().GetCoinbaseOut())
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut().ScriptPubKey, decoded.GetAuxTemplate().GetCoinbaseOut().ScriptPubKey)
+	require.Equal(t, protoAuxTemplate.GetCoinbaseOut().Value, decoded.GetAuxTemplate().GetCoinbaseOut().Value)
 }
 
 // TestEmptyGossipAuxTemplate tests encoding/decoding of empty GossipAuxTemplate

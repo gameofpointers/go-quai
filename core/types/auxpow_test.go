@@ -20,7 +20,7 @@ func testAuxTemplate() *AuxTemplate {
 	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x76, 0xa9, 0x14})
 
 	template := &AuxTemplate{}
-	template.SetPowID(1337)
+	template.SetPowID(Kawpow)
 	template.SetPrevHash(prevHash)
 	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
@@ -177,7 +177,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x51}) // OP_TRUE
 
 	original := &AuxTemplate{}
-	original.SetPowID(42)
+	original.SetPowID(Kawpow)
 	original.SetPrevHash(prevHash)
 	original.SetCoinbaseOut(coinbaseOut)
 	// Optional fields left at zero
