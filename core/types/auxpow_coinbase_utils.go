@@ -9,7 +9,6 @@ import (
 	btcblockchain "github.com/btcsuite/btcd/blockchain"
 	btcutil "github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	ltcblockchain "github.com/dominant-strategies/ltcd/blockchain"
 	ltcchainhash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
@@ -163,20 +162,60 @@ func BuildCoinbaseScriptSigWithNonce(blockHeight uint32, extraNonce1 uint32, ext
 }
 
 // CalculateMerkleRootFromTxs calculates merkle root from wire.MsgTx transactions
-func CalculateMerkleRootFromTxs(txs []*wire.MsgTx) common.Hash {
+func CalculateMerkleRootFromTxs(powId PowID, txs []*AuxPowTx) common.Hash {
 	if len(txs) == 0 {
 		return common.Hash{}
 	}
 
-	// Convert to btcutil.Tx for btcd functions
-	btcTxs := make([]*btcutil.Tx, len(txs))
-	for i, tx := range txs {
-		btcTxs[i] = btcutil.NewTx(tx)
-	}
+	switch powId {
+	case Kawpow:
+		transactions := make([]*btcutil.Tx, len(txs))
+		for i, tx := range txs {
+			ravenTx, ok := tx.inner.(*RavencoinTx)
+			if !ok || ravenTx == nil || ravenTx.MsgTx == nil {
+				return common.Hash{}
+			}
+			transactions[i] = btcutil.NewTx(ravenTx.MsgTx)
+		}
+		root := btcblockchain.CalcMerkleRoot(transactions, false) // false = not witness
+		return common.BytesToHash(root[:])
+	case SHA_BTC:
+		transactions := make([]*btcutil.Tx, len(txs))
+		for i, tx := range txs {
+			bitcoinTx, ok := tx.inner.(*BitcoinTxWrapper)
+			if !ok || bitcoinTx == nil || bitcoinTx.MsgTx == nil {
+				return common.Hash{}
+			}
+			transactions[i] = btcutil.NewTx(bitcoinTx.MsgTx)
+		}
+		root := btcblockchain.CalcMerkleRoot(transactions, false) // false = not witness
+		return common.BytesToHash(root[:])
+	case SHA_BCH:
+		transactions := make([]*bchutil.Tx, len(txs))
+		for i, tx := range txs {
+			bitcoinCashTx, ok := tx.inner.(*BitcoinCashTxWrapper)
+			if !ok || bitcoinCashTx == nil || bitcoinCashTx.MsgTx == nil {
+				return common.Hash{}
+			}
+			transactions[i] = bchutil.NewTx(bitcoinCashTx.MsgTx)
+		}
+		// TODO: Need to find the function for bchd
+		// root := bchblockchain.CalcMerkleRoot(transactions)
+		// return common.BytesToHash(root[:])
 
-	// Use btcd's CalcMerkleRoot function
-	root := btcblockchain.CalcMerkleRoot(btcTxs, false) // false = not witness
-	return common.BytesToHash(root[:])
+	case Scrypt:
+		Transactions := make([]*ltcutil.Tx, len(txs))
+		for i, tx := range txs {
+			litecoinTx, ok := tx.inner.(*LitecoinTxWrapper)
+			if !ok || litecoinTx == nil || litecoinTx.MsgTx == nil {
+				return common.Hash{}
+			}
+			Transactions[i] = ltcutil.NewTx(litecoinTx.MsgTx)
+		}
+		root := ltcblockchain.CalcMerkleRoot(Transactions, false) // false = not witness
+		return common.BytesToHash(root[:])
+	}
+	return common.Hash{}
 }
 
 // VerifyMerkleProof verifies a merkle proof for a transaction at index 0 (coinbase)
