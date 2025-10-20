@@ -695,6 +695,14 @@ func (wh *WorkObjectHeader) ShaDiffAndCount() *PowShareDiffAndCount {
 	return wh.shaDiffAndCount.Clone()
 }
 
+func (wh *WorkObjectHeader) ShareTarget() [4]byte {
+	return wh.shareTarget
+}
+
+func (wh *WorkObjectHeader) ShareTargetBytes() []byte {
+	return wh.shareTarget[:]
+}
+
 ////////////////////////////////////////////////////////////
 /////////////////// Work Object Header Setters ///////////////
 ////////////////////////////////////////////////////////////
@@ -761,14 +769,6 @@ func (wh *WorkObjectHeader) SetScryptDiffAndCount(val *PowShareDiffAndCount) {
 
 func (wh *WorkObjectHeader) SetShaDiffAndCount(val *PowShareDiffAndCount) {
 	wh.shaDiffAndCount = val.Clone()
-}
-
-func (wh *WorkObjectHeader) ShareTarget() [4]byte {
-	return wh.shareTarget
-}
-
-func (wh *WorkObjectHeader) ShareTargetBytes() []byte {
-	return wh.shareTarget[:]
 }
 
 func (wh *WorkObjectHeader) SetShareTarget(val [4]byte) {
@@ -1350,6 +1350,7 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 	if wh.KawpowActivationHappened() {
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
+		protoWh.ShareTarget = wh.ShareTargetBytes()
 	}
 
 	return protoWh

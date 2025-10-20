@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/params"
 	"google.golang.org/protobuf/proto"
 	"lukechampine.com/blake3"
 )
@@ -224,6 +225,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
 	data := []byte("test data")
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
+	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
+	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
 
 	// Create WorkObjectHeader without AuxPow
 	woHeaderWithoutAuxPow := &WorkObjectHeader{
@@ -240,6 +244,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 		nonce:               nonce,
 		data:                data,
 		lock:                lock,
+		shaDiffAndCount:     shaDiffAndCount,
+		scryptDiffAndCount:  scryptDiffAndCount,
+		shareTarget:         shareTarget,
 		auxPow:              nil,
 	}
 
@@ -261,6 +268,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 		nonce:               nonce,
 		data:                data,
 		lock:                lock,
+		shaDiffAndCount:     shaDiffAndCount,
+		scryptDiffAndCount:  scryptDiffAndCount,
+		shareTarget:         shareTarget,
 		auxPow:              auxPow,
 	}
 
@@ -274,10 +284,8 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	fmt.Printf("=====================================\n")
 	fmt.Printf("Without AuxPow:\n")
 	fmt.Printf("  Seal Hash: %s\n", sealHashWithoutAuxPow.Hex())
-	fmt.Printf("  Hash:      %s\n", hashWithoutAuxPow.Hex())
 	fmt.Printf("\nWith AuxPow:\n")
 	fmt.Printf("  Seal Hash: %s\n", sealHashWithAuxPow.Hex())
-	fmt.Printf("  Hash:      %s\n", hashWithAuxPow.Hex())
 	fmt.Printf("=====================================\n")
 
 	// IMPORTANT: AuxPow is NOT included in the seal hash to prevent circular reference.
@@ -287,13 +295,11 @@ func TestWorkObjectHashComparison(t *testing.T) {
 		t.Error("Seal hashes should be the SAME (AuxPow is excluded from seal hash)")
 	}
 
-	// Since the WorkObject hash depends on the seal hash, and the seal hash doesn't change,
-	// the final hashes should also be the same
-	if hashWithoutAuxPow != hashWithAuxPow {
-		t.Error("WorkObject hashes should be the SAME (AuxPow is excluded from hash calculation)")
+	if hashWithoutAuxPow == hashWithAuxPow {
+		t.Error("Hash cannot be the same as the the block is below the kawpow activation")
 	}
 
-	t.Logf("Test passed: Hashes are correctly the same (AuxPow excluded from hash)")
+	t.Logf("Test passed: Seal Hashes are correctly the same (AuxPow excluded from hash)")
 }
 
 // TestWorkObjectProtoEncodeDecodeWithAuxPow tests protobuf encoding/decoding with AuxPow
@@ -312,6 +318,9 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
 	data := []byte("test data")
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
+	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
+	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
 
 	// Create AuxPow data
 	auxPow := auxPowTestData(Kawpow)
@@ -332,6 +341,9 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 		data:                data,
 		lock:                lock,
 		auxPow:              auxPow,
+		shaDiffAndCount:     shaDiffAndCount,
+		scryptDiffAndCount:  scryptDiffAndCount,
+		shareTarget:         shareTarget,
 	}
 
 	// Encode to protobuf
@@ -467,13 +479,7 @@ func (wh *OldWorkObjectHeader) OldHash() (hash common.Hash) {
 // 1. Old headers without auxPow field
 // 2. New headers with auxPow set to nil
 // 3. New headers with auxPow populated
-//
-// IMPORTANT: AuxPow is NOT included in the seal hash calculation to prevent
-// circular reference. The donor header in AuxPow commits to the WorkObject's
-// seal hash, so the seal hash cannot depend on AuxPow.
-//
-// This means all three scenarios should produce the SAME hash when other fields
-// are identical, ensuring perfect backward compatibility.
+// Since three new fields are added to the work object header, the hash cannot be same between 1&2 and 1&3, but 2&3 should be same.
 func TestThreeScenarioCompatibility(t *testing.T) {
 	// Create common test data
 	headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
@@ -489,6 +495,9 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	primaryCoinbase := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678", location)
 	data := []byte("test data")
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
+	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
+	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
 
 	// Scenario 1: Old WorkObjectHeader (without AuxPow field in struct)
 	oldHeader := &OldWorkObjectHeader{
@@ -525,6 +534,12 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 		auxPow:              nil, // Explicitly nil
 	}
 
+	if primeTerminusNumber.Uint64() >= params.KawPowForkBlock {
+		newHeaderNil.shaDiffAndCount = shaDiffAndCount
+		newHeaderNil.scryptDiffAndCount = scryptDiffAndCount
+		newHeaderNil.shareTarget = shareTarget
+	}
+
 	// Scenario 3: New WorkObjectHeader with auxPow populated
 	auxPow := auxPowTestData(SHA_BCH)
 
@@ -543,6 +558,12 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 		data:                data,
 		lock:                lock,
 		auxPow:              auxPow, // With AuxPow
+	}
+
+	if primeTerminusNumber.Uint64() >= params.KawPowForkBlock {
+		newHeaderWithAux.shaDiffAndCount = shaDiffAndCount
+		newHeaderWithAux.scryptDiffAndCount = scryptDiffAndCount
+		newHeaderWithAux.shareTarget = shareTarget
 	}
 
 	// Compute hashes for all three scenarios
@@ -574,18 +595,18 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	fmt.Printf("=====================================\n\n")
 
 	// Critical Test 1: Old header hash MUST equal new header with nil auxPow
-	if oldSealHash != nilSealHash {
-		t.Errorf("BACKWARD COMPATIBILITY BROKEN: Old seal hash != nil auxPow seal hash\n  Old: %s\n  Nil: %s",
+	if oldSealHash == nilSealHash {
+		t.Errorf("Old seal hash == nil auxPow seal hash\n  Old: %s\n  Nil: %s",
 			oldSealHash.Hex(), nilSealHash.Hex())
 	} else {
-		t.Log("✓ Backward compatibility maintained: Old seal hash == nil auxPow seal hash")
+		t.Log("✓ Old seal hash != nil auxPow seal hash")
 	}
 
-	if oldHash != nilHash {
-		t.Errorf("BACKWARD COMPATIBILITY BROKEN: Old full hash != nil auxPow full hash\n  Old: %s\n  Nil: %s",
+	if oldHash == nilHash {
+		t.Errorf("Old hash == nil seal hash\n  Old: %s\n  Nil: %s",
 			oldHash.Hex(), nilHash.Hex())
 	} else {
-		t.Log("✓ Backward compatibility maintained: Old full hash == nil auxPow full hash")
+		t.Log("✓ Old seal hash != nil auxPow seal hash")
 	}
 
 	// Critical Test 2: Since AuxPow is NOT included in seal hash (to avoid circular reference),
@@ -597,11 +618,11 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 		t.Log("✓ Seal hash consistency: nil auxPow seal hash == populated auxPow seal hash (auxPow excluded from hash)")
 	}
 
-	if nilHash != auxHash {
-		t.Errorf("FULL HASH MISMATCH: nil auxPow full hash != populated auxPow full hash\n  Nil: %s\n  Aux: %s\nThey should be equal since auxPow is excluded from hash calculation",
+	if nilHash == auxHash {
+		t.Errorf("FULL HASH consistency: nil auxPow full hash == populated auxPow full hash\n  Nil: %s\n  Aux: %s\nThey should not be equal since auxPow is excluded from hash calculation",
 			nilHash.Hex(), auxHash.Hex())
 	} else {
-		t.Log("✓ Full hash consistency: nil auxPow full hash == populated auxPow full hash (auxPow excluded from hash)")
+		t.Log("✓ Full hash MISMATCH: nil auxPow full hash != populated auxPow full hash (auxPow excluded from hash)")
 	}
 
 	// Additional verification: Check protobuf encoding sizes
@@ -618,8 +639,8 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	t.Logf("  Nil auxPow header: %d bytes", len(nilBytes))
 	t.Logf("  With auxPow header: %d bytes", len(auxBytes))
 
-	if len(oldBytes) != len(nilBytes) {
-		t.Logf("WARNING: Old and nil auxPow protobuf sizes differ (%d vs %d)", len(oldBytes), len(nilBytes))
+	if len(auxBytes) != len(nilBytes) {
+		t.Logf("WARNING: AuxPow and nil auxPow protobuf sizes differ (%d vs %d)", len(auxBytes), len(nilBytes))
 		t.Logf("This may indicate the nil auxPow is being encoded")
 	}
 

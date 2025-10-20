@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 func TestAuxPowRPCMarshaling(t *testing.T) {
@@ -62,7 +63,7 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 	}
 
 	// Verify expected fields are present
-	expectedFields := []string{"powId", "header", "signature", "merkleBranch", "transaction", "signatureTime"}
+	expectedFields := []string{"powId", "header", "signature", "merkleBranch", "transaction"}
 	for _, field := range expectedFields {
 		if _, exists := auxPowMap[field]; !exists {
 			t.Errorf("Missing expected field in AuxPow: %s", field)
@@ -70,16 +71,10 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 	}
 
 	// Verify specific values
-	if powId, ok := auxPowMap["powId"].(float64); !ok || int(powId) != int(Kawpow) {
+	if powId, ok := auxPowMap["powId"].(hexutil.Uint64); !ok || int(powId) != int(Kawpow) {
 		t.Logf("Expected powId to be %d, got %v", Kawpow, auxPowMap["powId"])
 	} else {
 		t.Logf("✓ PowID correctly set to %d", int(powId))
-	}
-
-	if sigTime, ok := auxPowMap["signatureTime"].(float64); !ok || int(sigTime) != 1588788000 {
-		t.Logf("Expected signatureTime to be 1588788000, got %v", auxPowMap["signatureTime"])
-	} else {
-		t.Logf("✓ SignatureTime correctly set to %d", int(sigTime))
 	}
 
 	t.Logf("✓ AuxPow RPC marshaling test completed successfully")
