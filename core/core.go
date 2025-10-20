@@ -1015,6 +1015,14 @@ func (c *Core) CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) er
 	return c.sl.hc.CheckPowIdValidityForWorkshare(header)
 }
 
+func (c *Core) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (*big.Int, *big.Int) {
+	return c.sl.hc.CalculatePowDiffAndCount(shares, numShares, powId)
+}
+
+func (c *Core) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int) {
+	return c.sl.hc.CountWorkSharesByAlgo(wo)
+}
+
 // CalcOrder returns the order of the block within the hierarchy of chains
 func (c *Core) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
 	engine := c.GetEngineForHeader(header.WorkObjectHeader())
