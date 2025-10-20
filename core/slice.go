@@ -1405,6 +1405,7 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		if header.WorkObjectHeader().ScryptDiffAndCount() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetScryptDiffAndCount(header.WorkObjectHeader().ScryptDiffAndCount())
 		}
+		combinedPendingHeader.WorkObjectHeader().SetShareTarget(header.WorkObjectHeader().ShareTarget())
 
 		combinedPendingHeader.Header().SetEtxRollupHash(header.EtxRollupHash())
 		combinedPendingHeader.Header().SetUncledEntropy(header.Header().UncledEntropy())
@@ -1427,7 +1428,6 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.Header().SetExpansionNumber(header.ExpansionNumber())
 		combinedPendingHeader.Header().SetAvgTxFees(header.AvgTxFees())
 		combinedPendingHeader.Header().SetTotalFees(header.TotalFees())
-		combinedPendingHeader.WorkObjectHeader().SetShareTarget(header.WorkObjectHeader().ShareTarget())
 
 		combinedPendingHeader.Body().SetTransactions(header.Transactions())
 		combinedPendingHeader.Body().SetOutboundEtxs(header.OutboundEtxs())

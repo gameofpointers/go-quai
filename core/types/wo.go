@@ -992,7 +992,8 @@ func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, w
 		header.WorkObjectHeader().data,
 		header.WorkObjectHeader().AuxPow(),
 		header.WorkObjectHeader().ScryptDiffAndCount(),
-		header.WorkObjectHeader().ShaDiffAndCount())
+		header.WorkObjectHeader().ShaDiffAndCount(),
+		header.WorkObjectHeader().ShareTarget())
 	woBody, _ := NewWorkObjectBody(header.Body().Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
 }
@@ -1166,7 +1167,7 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Locatio
 	return nil
 }
 
-func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, scryptDiffAndCount *PowShareDiffAndCount, shaDiffAndCount *PowShareDiffAndCount) *WorkObjectHeader {
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, scryptDiffAndCount *PowShareDiffAndCount, shaDiffAndCount *PowShareDiffAndCount, shareTarget [4]byte) *WorkObjectHeader {
 	return &WorkObjectHeader{
 		headerHash:          headerHash,
 		parentHash:          parentHash,
@@ -1183,6 +1184,7 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 		auxPow:              auxpow,
 		scryptDiffAndCount:  scryptDiffAndCount.Clone(),
 		shaDiffAndCount:     shaDiffAndCount.Clone(),
+		shareTarget:         shareTarget,
 	}
 }
 
@@ -1208,6 +1210,8 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 	if wh.ShaDiffAndCount() != nil {
 		cpy.SetShaDiffAndCount(wh.ShaDiffAndCount())
 	}
+
+	cpy.SetShareTarget(wh.ShareTarget())
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
@@ -1259,6 +1263,8 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 		}
 		result["shaDiffAndCount"] = shaResult
 	}
+
+	result["shareTarget"] = hexutil.Bytes(wh.ShareTargetBytes())
 
 	return result
 }
@@ -1447,7 +1453,9 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 
 		// Decode ShareTarget if present
 		if len(data.GetShareTarget()) == 4 {
-			copy(wh.shareTarget[:], data.GetShareTarget())
+			wh.SetShareTarget([4]byte(data.GetShareTarget()))
+		} else {
+			return errors.New("invalid share target length")
 		}
 	}
 
