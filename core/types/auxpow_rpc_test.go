@@ -33,6 +33,7 @@ func TestAuxPowRPCMarshaling(t *testing.T) {
 		auxPow,                         // auxpow
 		&PowShareDiffAndCount{},        // scryptDiffAndCount
 		&PowShareDiffAndCount{},        // shaDiffAndCount
+		[4]byte{},
 	)
 
 	// Test RPC marshaling
