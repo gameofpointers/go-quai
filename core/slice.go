@@ -1043,12 +1043,15 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 		case types.Kawpow, types.SHA_BTC, types.SHA_BCH, types.Scrypt:
 			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
-				// Create a properly configured Ravencoin header for KAWPOW mining
-				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), common.Hash{}, uint32(phCopy.Time()), auxTemplate.NBits(), 0, auxTemplate.Height())
 
 				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash().Bytes())
+				merkleRoot := types.CalculateMerkleRoot(coinbaseTransaction, auxTemplate.MerkleBranch())
+
+				// Create a properly configured Ravencoin header for KAWPOW mining
+				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, uint32(phCopy.Time()), auxTemplate.NBits(), 0, auxTemplate.Height())
+
 				// Dont have the actual hash of the block yet
-				auxPow := types.NewAuxPow(powId, auxHeader, []byte{}, auxTemplate.MerkleBranch(), coinbaseTransaction)
+				auxPow := types.NewAuxPow(powId, auxHeader, auxTemplate.Sigs(), auxTemplate.MerkleBranch(), coinbaseTransaction)
 
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)

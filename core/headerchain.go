@@ -587,6 +587,14 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 
 	// TODO: Also check that the values used in the kawpow header are signed
 
+	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && header.AuxPow() != nil {
+		// Verify the merkle root as well
+		expectedMerkleRoot := types.CalculateMerkleRoot(header.AuxPow().Transaction(), header.AuxPow().MerkleBranch())
+		if header.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
+			return errors.New("invalid merkle root in auxpow")
+		}
+	}
+
 	engine := hc.GetEngineForHeader(header.WorkObjectHeader())
 
 	err := engine.VerifyHeader(hc, header)

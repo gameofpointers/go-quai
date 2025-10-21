@@ -238,6 +238,13 @@ func (lct *LitecoinTxWrapper) version() int32 {
 	return lct.MsgTx.Version
 }
 
+func (lct *LitecoinTxWrapper) txHash() [32]byte {
+	if lct.MsgTx == nil {
+		return [32]byte{}
+	}
+	return lct.MsgTx.TxHash()
+}
+
 // CoinbaseTxOut functions
 func (lco *LitecoinCoinbaseTxOutWrapper) Value() int64 {
 	return lco.TxOut.Value
