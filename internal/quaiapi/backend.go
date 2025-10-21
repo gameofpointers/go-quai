@@ -105,6 +105,7 @@ type Backend interface {
 	WriteGenesisBlock(block *types.WorkObject, location common.Location)
 	SendWorkShare(workShare *types.WorkObjectHeader) error
 	SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error
+	GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate
 	CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity
 	SetDomInterface(domInterface core.CoreBackend)
 	BroadcastWorkShare(workShare *types.WorkObjectShareView, location common.Location) error

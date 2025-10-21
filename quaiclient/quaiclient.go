@@ -89,8 +89,8 @@ func (ec *Client) Close() {
 }
 
 // SubscribePendingHeader subscribes to notifications about the current pending block on the node.
-func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- []byte) (quai.Subscription, error) {
-	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
+func (ec *Client) SubscribePendingHeader(ctx context.Context, powId types.PowID, ch chan<- []byte) (quai.Subscription, error) {
+	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader", powId)
 }
 
 // SubscribeNewWorkshares subscribes to notifications about new workshares received via P2P.

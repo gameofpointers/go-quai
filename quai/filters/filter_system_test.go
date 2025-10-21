@@ -202,6 +202,10 @@ func (b *testBackend) SubscribeNewWorkshareEvent(ch chan<- core.NewWorkshareEven
 	return b.worksharesFeed.Subscribe(ch)
 }
 
+func (b *testBackend) GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate {
+	return nil
+}
+
 // TestPendingTxFilter tests whether pending tx filters retrieve all pending transactions that are posted to the event mux.
 func TestPendingTxFilter(t *testing.T) {
 	t.Skip("Todo: Fix broken test")
