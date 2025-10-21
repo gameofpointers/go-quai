@@ -54,6 +54,7 @@ type Backend interface {
 	NodeLocation() common.Location
 	NodeCtx() int
 	Engine(header *types.WorkObjectHeader) consensus.Engine
+	GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate
 
 	BloomStatus() (uint64, uint64)
 	ServiceFilter(ctx context.Context, session *bloombits.MatcherSession)

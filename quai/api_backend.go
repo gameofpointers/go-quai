@@ -850,6 +850,10 @@ func (b *QuaiAPIBackend) SendAuxPowTemplate(auxTemplate *types.AuxTemplate) erro
 	return b.quai.core.SendAuxPowTemplate(auxTemplate)
 }
 
+func (b *QuaiAPIBackend) GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate {
+	return b.quai.core.GetBestAuxTemplate(powId)
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////

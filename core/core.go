@@ -1297,6 +1297,10 @@ func (c *Core) SetMinerPreference(minerPreference float64) {
 	c.sl.miner.worker.SetMinerPreference(minerPreference)
 }
 
+func (c *Core) GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate {
+	return c.sl.miner.worker.GetBestAuxTemplate(powId)
+}
+
 // SubscribePendingLogs starts delivering logs from pending transactions
 // to the given channel.
 func (c *Core) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
