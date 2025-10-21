@@ -441,6 +441,13 @@ func (rct *RavencoinTx) txHash() [32]byte {
 	return rct.MsgTx.TxHash()
 }
 
+func (rct *RavencoinTx) pkScript() []byte {
+	if rct.MsgTx == nil || len(rct.MsgTx.TxOut) == 0 {
+		return nil
+	}
+	return rct.MsgTx.TxOut[0].PkScript
+}
+
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
 	return rct.MsgTx.DeserializeNoWitness(r)
 }

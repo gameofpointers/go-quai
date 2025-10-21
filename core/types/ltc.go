@@ -245,6 +245,13 @@ func (lct *LitecoinTxWrapper) txHash() [32]byte {
 	return lct.MsgTx.TxHash()
 }
 
+func (lct *LitecoinTxWrapper) pkScript() []byte {
+	if lct.MsgTx == nil || len(lct.MsgTx.TxOut) == 0 {
+		return nil
+	}
+	return lct.MsgTx.TxOut[0].PkScript
+}
+
 // CoinbaseTxOut functions
 func (lco *LitecoinCoinbaseTxOutWrapper) Value() int64 {
 	return lco.TxOut.Value

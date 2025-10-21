@@ -564,6 +564,7 @@ type AuxPowTxData interface {
 	scriptSig() []byte
 	value() int64
 	version() int32
+	pkScript() []byte
 }
 
 func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *AuxPowTx {
@@ -644,6 +645,13 @@ func (ac *AuxPowTx) TxHash() [common.HashLength]byte {
 		return common.Hash{}
 	}
 	return ac.inner.txHash()
+}
+
+func (ac *AuxPowTx) PkScript() []byte {
+	if ac.inner == nil {
+		return nil
+	}
+	return ac.inner.pkScript()
 }
 
 type AuxPowCoinbaseOut struct {
@@ -851,6 +859,20 @@ func NewAuxPow(powID PowID, header *AuxPowHeader, signature []byte, merkleBranch
 		merkleBranch: merkleBranch,
 		transaction:  transaction,
 	}
+}
+
+func (ap *AuxPow) ConvertToTemplate() *AuxTemplate {
+	auxTemplate := &AuxTemplate{}
+	auxTemplate.SetPowID(ap.powID)
+	auxTemplate.SetPrevHash(ap.header.PrevBlock())
+	auxTemplate.SetVersion(uint32(ap.header.Version()))
+	auxTemplate.SetNBits(ap.header.Bits())
+	auxTemplate.SetNTimeMask(NTimeMask(ap.header.Timestamp()))
+	auxTemplate.SetHeight(ap.header.Height())
+	auxTemplate.SetCoinbaseOut(NewAuxPowCoinbaseOut(ap.powID, ap.transaction.Value(), ap.transaction.PkScript()))
+	auxTemplate.SetMerkleBranch(ap.merkleBranch)
+	auxTemplate.SetSigs(ap.signature)
+	return auxTemplate
 }
 
 func (ap *AuxPow) PowID() PowID { return ap.powID }
