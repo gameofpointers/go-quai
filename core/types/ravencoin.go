@@ -434,6 +434,13 @@ func (rct *RavencoinTx) version() int32 {
 	return rct.MsgTx.Version
 }
 
+func (rct *RavencoinTx) txHash() [32]byte {
+	if rct.MsgTx == nil {
+		return [32]byte{}
+	}
+	return rct.MsgTx.TxHash()
+}
+
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
 	return rct.MsgTx.DeserializeNoWitness(r)
 }

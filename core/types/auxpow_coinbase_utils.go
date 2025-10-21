@@ -161,81 +161,56 @@ func BuildCoinbaseScriptSigWithNonce(blockHeight uint32, extraNonce1 uint32, ext
 	return buf.Bytes()
 }
 
-// CalculateMerkleRootFromTxs calculates merkle root from wire.MsgTx transactions
-func CalculateMerkleRootFromTxs(powId PowID, txs []*AuxPowTx) common.Hash {
-	if len(txs) == 0 {
-		return common.Hash{}
-	}
-
-	switch powId {
-	case Kawpow:
-		transactions := make([]*btcutil.Tx, len(txs))
-		for i, tx := range txs {
-			ravenTx, ok := tx.inner.(*RavencoinTx)
-			if !ok || ravenTx == nil || ravenTx.MsgTx == nil {
-				return common.Hash{}
-			}
-			transactions[i] = btcutil.NewTx(ravenTx.MsgTx)
-		}
-		root := btcblockchain.CalcMerkleRoot(transactions, false) // false = not witness
-		return common.BytesToHash(root[:])
-	case SHA_BTC:
-		transactions := make([]*btcutil.Tx, len(txs))
-		for i, tx := range txs {
-			bitcoinTx, ok := tx.inner.(*BitcoinTxWrapper)
-			if !ok || bitcoinTx == nil || bitcoinTx.MsgTx == nil {
-				return common.Hash{}
-			}
-			transactions[i] = btcutil.NewTx(bitcoinTx.MsgTx)
-		}
-		root := btcblockchain.CalcMerkleRoot(transactions, false) // false = not witness
-		return common.BytesToHash(root[:])
-	case SHA_BCH:
-		transactions := make([]*bchutil.Tx, len(txs))
-		for i, tx := range txs {
-			bitcoinCashTx, ok := tx.inner.(*BitcoinCashTxWrapper)
-			if !ok || bitcoinCashTx == nil || bitcoinCashTx.MsgTx == nil {
-				return common.Hash{}
-			}
-			transactions[i] = bchutil.NewTx(bitcoinCashTx.MsgTx)
-		}
-		// TODO: Need to find the function for bchd
-		// root := bchblockchain.CalcMerkleRoot(transactions)
-		// return common.BytesToHash(root[:])
-
-	case Scrypt:
-		Transactions := make([]*ltcutil.Tx, len(txs))
-		for i, tx := range txs {
-			litecoinTx, ok := tx.inner.(*LitecoinTxWrapper)
-			if !ok || litecoinTx == nil || litecoinTx.MsgTx == nil {
-				return common.Hash{}
-			}
-			Transactions[i] = ltcutil.NewTx(litecoinTx.MsgTx)
-		}
-		root := ltcblockchain.CalcMerkleRoot(Transactions, false) // false = not witness
-		return common.BytesToHash(root[:])
-	}
-	return common.Hash{}
-}
-
 // VerifyMerkleProof verifies a merkle proof for a transaction at index 0 (coinbase)
 // merkleBranch contains the sibling hashes from leaf to root
-func VerifyMerkleProof(txHash chainhash.Hash, merkleBranch [][]byte, merkleRoot common.Hash) bool {
-	// Start with the transaction hash
-	currentHash := txHash
+func CalculateMerkleRoot(coinbaseTx *AuxPowTx, merkleBranch [][]byte) [common.HashLength]byte {
 
-	// For coinbase (index 0), we always take the right branch
-	// and our hash goes on the left
-	for _, siblingBytes := range merkleBranch {
-		var sibling chainhash.Hash
-		copy(sibling[:], siblingBytes)
+	switch coinbaseTx.inner.(type) {
+	case *RavencoinTx, *BitcoinTxWrapper:
+		// Start with the transaction hash
+		currentHash := chainhash.Hash(coinbaseTx.TxHash())
 
-		// Since we're at index 0 (coinbase), we're always the left child
-		currentHash = btcblockchain.HashMerkleBranches(&currentHash, &sibling)
+		// For coinbase (index 0), we always take the right branch
+		// and our hash goes on the left
+		for _, siblingBytes := range merkleBranch {
+			var sibling chainhash.Hash
+			copy(sibling[:], siblingBytes)
+
+			// Since we're at index 0 (coinbase), we're always the left child
+			currentHash = btcblockchain.HashMerkleBranches(&currentHash, &sibling)
+		}
+		return currentHash
+	case *LitecoinTxWrapper:
+		// Start with the transaction hash
+		currentHash := ltcchainhash.Hash(coinbaseTx.TxHash())
+
+		// For coinbase (index 0), we always take the right branch
+		// and our hash goes on the left
+		for _, siblingBytes := range merkleBranch {
+			var sibling ltcchainhash.Hash
+			copy(sibling[:], siblingBytes)
+
+			// Since we're at index 0 (coinbase), we're always the left child
+			currentHash = ltcblockchain.HashMerkleBranches(&currentHash, &sibling)
+		}
+		return currentHash
+	case *BitcoinCashTxWrapper:
+		// Start with the transaction hash
+		currentHash := bchchainhash.Hash(coinbaseTx.TxHash())
+
+		// For coinbase (index 0), we always take the right branch
+		// and our hash goes on the left
+		for _, siblingBytes := range merkleBranch {
+			var sibling bchchainhash.Hash
+			copy(sibling[:], siblingBytes)
+
+			// Since we're at index 0 (coinbase), we're always the left child
+			currentHash = *bchblockchain.HashMerkleBranches(&currentHash, &sibling)
+		}
+		return currentHash
+	default:
+		return [common.HashLength]byte{}
 	}
-
-	// Compare with expected merkle root
-	return bytes.Equal(currentHash[:], merkleRoot[:])
 }
 
 func BuildMerkleTreeStore(powID PowID, txs []*AuxPowTx, witness bool) []*chainhash.Hash {
