@@ -239,3 +239,10 @@ func (btt *BitcoinTxWrapper) txHash() [32]byte {
 	}
 	return btt.MsgTx.TxHash()
 }
+
+func (btt *BitcoinTxWrapper) pkScript() []byte {
+	if btt.MsgTx == nil || len(btt.MsgTx.TxOut) == 0 {
+		return nil
+	}
+	return btt.MsgTx.TxOut[0].PkScript
+}
