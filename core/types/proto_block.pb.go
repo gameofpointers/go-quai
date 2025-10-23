@@ -913,7 +913,7 @@ type ProtoAuxTemplate struct {
 	NtimeMask *uint32 `protobuf:"varint,5,opt,name=ntime_mask,json=ntimeMask,proto3,oneof" json:"ntime_mask,omitempty"` // allowed time range/step
 	Height    *uint32 `protobuf:"varint,6,opt,name=height,proto3,oneof" json:"height,omitempty"`                        // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 	// CoinbaseOut is the coinbase payout
-	CoinbaseOut *ProtoCoinbaseTxOut `protobuf:"bytes,7,opt,name=coinbase_out,json=coinbaseOut,proto3,oneof" json:"coinbase_out,omitempty"` // full coinbase output script (scriptPubKey)
+	CoinbaseOut []*ProtoCoinbaseTxOut `protobuf:"bytes,7,rep,name=coinbase_out,json=coinbaseOut,proto3" json:"coinbase_out,omitempty"` // full coinbase output script (scriptPubKey)
 	// Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
 	MerkleBranch [][]byte `protobuf:"bytes,8,rep,name=merkle_branch,json=merkleBranch,proto3" json:"merkle_branch,omitempty"` // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
 	// === Quorum signatures over CanonicalEncode(template WITHOUT Sigs) ===
@@ -995,7 +995,7 @@ func (x *ProtoAuxTemplate) GetHeight() uint32 {
 	return 0
 }
 
-func (x *ProtoAuxTemplate) GetCoinbaseOut() *ProtoCoinbaseTxOut {
+func (x *ProtoAuxTemplate) GetCoinbaseOut() []*ProtoCoinbaseTxOut {
 	if x != nil {
 		return x.CoinbaseOut
 	}
@@ -3598,7 +3598,7 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\n" +
 	"_signer_idB\f\n" +
 	"\n" +
-	"_signature\"\xe2\x03\n" +
+	"_signature\"\xcc\x03\n" +
 	"\x10ProtoAuxTemplate\x12\x1e\n" +
 	"\bchain_id\x18\x01 \x01(\rH\x00R\achainId\x88\x01\x01\x12 \n" +
 	"\tprev_hash\x18\x02 \x01(\fH\x01R\bprevHash\x88\x01\x01\x12\x1d\n" +
@@ -3606,12 +3606,12 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\x05nbits\x18\x04 \x01(\rH\x03R\x05nbits\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"ntime_mask\x18\x05 \x01(\rH\x04R\tntimeMask\x88\x01\x01\x12\x1b\n" +
-	"\x06height\x18\x06 \x01(\rH\x05R\x06height\x88\x01\x01\x12A\n" +
-	"\fcoinbase_out\x18\a \x01(\v2\x19.block.ProtoCoinbaseTxOutH\x06R\vcoinbaseOut\x88\x01\x01\x12#\n" +
+	"\x06height\x18\x06 \x01(\rH\x05R\x06height\x88\x01\x01\x12<\n" +
+	"\fcoinbase_out\x18\a \x03(\v2\x19.block.ProtoCoinbaseTxOutR\vcoinbaseOut\x12#\n" +
 	"\rmerkle_branch\x18\b \x03(\fR\fmerkleBranch\x12\x17\n" +
-	"\x04sigs\x18\t \x01(\fH\aR\x04sigs\x88\x01\x01\x12\x1e\n" +
+	"\x04sigs\x18\t \x01(\fH\x06R\x04sigs\x88\x01\x01\x12\x1e\n" +
 	"\baux_pow2\x18\n" +
-	" \x01(\fH\bR\aauxPow2\x88\x01\x01B\v\n" +
+	" \x01(\fH\aR\aauxPow2\x88\x01\x01B\v\n" +
 	"\t_chain_idB\f\n" +
 	"\n" +
 	"_prev_hashB\n" +
@@ -3619,8 +3619,7 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\b_versionB\b\n" +
 	"\x06_nbitsB\r\n" +
 	"\v_ntime_maskB\t\n" +
-	"\a_heightB\x0f\n" +
-	"\r_coinbase_outB\a\n" +
+	"\a_heightB\a\n" +
 	"\x05_sigsB\v\n" +
 	"\t_aux_pow2\"w\n" +
 	"\x12ProtoCoinbaseTxOut\x12\x19\n" +

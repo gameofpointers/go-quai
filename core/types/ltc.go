@@ -187,7 +187,7 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 
 // CoinbaseTx functions
 
-func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *LitecoinTxWrapper {
+func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *LitecoinTxWrapper {
 	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
 	// Create the coinbase input with height in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
@@ -202,10 +202,12 @@ func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut,
 
 	// Add the coinbase output
 	if coinbaseOut != nil {
-		value := coinbaseOut.Value()
-		pkScript := coinbaseOut.PkScript()
-		txOut := NewLitecoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+		for _, co := range coinbaseOut {
+			value := co.Value()
+			pkScript := co.PkScript()
+			txOut := NewLitecoinCoinbaseTxOut(value, pkScript)
+			coinbaseTx.AddTxOut(txOut.TxOut)
+		}
 	}
 
 	return coinbaseTx
@@ -250,6 +252,17 @@ func (lct *LitecoinTxWrapper) pkScript() []byte {
 		return nil
 	}
 	return lct.MsgTx.TxOut[0].PkScript
+}
+
+func (lct *LitecoinTxWrapper) txOut() []*AuxPowCoinbaseOut {
+	if lct.MsgTx == nil {
+		return nil
+	}
+	txOuts := make([]*AuxPowCoinbaseOut, 0, len(lct.MsgTx.TxOut))
+	for _, txOut := range lct.MsgTx.TxOut {
+		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewLitecoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
+	}
+	return txOuts
 }
 
 // CoinbaseTxOut functions

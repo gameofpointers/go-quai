@@ -17,7 +17,7 @@ func testAuxTemplate() *AuxTemplate {
 	copy(prevHash[:], bytes.Repeat([]byte{0x11}, 32))
 
 	// Create wire-encoded TxOut for coinbaseOut
-	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x76, 0xa9, 0x14})
+	coinbaseOut := []*AuxPowCoinbaseOut{NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x76, 0xa9, 0x14})}
 
 	template := &AuxTemplate{}
 	template.SetPowID(Kawpow)
@@ -174,7 +174,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{0x22}, 32))
 
-	coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x51}) // OP_TRUE
+	coinbaseOut := []*AuxPowCoinbaseOut{NewAuxPowCoinbaseOut(Kawpow, 625000000, []byte{0x51})} // OP_TRUE
 
 	original := &AuxTemplate{}
 	original.SetPowID(Kawpow)
