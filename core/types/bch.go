@@ -194,13 +194,11 @@ func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbas
 	})
 
 	// Add the coinbase output
-	if coinbaseOut != nil {
-		for _, co := range coinbaseOut {
-			value := co.Value()
-			pkScript := co.PkScript()
-			txOut := NewBitcoinCashCoinbaseTxOut(value, pkScript)
-			coinbaseTx.AddTxOut(txOut.TxOut)
-		}
+	for _, co := range coinbaseOut {
+		value := co.Value()
+		pkScript := co.PkScript()
+		txOut := NewBitcoinCashCoinbaseTxOut(value, pkScript)
+		coinbaseTx.AddTxOut(txOut.TxOut)
 	}
 
 	return coinbaseTx
