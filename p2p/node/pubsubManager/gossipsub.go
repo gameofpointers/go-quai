@@ -422,6 +422,12 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 				// Check if satisfies workShareTarget
 				if powHashBigInt.Cmp(workShareTarget) > 0 {
+					backend.Logger().WithFields(log.Fields{
+						"peer":            id,
+						"workShareTarget": workShareTarget,
+						"powHash":         powHash.Hex(),
+						"powHashBigInt":   powHashBigInt.String(),
+					}).Warn("Workshare hash exceeds target")
 					return pubsub.ValidationReject
 				}
 

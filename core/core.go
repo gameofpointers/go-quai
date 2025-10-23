@@ -2,7 +2,9 @@ package core
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/wire"
+	bchdwire "github.com/gcash/bchd/wire"
 	lru "github.com/hashicorp/golang-lru/v2"
 	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -573,59 +577,337 @@ func (c *Core) ReceiveMinedHeader(workObject *types.WorkObject) (*types.WorkObje
 }
 
 func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
-	const ravencoinHeaderSize = 120
+	const (
+		bitcoinHeaderSize   = 80
+		ravencoinHeaderSize = 120
+		minPayloadSize      = bitcoinHeaderSize
+	)
 
-	log.Global.Info("SubmitBlock called with bytes", raw)
+	log.Global.Info("SubmitBlock called", "bytes", len(raw))
 
-	if len(raw) <= ravencoinHeaderSize {
-		return nil, errors.New("submitBlock payload too short")
+	if len(raw) < minPayloadSize {
+		return nil, fmt.Errorf("submitBlock payload too short: %d bytes (minimum %d)", len(raw), minPayloadSize)
 	}
 
 	data := []byte(raw)
-	rvnHeaderBytes := data[:ravencoinHeaderSize]
-
-	ravencoinHeader, err := types.DecodeRavencoinHeader(rvnHeaderBytes)
-	if err != nil {
-		return nil, fmt.Errorf("decode ravencoin header: %w", err)
-	}
-
-	auxHeader := types.NewAuxPowHeader(ravencoinHeader)
-
-	extra := data[ravencoinHeaderSize:]
-
-	auxCoinbaseTx := &types.AuxPowTx{}
-	auxCoinbaseTx.DeserializeNoWitness(bytes.NewReader(extra))
-
-	sealHash, err := types.ExtractSealHashFromCoinbase(auxCoinbaseTx.ScriptSig())
-	if err != nil {
-		return nil, err
-	}
 
 	c.logger.WithFields(log.Fields{
-		"height":     ravencoinHeader.Height,
-		"nonce":      ravencoinHeader.Nonce64,
-		"mixHash":    ravencoinHeader.MixHash.Hex(),
-		"headerHash": ravencoinHeader.GetKAWPOWHeaderHash().Hex(),
-		"seal":       sealHash.Hex(),
-	}).Info("Received mined KawPow block")
+		"data": hex.EncodeToString(data),
+	}).Info("SubmitBlock data")
 
-	// get the pending block body
+	// Determine block type based on header size
+	// Try SHA/Bitcoin (80 bytes) first, then fall back to KAWPOW (120 bytes)
+	// This is because DecodeRavencoinHeader can successfully parse the first 120 bytes
+	// of a SHA block, leading to false positives.
+	var (
+		auxHeader *types.AuxPowHeader
+		sealHash  common.Hash
+		powType   types.PowID
+		err       error
+	)
+
+	var coinbaseTx *types.AuxPowTx // Store the parsed coinbase transaction
+
+	// Try SHA256d/Bitcoin format (80 byte header) FIRST
+	if len(data) >= bitcoinHeaderSize {
+		shaHeaderBytes := data[:bitcoinHeaderSize]
+		// Decode using btcd wire protocol
+		shaHeader := &bchdwire.BlockHeader{}
+		shaErr := shaHeader.Deserialize(bytes.NewReader(shaHeaderBytes))
+		if shaErr == nil {
+			// Successfully decoded as Bitcoin - parse coinbase to extract seal hash
+			extra := data[bitcoinHeaderSize:]
+
+			if len(extra) == 0 {
+				c.logger.Error("No transaction data after SHA256d header - must include coinbase transaction")
+				return nil, errors.New("SHA256d block submission must include coinbase transaction after 80-byte header")
+			}
+
+			// Parse the var_int transaction count (Bitcoin block format)
+			reader := bytes.NewReader(extra)
+			txCount, err := wire.ReadVarInt(reader, 0)
+			if err != nil {
+				c.logger.WithField("error", err.Error()).Error("Failed to read SHA256d transaction count")
+				return nil, errors.New("failed to read SHA256d transaction count: " + err.Error())
+			}
+			if txCount == 0 {
+				c.logger.Error("SHA256d block has zero transactions")
+				return nil, errors.New("SHA256d block must have at least one transaction (coinbase)")
+			}
+
+			// Now deserialize the first transaction (coinbase)
+			// Create an AuxPowTx with correct type (Bitcoin) for deserialization
+			coinbaseTx = types.NewAuxPowCoinbaseTx(types.SHA_BCH, 0, nil, common.Hash{})
+			txErr := coinbaseTx.DeserializeNoWitness(reader)
+			if txErr != nil {
+				c.logger.WithFields(log.Fields{
+					"type":  "SHA256d",
+					"error": txErr.Error(),
+				}).Error("Failed to decode as SHA256d transaction, will try KAWPOW")
+				// Don't return error yet - might be KAWPOW
+				coinbaseTx = nil
+			} else {
+				// Extract seal hash from the parsed transaction
+				sealHash, err = types.ExtractSealHashFromCoinbase(coinbaseTx.ScriptSig())
+				if err != nil {
+					c.logger.WithFields(log.Fields{
+						"type":  "SHA256d",
+						"error": err.Error(),
+					}).Error("Failed to extract seal hash from SHA256d block, will try KAWPOW")
+					coinbaseTx = nil
+				} else {
+					// Successfully parsed as SHA256d
+					// Create wrapped Bitcoin header
+					btcHeaderWrapper := &types.BitcoinCashHeaderWrapper{BlockHeader: shaHeader}
+					auxHeader = types.NewAuxPowHeader(btcHeaderWrapper)
+					powType = types.SHA_BCH
+
+					c.logger.WithFields(log.Fields{
+						"type":       "SHA256d",
+						"version":    shaHeader.Version,
+						"nonce":      shaHeader.Nonce,
+						"bits":       shaHeader.Bits,
+						"headerHash": shaHeader.BlockHash().String(),
+						"seal":       sealHash.Hex(),
+					}).Info("Received mined SHA256d block")
+				}
+			}
+		}
+	}
+
+	// If SHA256d parsing failed, try KAWPOW/Ravencoin format (120 byte header)
+	if auxHeader == nil && len(data) >= ravencoinHeaderSize {
+		rvnHeaderBytes := data[:ravencoinHeaderSize]
+		ravencoinHeader, rvnErr := types.DecodeRavencoinHeader(rvnHeaderBytes)
+		if rvnErr == nil {
+			// Successfully decoded as Ravencoin - parse coinbase to extract seal hash
+			extra := data[ravencoinHeaderSize:]
+			c.logger.WithFields(log.Fields{
+				"totalBytes":  len(data),
+				"headerBytes": ravencoinHeaderSize,
+				"extraBytes":  len(extra),
+			}).Info("Parsing KAWPOW block")
+
+			if len(extra) == 0 {
+				c.logger.Error("No transaction data after KAWPOW header - stratum proxy must include coinbase transaction")
+				return nil, errors.New("KAWPOW block submission must include coinbase transaction after 120-byte header")
+			}
+
+			// Parse the var_int transaction count (Bitcoin block format)
+			reader := bytes.NewReader(extra)
+			txCount, err := wire.ReadVarInt(reader, 0) // 0 = protocol version (any version works for var_int)
+			if err != nil {
+				c.logger.WithField("error", err.Error()).Error("Failed to read transaction count")
+				return nil, errors.New("failed to read transaction count: " + err.Error())
+			}
+			if txCount == 0 {
+				c.logger.Error("KAWPOW block has zero transactions")
+				return nil, errors.New("KAWPOW block must have at least one transaction (coinbase)")
+			}
+
+			// Now deserialize the first transaction (coinbase)
+			// Create an AuxPowTx for Ravencoin and deserialize into it
+			coinbaseTx = types.NewAuxPowCoinbaseTx(types.Kawpow, 0, nil, common.Hash{}) // Temporary, will be replaced
+			txErr := coinbaseTx.DeserializeNoWitness(reader)
+			if txErr != nil {
+				c.logger.WithFields(log.Fields{
+					"type":  "KAWPOW",
+					"error": txErr.Error(),
+				}).Error("Failed to decode KAWPOW transaction")
+				return nil, errors.New("failed to decode KAWPOW transaction: " + txErr.Error())
+			}
+
+			// Extract seal hash from the parsed transaction
+			sealHash, err = types.ExtractSealHashFromCoinbase(coinbaseTx.ScriptSig())
+			if err != nil {
+				c.logger.WithFields(log.Fields{
+					"type":  "KAWPOW",
+					"error": err.Error(),
+				}).Error("Failed to extract seal hash from KAWPOW block")
+				return nil, errors.New("failed to extract seal hash from KAWPOW block: " + err.Error())
+			}
+
+			// Create wrapped header for the newer AuxPow API
+			auxHeader = types.NewAuxPowHeader(ravencoinHeader)
+			powType = types.Kawpow
+
+			c.logger.WithFields(log.Fields{
+				"type":       "KAWPOW",
+				"height":     ravencoinHeader.Height,
+				"nonce":      ravencoinHeader.Nonce64,
+				"mixHash":    ravencoinHeader.MixHash.Hex(),
+				"headerHash": ravencoinHeader.GetKAWPOWHeaderHash().Hex(),
+				"seal":       sealHash.Hex(),
+			}).Info("Received mined KAWPOW block")
+		} else {
+			c.logger.WithFields(log.Fields{
+				"type":  "KAWPOW",
+				"error": rvnErr.Error(),
+			}).Error("Failed to decode KAWPOW block")
+			return nil, errors.New("failed to decode KAWPOW block: " + rvnErr.Error())
+		}
+	}
+
+	// If both formats failed, return error
+	if auxHeader == nil {
+		return nil, errors.New("failed to decode block: not a valid KAWPOW (120 byte) or SHA256d (80 byte) header")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract seal hash: %w", err)
+	}
+
+	// Get the pending block body using the seal hash
 	workObject := c.sl.GetPendingBlockBody(sealHash)
 	if workObject == nil {
-		return nil, fmt.Errorf("could not get the pending block body for this seal hash %v", sealHash)
+		return nil, fmt.Errorf("could not get the pending block body for seal hash %s", sealHash.Hex())
 	}
 
 	workObjectCopy := types.CopyWorkObject(workObject)
 
-	// Set the Ravencoin header and coinbase transaction
+	// Verify the AuxPow type matches what we decoded
+	if workObjectCopy.AuxPow() != nil && workObjectCopy.AuxPow().PowID() != powType {
+		c.logger.WithFields(log.Fields{
+			"expected": workObjectCopy.AuxPow().PowID(),
+			"received": powType,
+		}).Warn("Block PoW type mismatch - updating AuxPow")
+		workObjectCopy.AuxPow().SetPowID(powType)
+	}
+
+	// Update the header and transaction in the AuxPow with the mined data
+	// Note: PowID and MerkleBranch are already correct from the cached pending block body
 	workObjectCopy.AuxPow().SetHeader(auxHeader)
-	workObjectCopy.AuxPow().SetTransaction(auxCoinbaseTx)
+	workObjectCopy.AuxPow().SetTransaction(coinbaseTx)
 
 	c.logger.WithFields(log.Fields{
-		"raven header bytes": len(rvnHeaderBytes),
-	}).Info("Received mined KawPow block")
+		"powType":  powType,
+		"sealHash": sealHash.Hex(),
+	}).Info("Block successfully submitted")
+
+	// Verify the proof of work before accepting the block
+	engine := c.sl.GetEngineForHeader(workObjectCopy.WorkObjectHeader())
+	if engine == nil {
+		return nil, errors.New("could not get consensus engine for block")
+	}
+
+	powHash, err := engine.VerifySeal(workObjectCopy.WorkObjectHeader())
+	if err != nil {
+		c.logger.WithFields(log.Fields{
+			"err":      err.Error(),
+			"powType":  powType,
+			"sealHash": sealHash.Hex(),
+		}).Error("Block failed PoW verification")
+		return nil, fmt.Errorf("block failed proof of work verification: %w", err)
+	}
+
+	c.logger.WithFields(log.Fields{
+		"powHash":  powHash.Hex(),
+		"powType":  powType,
+		"sealHash": sealHash.Hex(),
+	}).Info("Block passed PoW verification")
+
+	// Additional BCH-specific merkle root verification
+	if powType == types.SHA_BCH {
+		if err := c.VerifyBCHMerkleRoot(data, workObjectCopy.AuxPow().MerkleBranch()); err != nil {
+			c.logger.WithFields(log.Fields{
+				"err":      err.Error(),
+				"powType":  powType,
+				"sealHash": sealHash.Hex(),
+			}).Error("BCH block failed merkle root verification")
+			return nil, fmt.Errorf("BCH block failed merkle root verification: %w", err)
+		}
+		c.logger.Info("BCH block passed merkle root verification")
+	}
 
 	return workObjectCopy, nil
+}
+
+// verifyBCHMerkleRoot verifies the merkle root in a BCH block header matches the calculated merkle root
+// by using the coinbase transaction and the provided merkle branch.
+func (c *Core) VerifyBCHMerkleRoot(blockData []byte, merkleBranch [][]byte) error {
+	if len(blockData) < 80 {
+		return fmt.Errorf("block too short: %d bytes", len(blockData))
+	}
+
+	// Parse header (80 bytes)
+	headerBytes := blockData[:80]
+	merkleRootInHeader := headerBytes[36:68]
+
+	// Parse transactions (after 80-byte header)
+	txBytes := blockData[80:]
+	if len(txBytes) == 0 {
+		return errors.New("no transaction data after header")
+	}
+
+	// Read varint for tx count
+	txCount := uint64(txBytes[0])
+	if txCount == 0 {
+		return errors.New("block has zero transactions")
+	}
+
+	// Get the coinbase transaction (first transaction)
+	coinbaseTxBytes := txBytes[1:] // Skip the varint byte
+
+	// Calculate coinbase transaction hash (double SHA256)
+	hash1 := sha256.Sum256(coinbaseTxBytes)
+	coinbaseTxHash := sha256.Sum256(hash1[:])
+
+	// If only one transaction and no merkle branch, the coinbase hash IS the merkle root
+	if txCount == 1 && len(merkleBranch) == 0 {
+		if !bytes.Equal(merkleRootInHeader, coinbaseTxHash[:]) {
+			c.logger.WithFields(log.Fields{
+				"merkleRootInHeader": hex.EncodeToString(merkleRootInHeader),
+				"coinbaseTxHash":     hex.EncodeToString(coinbaseTxHash[:]),
+			}).Error("Merkle root mismatch in single-tx BCH block")
+			return errors.New("merkle root in header does not match coinbase transaction hash")
+		}
+		return nil
+	}
+
+	// Use the merkle branch to calculate the merkle root
+	// Start with the coinbase transaction hash
+	currentHash := coinbaseTxHash[:]
+
+	// Walk up the merkle tree using the branch
+	for i, branchHash := range merkleBranch {
+		// Concatenate current hash with branch hash
+		// In Bitcoin/BCH, the coinbase is always at index 0, so it goes on the left
+		combined := make([]byte, 64)
+		copy(combined[:32], currentHash)
+		copy(combined[32:], branchHash)
+
+		// Double SHA256
+		firstHash := sha256.Sum256(combined)
+		secondHash := sha256.Sum256(firstHash[:])
+		currentHash = secondHash[:]
+
+		c.logger.WithFields(log.Fields{
+			"level":       i,
+			"branchHash":  hex.EncodeToString(branchHash),
+			"currentHash": hex.EncodeToString(currentHash),
+		}).Info("BCH merkle tree step")
+	}
+
+	// The final hash should match the merkle root in the header
+	if !bytes.Equal(merkleRootInHeader, currentHash) {
+		merkleBranch_str := make([]string, len(merkleBranch))
+		for i, hash := range merkleBranch {
+			merkleBranch_str[i] = hex.EncodeToString(hash[:])
+		}
+		c.logger.WithFields(log.Fields{
+			"merkleRootInHeader": hex.EncodeToString(merkleRootInHeader),
+			"calculatedRoot":     hex.EncodeToString(currentHash),
+			"merkleBranch":       merkleBranch_str,
+		}).Error("Merkle root mismatch after applying merkle branch")
+		return errors.New("merkle root in header does not match calculated root from merkle branch")
+	}
+
+	c.logger.WithFields(log.Fields{
+		"merkleRoot":         hex.EncodeToString(currentHash),
+		"merkleBranchLevels": len(merkleBranch),
+	}).Info("BCH merkle root verification successful")
+
+	return nil
 }
 
 func (c *Core) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Subscription {

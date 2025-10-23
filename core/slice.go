@@ -1044,7 +1044,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 
-				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash().Bytes())
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash())
 				merkleRoot := types.CalculateMerkleRoot(coinbaseTransaction, auxTemplate.MerkleBranch())
 
 				// Create a properly configured Ravencoin header for KAWPOW mining
@@ -1055,8 +1055,12 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
+
+				// Update the pending block body cache with the populated AuxPow
+				// This ensures SubmitBlock can retrieve the complete AuxPow including merkle branch
+				sl.miner.worker.AddPendingWorkObjectBody(phCopy)
 			} else {
-				return nil, errors.New("no auxpow template available for KAWPOW mining")
+				return nil, errors.New("no auxpow template available for " + powId.String() + " mining")
 			}
 		default:
 			return nil, errors.New("pending header requested for unknown pow id")

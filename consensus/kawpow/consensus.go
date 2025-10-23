@@ -662,11 +662,11 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 	nonce64 := ravencoinHeader.Nonce64()
 
 	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
-	kawpowHeaderHash := ravencoinHeader.SealHash()
+	kawpowHeaderHash := ravencoinHeader.SealHash() // Already in little endian to be directly used for the mix hash calculation
 	blockNumber := uint64(ravencoinHeader.Height())
 
-	// Create a unique cache key using kawpowHeaderHash + nonce
-	// This ensures different nonces for the same block template have separate cache entries
+	// Create a unique cache key using the RVN-compatible header hash + nonce so
+	// results are cached consistently with the actual kernel input.
 	nonceBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(nonceBytes, nonce64)
 	cacheKey := crypto.Keccak256Hash(kawpowHeaderHash.Bytes(), nonceBytes)
@@ -685,10 +685,12 @@ func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, 
 		ethashCache.cDag = cDag
 	}
 
-	// Use the same kawpowLight function as the sealer
+	// Use the same kawpowLight function as the sealer, but feed the
+	// RVN-compatible (byte-reversed) header hash bytes.
 	size := datasetSize(blockNumber)
 	digest, result := kawpowLight(size, ethashCache.cache, kawpowHeaderHash.Bytes(), nonce64, blockNumber, ethashCache.cDag)
-	mixHash = common.BytesToHash(digest)
+	// MixHash stored in the header should be little endian, so reverse it back to little endian
+	mixHash = common.BytesToHash(reverseBytes32(digest))
 	powHash = common.BytesToHash(result)
 
 	// Cache the result with the unique key
@@ -743,11 +745,16 @@ func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Has
 
 	ravencoinHeader := auxPow.Header()
 
-	// Verify the calculated values against the ones provided in the Ravencoin header
-	if !bytes.Equal(ravencoinHeader.MixHash().Bytes(), mixHash.Bytes()) {
+	// Verify the calculated mix against the one provided in the Ravencoin header.
+	// The kawpowLight function returns mixHash in little-endian format (KAWPOW algorithm spec).
+	// The stratum proxy reverses the mixHash bytes before sending (stratum-converter.py:394).
+	// DecodeRavencoinHeader() reverses the bytes back when reading (ravencoin.go:241-244),
+	// so both the calculated and header mixHash are now in the same format (little-endian).
+	headerMix := ravencoinHeader.MixHash().Bytes()
+	if !bytes.Equal(headerMix, mixHash.Bytes()) {
 		kawpow.logger.WithFields(log.Fields{
-			"receivedMixHash":   ravencoinHeader.MixHash().Hex(),
-			"calculatedMixHash": mixHash.Hex(),
+			"receivedMixHash":   fmt.Sprintf("%x", headerMix),
+			"calculatedMixHash": fmt.Sprintf("%x", mixHash.Bytes()),
 		}).Error("MixHash mismatch in ComputePowHash")
 		return common.Hash{}, consensus.ErrInvalidMixHash
 	}

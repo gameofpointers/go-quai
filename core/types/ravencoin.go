@@ -142,7 +142,7 @@ func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	first := sha256.Sum256(data)
 	second := sha256.Sum256(first[:])
 
-	return common.BytesToHash(second[:])
+	return common.BytesToHash(reverseBytesCopy(second[:]))
 }
 
 // EncodeBinary encodes the header to Ravencoin's binary format
@@ -383,11 +383,11 @@ type RavencoinTx struct {
 	*btcdwire.MsgTx
 }
 
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *RavencoinTx {
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *RavencoinTx {
 	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
 
-	// Create the coinbase input
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
+	// Create the coinbase input with seal hash
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash)
 	coinbaseTx.AddTxIn(&btcdwire.TxIn{
 		PreviousOutPoint: btcdwire.OutPoint{
 			Hash:  btchash.Hash{}, // Coinbase has no previous output
@@ -459,7 +459,24 @@ func (rct *RavencoinTx) txOut() []*AuxPowCoinbaseOut {
 	return txOuts
 }
 
+func (rct *RavencoinTx) Serialize(w io.Writer) error {
+	if rct.MsgTx == nil {
+		return fmt.Errorf("cannot serialize: MsgTx is nil")
+	}
+	return rct.MsgTx.Serialize(w)
+}
+
+func (rct *RavencoinTx) Deserialize(r io.Reader) error {
+	if rct.MsgTx == nil {
+		return fmt.Errorf("cannot deserialize: MsgTx is nil")
+	}
+	return rct.MsgTx.Deserialize(r)
+}
+
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
+	if rct.MsgTx == nil {
+		return fmt.Errorf("cannot deserialize: MsgTx is nil")
+	}
 	return rct.MsgTx.DeserializeNoWitness(r)
 }
 
