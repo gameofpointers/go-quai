@@ -187,10 +187,10 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 
 // CoinbaseTx functions
 
-func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *LitecoinTxWrapper {
+func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *LitecoinTxWrapper {
 	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
-	// Create the coinbase input with height in scriptSig
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, extraData)
+	// Create the coinbase input with seal hash in scriptSig
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash)
 	coinbaseTx.AddTxIn(&ltcdwire.TxIn{
 		PreviousOutPoint: ltcdwire.OutPoint{
 			Hash:  ltchash.Hash{}, // Coinbase has no previous output
@@ -261,6 +261,27 @@ func (lct *LitecoinTxWrapper) txOut() []*AuxPowCoinbaseOut {
 		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewLitecoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
 	}
 	return txOuts
+}
+
+func (lct *LitecoinTxWrapper) Serialize(w io.Writer) error {
+	if lct.MsgTx == nil {
+		return fmt.Errorf("cannot serialize: MsgTx is nil")
+	}
+	return lct.MsgTx.Serialize(w)
+}
+
+func (lct *LitecoinTxWrapper) Deserialize(r io.Reader) error {
+	if lct.MsgTx == nil {
+		return fmt.Errorf("cannot deserialize: MsgTx is nil")
+	}
+	return lct.MsgTx.Deserialize(r)
+}
+
+func (lct *LitecoinTxWrapper) DeserializeNoWitness(r io.Reader) error {
+	if lct.MsgTx == nil {
+		return fmt.Errorf("cannot deserialize: MsgTx is nil")
+	}
+	return lct.MsgTx.DeserializeNoWitness(r)
 }
 
 // CoinbaseTxOut functions
