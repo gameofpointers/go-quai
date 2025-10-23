@@ -398,13 +398,11 @@ func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, ext
 	})
 
 	// Add the coinbase output
-	if coinbaseOut != nil {
-		for _, co := range coinbaseOut {
-			value := co.Value()
-			pkScript := co.PkScript()
-			txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
-			coinbaseTx.AddTxOut(txOut.TxOut)
-		}
+	for _, co := range coinbaseOut {
+		value := co.Value()
+		pkScript := co.PkScript()
+		txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
+		coinbaseTx.AddTxOut(txOut.TxOut)
 	}
 
 	return coinbaseTx

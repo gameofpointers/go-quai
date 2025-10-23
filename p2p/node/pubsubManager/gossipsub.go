@@ -393,7 +393,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					shareDiff := block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
-					if shareDiff.Cmp(thresholdShareDiff) > 0 {
+					if shareDiff.Cmp(thresholdShareDiff) < 0 {
 						backend.Logger().WithFields(log.Fields{
 							"peer":               id,
 							"workshareDiff":      shareDiff,
@@ -407,7 +407,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					shareDiff := block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
-					if shareDiff.Cmp(thresholdShareDiff) > 0 {
+					if shareDiff.Cmp(thresholdShareDiff) < 0 {
 						backend.Logger().WithFields(log.Fields{
 							"peer":               id,
 							"workshareDiff":      shareDiff,
