@@ -383,7 +383,7 @@ type RavencoinTx struct {
 	*btcdwire.MsgTx
 }
 
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *RavencoinTx {
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *RavencoinTx {
 	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
 
 	// Create the coinbase input
@@ -399,10 +399,12 @@ func NewRavencoinCoinbaseTx(height uint32, coinbaseOut *AuxPowCoinbaseOut, extra
 
 	// Add the coinbase output
 	if coinbaseOut != nil {
-		value := coinbaseOut.Value()
-		pkScript := coinbaseOut.PkScript()
-		txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+		for _, co := range coinbaseOut {
+			value := co.Value()
+			pkScript := co.PkScript()
+			txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
+			coinbaseTx.AddTxOut(txOut.TxOut)
+		}
 	}
 
 	return coinbaseTx
@@ -446,6 +448,17 @@ func (rct *RavencoinTx) pkScript() []byte {
 		return nil
 	}
 	return rct.MsgTx.TxOut[0].PkScript
+}
+
+func (rct *RavencoinTx) txOut() []*AuxPowCoinbaseOut {
+	if rct.MsgTx == nil {
+		return nil
+	}
+	txOuts := make([]*AuxPowCoinbaseOut, 0, len(rct.MsgTx.TxOut))
+	for _, txOut := range rct.MsgTx.TxOut {
+		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewRavencoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
+	}
+	return txOuts
 }
 
 func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {

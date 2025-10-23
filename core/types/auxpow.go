@@ -89,7 +89,7 @@ type AuxTemplate struct {
 	height    uint32    // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
 	// CoinbaseOut is the coinbase payout
-	coinbaseOut *AuxPowCoinbaseOut // full coinbase output script (scriptPubKey)
+	coinbaseOut []*AuxPowCoinbaseOut // full coinbase output script (scriptPubKey)
 
 	// Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
 	merkleBranch [][]byte // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
@@ -111,7 +111,7 @@ func EmptyAuxTemplate() *AuxTemplate {
 		nBits:        0,
 		nTimeMask:    0,
 		height:       0,
-		coinbaseOut:  NewAuxPowCoinbaseOut(Kawpow, 0, nil),
+		coinbaseOut:  []*AuxPowCoinbaseOut{NewAuxPowCoinbaseOut(Kawpow, 0, nil)},
 		merkleBranch: [][]byte{},
 		sigs:         []byte{},
 	}
@@ -179,28 +179,28 @@ func RPCMarshalAuxPow(ap *AuxPow) map[string]interface{} {
 }
 
 // Getters for AuxTemplate fields
-func (at *AuxTemplate) PowID() PowID                    { return at.powID }
-func (at *AuxTemplate) PrevHash() [32]byte              { return at.prevHash }
-func (at *AuxTemplate) AuxPow2() []byte                 { return at.auxPow2 }
-func (at *AuxTemplate) Version() uint32                 { return at.version }
-func (at *AuxTemplate) NBits() uint32                   { return at.nBits }
-func (at *AuxTemplate) NTimeMask() NTimeMask            { return at.nTimeMask }
-func (at *AuxTemplate) Height() uint32                  { return at.height }
-func (at *AuxTemplate) CoinbaseOut() *AuxPowCoinbaseOut { return at.coinbaseOut }
-func (at *AuxTemplate) MerkleBranch() [][]byte          { return at.merkleBranch }
-func (at *AuxTemplate) Sigs() []byte                    { return at.sigs }
+func (at *AuxTemplate) PowID() PowID                      { return at.powID }
+func (at *AuxTemplate) PrevHash() [32]byte                { return at.prevHash }
+func (at *AuxTemplate) AuxPow2() []byte                   { return at.auxPow2 }
+func (at *AuxTemplate) Version() uint32                   { return at.version }
+func (at *AuxTemplate) NBits() uint32                     { return at.nBits }
+func (at *AuxTemplate) NTimeMask() NTimeMask              { return at.nTimeMask }
+func (at *AuxTemplate) Height() uint32                    { return at.height }
+func (at *AuxTemplate) CoinbaseOut() []*AuxPowCoinbaseOut { return at.coinbaseOut }
+func (at *AuxTemplate) MerkleBranch() [][]byte            { return at.merkleBranch }
+func (at *AuxTemplate) Sigs() []byte                      { return at.sigs }
 
 // Setters for AuxTemplate fields
-func (at *AuxTemplate) SetPowID(id PowID)                     { at.powID = id }
-func (at *AuxTemplate) SetPrevHash(hash [32]byte)             { at.prevHash = hash }
-func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)             { at.auxPow2 = auxPow2 }
-func (at *AuxTemplate) SetVersion(v uint32)                   { at.version = v }
-func (at *AuxTemplate) SetNBits(bits uint32)                  { at.nBits = bits }
-func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)           { at.nTimeMask = mask }
-func (at *AuxTemplate) SetHeight(h uint32)                    { at.height = h }
-func (at *AuxTemplate) SetCoinbaseOut(out *AuxPowCoinbaseOut) { at.coinbaseOut = out }
-func (at *AuxTemplate) SetMerkleBranch(branch [][]byte)       { at.merkleBranch = branch }
-func (at *AuxTemplate) SetSigs(sigs []byte)                   { at.sigs = sigs }
+func (at *AuxTemplate) SetPowID(id PowID)                       { at.powID = id }
+func (at *AuxTemplate) SetPrevHash(hash [32]byte)               { at.prevHash = hash }
+func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)               { at.auxPow2 = auxPow2 }
+func (at *AuxTemplate) SetVersion(v uint32)                     { at.version = v }
+func (at *AuxTemplate) SetNBits(bits uint32)                    { at.nBits = bits }
+func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)             { at.nTimeMask = mask }
+func (at *AuxTemplate) SetHeight(h uint32)                      { at.height = h }
+func (at *AuxTemplate) SetCoinbaseOut(out []*AuxPowCoinbaseOut) { at.coinbaseOut = out }
+func (at *AuxTemplate) SetMerkleBranch(branch [][]byte)         { at.merkleBranch = branch }
+func (at *AuxTemplate) SetSigs(sigs []byte)                     { at.sigs = sigs }
 
 // ProtoEncode converts AuxTemplate to its protobuf representation
 func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
@@ -218,6 +218,12 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 	merkleBranch := make([][]byte, len(at.merkleBranch))
 	copy(merkleBranch, at.merkleBranch)
 
+	protoCoinbaseOuts := make([]*ProtoCoinbaseTxOut, len(at.coinbaseOut))
+	for i, out := range at.coinbaseOut {
+		if out != nil {
+			protoCoinbaseOuts[i] = out.ProtoEncode()
+		}
+	}
 	return &ProtoAuxTemplate{
 		ChainId:      &powID,
 		PrevHash:     at.prevHash[:],
@@ -226,7 +232,7 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 		Nbits:        &nbits,
 		NtimeMask:    &ntimeMask,
 		Height:       &height,
-		CoinbaseOut:  at.coinbaseOut.ProtoEncode(),
+		CoinbaseOut:  protoCoinbaseOuts,
 		MerkleBranch: merkleBranch,
 		Sigs:         at.Sigs(),
 	}
@@ -252,10 +258,13 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 	at.height = data.GetHeight()
 
 	var err error
-	at.coinbaseOut = &AuxPowCoinbaseOut{}
-	err = at.coinbaseOut.ProtoDecode(data.GetCoinbaseOut(), at.powID)
-	if err != nil {
-		return err
+	at.coinbaseOut = make([]*AuxPowCoinbaseOut, len(data.GetCoinbaseOut()))
+	for i := range data.GetCoinbaseOut() {
+		at.coinbaseOut[i] = &AuxPowCoinbaseOut{}
+		err = at.coinbaseOut[i].ProtoDecode(data.GetCoinbaseOut()[i], at.powID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Copy merkle branch
@@ -560,6 +569,7 @@ type AuxPowTxData interface {
 	DeserializeNoWitness(r io.Reader) error
 	Copy() AuxPowTxData
 	txHash() [32]byte
+	txOut() []*AuxPowCoinbaseOut
 
 	scriptSig() []byte
 	value() int64
@@ -567,7 +577,7 @@ type AuxPowTxData interface {
 	pkScript() []byte
 }
 
-func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *AuxPowTx {
+func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *AuxPowTx {
 	switch powId {
 	case Kawpow:
 		return &AuxPowTx{inner: NewRavencoinCoinbaseTx(height, coinbaseOut, extraData)}
@@ -652,6 +662,13 @@ func (ac *AuxPowTx) PkScript() []byte {
 		return nil
 	}
 	return ac.inner.pkScript()
+}
+
+func (ac *AuxPowTx) TxOut() []*AuxPowCoinbaseOut {
+	if ac.inner == nil {
+		return nil
+	}
+	return ac.inner.txOut()
 }
 
 type AuxPowCoinbaseOut struct {
@@ -869,7 +886,7 @@ func (ap *AuxPow) ConvertToTemplate() *AuxTemplate {
 	auxTemplate.SetNBits(ap.header.Bits())
 	auxTemplate.SetNTimeMask(NTimeMask(ap.header.Timestamp()))
 	auxTemplate.SetHeight(ap.header.Height())
-	auxTemplate.SetCoinbaseOut(NewAuxPowCoinbaseOut(ap.powID, ap.transaction.Value(), ap.transaction.PkScript()))
+	auxTemplate.SetCoinbaseOut(ap.transaction.TxOut())
 	auxTemplate.SetMerkleBranch(ap.merkleBranch)
 	auxTemplate.SetSigs(ap.signature)
 	return auxTemplate

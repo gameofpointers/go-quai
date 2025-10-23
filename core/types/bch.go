@@ -179,7 +179,7 @@ func (bch *BitcoinCashHeaderWrapper) Copy() AuxHeaderData {
 	return &BitcoinCashHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
-func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinCashTxWrapper {
+func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *BitcoinCashTxWrapper {
 	coinbaseTx := &BitcoinCashTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
 
 	// Create the coinbase input with height in scriptSig
@@ -195,10 +195,12 @@ func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseO
 
 	// Add the coinbase output
 	if coinbaseOut != nil {
-		value := coinbaseOut.Value()
-		pkScript := coinbaseOut.PkScript()
-		txOut := NewBitcoinCashCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+		for _, co := range coinbaseOut {
+			value := co.Value()
+			pkScript := co.PkScript()
+			txOut := NewBitcoinCashCoinbaseTxOut(value, pkScript)
+			coinbaseTx.AddTxOut(txOut.TxOut)
+		}
 	}
 
 	return coinbaseTx
@@ -242,6 +244,17 @@ func (bct *BitcoinCashTxWrapper) pkScript() []byte {
 		return nil
 	}
 	return bct.MsgTx.TxOut[0].PkScript
+}
+
+func (bct *BitcoinCashTxWrapper) txOut() []*AuxPowCoinbaseOut {
+	if bct.MsgTx == nil {
+		return nil
+	}
+	txOuts := make([]*AuxPowCoinbaseOut, 0, len(bct.MsgTx.TxOut))
+	for _, txOut := range bct.MsgTx.TxOut {
+		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewBitcoinCashCoinbaseTxOut(txOut.Value, txOut.PkScript)})
+	}
+	return txOuts
 }
 
 func (bct *BitcoinCashTxWrapper) DeserializeNoWitness(r io.Reader) error {

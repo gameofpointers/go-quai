@@ -184,7 +184,7 @@ func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
 }
 
-func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, extraData []byte) *BitcoinTxWrapper {
+func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, extraData []byte) *BitcoinTxWrapper {
 	coinbaseTx := &BitcoinTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
 
 	// Create the coinbase input with height in scriptSig
@@ -200,10 +200,12 @@ func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut *AuxPowCoinbaseOut, 
 
 	// Add the coinbase output
 	if coinbaseOut != nil {
-		value := coinbaseOut.Value()
-		pkScript := coinbaseOut.PkScript()
-		txOut := NewBitcoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+		for _, co := range coinbaseOut {
+			value := co.Value()
+			pkScript := co.PkScript()
+			txOut := NewBitcoinCoinbaseTxOut(value, pkScript)
+			coinbaseTx.AddTxOut(txOut.TxOut)
+		}
 	}
 
 	return coinbaseTx
@@ -218,6 +220,17 @@ func (btt *BitcoinTxWrapper) scriptSig() []byte {
 		return nil
 	}
 	return btt.MsgTx.TxIn[0].SignatureScript
+}
+
+func (btt *BitcoinTxWrapper) txOut() []*AuxPowCoinbaseOut {
+	if btt.MsgTx == nil {
+		return nil
+	}
+	txOuts := make([]*AuxPowCoinbaseOut, 0, len(btt.MsgTx.TxOut))
+	for _, txOut := range btt.MsgTx.TxOut {
+		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewBitcoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
+	}
+	return txOuts
 }
 
 func (btt *BitcoinTxWrapper) value() int64 {
