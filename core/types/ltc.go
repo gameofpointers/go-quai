@@ -238,6 +238,7 @@ func (lct *LitecoinTxWrapper) version() int32 {
 	return lct.MsgTx.Version
 }
 
+// txHash returns the little endian hash of the transaction
 func (lct *LitecoinTxWrapper) txHash() [32]byte {
 	if lct.MsgTx == nil {
 		return [32]byte{}
