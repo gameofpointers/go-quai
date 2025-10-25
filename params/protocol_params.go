@@ -272,7 +272,7 @@ var (
 
 	// PoW share difficulty parameters
 	InitialShaDiff    = big.NewInt(10000000) // Minimum difficulty for a SHA work share
-	InitialScryptDiff = big.NewInt(10000)    // Minimum difficulty for a Scrypt work share
+	InitialScryptDiff = big.NewInt(1000)     // Minimum difficulty for a Scrypt work share
 	MinPowDivisor     = big.NewInt(2)        // Minimum multiple of the target difficulty that a share must meet to be valid
 
 	// Target number of shares per algo times 2^32

@@ -368,7 +368,7 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCou
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
 
 	// Calculate the new workshares
-	newAverageShares = new(big.Int).Mul(numShares, params.WorkShareEmaBlocks)
+	newAverageShares = new(big.Int).Mul(shares.Count(), params.WorkShareEmaBlocks)
 	newAverageShares = newAverageShares.Add(newAverageShares, numShares)
 	newAverageShares = newAverageShares.Div(newAverageShares, params.WorkShareEmaBlocks)
 
