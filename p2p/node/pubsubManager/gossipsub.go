@@ -386,9 +386,10 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					block.WorkObject.AuxPow().PowID() == types.SHA_BTC ||
 					block.WorkObject.AuxPow().PowID() == types.Scrypt) {
 
-				workShareTarget := new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 				var powHash common.Hash
+				var workShareTarget *big.Int
 				if block.WorkObject.AuxPow().PowID() == types.Scrypt {
+					workShareTarget = new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
 					powHash = block.WorkObject.AuxPow().Header().PowHash()
 					shareDiff := block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
@@ -403,6 +404,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 						return pubsub.ValidationReject
 					}
 				} else {
+					workShareTarget = new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 					powHash = block.WorkObject.AuxPow().Header().PowHash()
 					shareDiff := block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
