@@ -250,6 +250,19 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		if uncle.NumberU64() < 2*params.BlocksPerMonth && uncle.Lock() != 0 {
 			return fmt.Errorf("workshare lock byte: %v is not valid: it has to be %v for the first two months", uncle.Lock(), 0)
 		}
+
+		if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && uncle.AuxPow() != nil {
+			// Verify the merkle root as well
+			expectedMerkleRoot := types.CalculateMerkleRoot(uncle.AuxPow().Transaction(), uncle.AuxPow().MerkleBranch())
+			if uncle.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
+				return errors.New("invalid merkle root in auxpow")
+			}
+
+			if !uncle.AuxPow().ConvertToTemplate().VerifySignature() {
+				return errors.New("invalid auxpow signature")
+			}
+		}
+
 		// Verify the block's difficulty based on its timestamp and parent's difficulty
 		// difficulty adjustment can only be checked in zone
 		if nodeCtx == common.ZONE_CTX {
