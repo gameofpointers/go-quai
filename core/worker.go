@@ -2477,12 +2477,19 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 		return nil
 	}
 
+	var powIdString string
+	if workShare.AuxPow() != nil {
+		powIdString = workShare.AuxPow().PowID().String()
+	} else {
+		powIdString = "progpow"
+	}
+
 	validity := w.hc.UncleWorkShareClassification(workShare)
 	if validity == types.Invalid {
 		w.logger.WithFields(log.Fields{
 			"hash":     workShare.Hash().Hex(),
 			"number":   workShare.NumberU64(),
-			"powType":  workShare.AuxPow().PowID(),
+			"powType":  powIdString,
 			"validity": validity,
 		}).Warn("Workshare failed validation - rejecting")
 		return errors.New("work share received from peer is not valid")
@@ -2497,7 +2504,7 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 	w.logger.WithFields(log.Fields{
 		"hash":     workShare.Hash().Hex(),
 		"number":   workShare.NumberU64(),
-		"powType":  workShare.AuxPow().PowID(),
+		"powType":  powIdString,
 		"validity": validity,
 	}).Info("✓ Workshare accepted and sent to feed")
 
