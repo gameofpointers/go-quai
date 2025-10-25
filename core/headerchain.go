@@ -285,8 +285,6 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 				wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
 			}
 
-			hc.logger.WithFields(log.Fields{"ws_entropy_pre_adj": wsEntropy, "wsType": wsType, "sha target bytes": shaTarget, "cBigBits": cBigBits, "thresholdBigBits": thresholdBigBits, "target": target, "woDiff": woDiff}).Warn("workshare entropy information")
-
 			extraBits := new(big.Float).Quo(new(big.Float).SetInt(wsEntropy), new(big.Float).SetInt(common.Big2e64))
 
 			wsEntropyAdj := new(big.Float).Quo(new(big.Float).SetInt(common.Big2e64), bigMath.TwoToTheX(extraBits))
@@ -304,7 +302,6 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 		if err != nil {
 			return big.NewInt(0), err
 		}
-		hc.logger.WithFields(log.Fields{"ws_entropy": wsEntropy, "distance": distance, "wsType": wsType}).Warn("workshare entropy information")
 		wsEntropy = new(big.Int).Div(wsEntropy, new(big.Int).Exp(big.NewInt(2), distance, nil))
 		// Add the entropy into the total entropy once the discount calculation is done
 		totalWsEntropy.Add(totalWsEntropy, wsEntropy)
