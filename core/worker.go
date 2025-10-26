@@ -41,7 +41,7 @@ const (
 	minRecommitInterval = 1 * time.Second
 
 	// pendingBlockBodyLimit is maximum number of pending block bodies to be kept in cache.
-	pendingBlockBodyLimit = 100
+	pendingBlockBodyLimit = 300
 
 	// c_headerPrintsExpiryTime is how long a header hash is kept in the cache, so that currentInfo
 	// is not printed on a Proc frequency
@@ -173,6 +173,7 @@ type worker struct {
 	workerDb ethdb.Database
 
 	pendingBlockBody *lru.Cache[common.Hash, types.WorkObject]
+	pendingAuxPow    *lru.Cache[[33]byte, types.AuxPow] // key is sealhash + powid
 
 	snapshotMu    sync.RWMutex // The lock used to protect the snapshots below
 	snapshotBlock *types.WorkObject
@@ -262,6 +263,9 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 
 	phBodyCache, _ := lru.New[common.Hash, types.WorkObject](pendingBlockBodyLimit)
 	worker.pendingBlockBody = phBodyCache
+
+	auxPowCache, _ := lru.New[[33]byte, types.AuxPow](pendingBlockBodyLimit)
+	worker.pendingAuxPow = auxPowCache
 
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
@@ -2418,13 +2422,43 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 func (w *worker) AddPendingWorkObjectBody(wo *types.WorkObject) {
 	// do not include the tx hash while storing the body
 	woHeaderCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
+	auxpowCopy := types.CopyAuxPow(woHeaderCopy.AuxPow())
+
+	var powId types.PowID
+	if woHeaderCopy.AuxPow() == nil {
+		powId = types.Progpow
+	} else {
+		powId = woHeaderCopy.AuxPow().PowID()
+	}
+
+	// Remove auxpow wo, because we want to be able to map multiple auxpows to
+	// the same sealhash, so storing the auxpow separately
+	woHeaderCopy.SetAuxPow(nil)
 	w.pendingBlockBody.Add(woHeaderCopy.SealHash(), *wo)
+
+	w.AddPendingAuxPow(powId, woHeaderCopy.SealHash(), auxpowCopy)
+}
+
+func (w *worker) AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxpow *types.AuxPow) {
+	if w.hc.NodeCtx() == common.ZONE_CTX && powId != types.Progpow {
+		// Since auxpow can be unique per powid, we need to be able to map one sealhash to multiple auxpows
+		key := append(sealHash.Bytes(), byte(powId))
+		w.pendingAuxPow.Add([33]byte(key), *auxpow)
+	}
 }
 
 // GetPendingBlockBody gets the block body associated with the given header.
-func (w *worker) GetPendingBlockBody(sealHash common.Hash) (*types.WorkObject, error) {
+func (w *worker) GetPendingBlockBody(powId types.PowID, sealHash common.Hash) (*types.WorkObject, error) {
 	body, ok := w.pendingBlockBody.Peek(sealHash)
 	if ok {
+		if w.hc.NodeCtx() == common.ZONE_CTX && powId != types.Progpow {
+			// Since auxpow can be unique per powid, we need to be able to map one sealhash to multiple auxpows
+			key := append(sealHash.Bytes(), byte(powId))
+			auxpow, ok := w.pendingAuxPow.Peek([33]byte(key))
+			if ok {
+				body.WorkObjectHeader().SetAuxPow(&auxpow)
+			}
+		}
 		return &body, nil
 	}
 	w.logger.WithField("key", sealHash).Warn("pending block body not found for header")

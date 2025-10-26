@@ -1058,7 +1058,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 
 				// Update the pending block body cache with the populated AuxPow
 				// This ensures SubmitBlock can retrieve the complete AuxPow including merkle branch
-				// sl.miner.worker.AddPendingWorkObjectBody(phCopy)
+				sl.miner.worker.AddPendingWorkObjectBody(phCopy)
 			} else {
 				return nil, errors.New("no auxpow template available for " + powId.String() + " mining")
 			}
@@ -1297,7 +1297,14 @@ func (sl *Slice) ConstructLocalMinedBlock(wo *types.WorkObject) (*types.WorkObje
 	if nodeCtx == common.ZONE_CTX {
 		// do not include the tx hash while storing the body
 		woHeaderCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
-		pendingBlockBody = sl.GetPendingBlockBody(woHeaderCopy.SealHash())
+		var powId types.PowID
+		if woHeaderCopy.AuxPow() == nil {
+			powId = types.Progpow
+		} else {
+			powId = woHeaderCopy.AuxPow().PowID()
+		}
+
+		pendingBlockBody = sl.GetPendingBlockBody(powId, woHeaderCopy.SealHash())
 		if pendingBlockBody == nil {
 			sl.logger.WithFields(log.Fields{"wo.Hash": wo.Hash(),
 				"wo.Header":       wo.HeaderHash(),
@@ -1926,8 +1933,8 @@ func (sl *Slice) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	return pendingHeader, nil
 }
 
-func (sl *Slice) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
-	blockBody, _ := sl.miner.worker.GetPendingBlockBody(sealHash)
+func (sl *Slice) GetPendingBlockBody(powId types.PowID, sealHash common.Hash) *types.WorkObject {
+	blockBody, _ := sl.miner.worker.GetPendingBlockBody(powId, sealHash)
 	return blockBody
 }
 

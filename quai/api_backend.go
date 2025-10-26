@@ -544,8 +544,12 @@ func (b *QuaiAPIBackend) ReceiveWorkShare(workShare *types.WorkObjectHeader) err
 	return b.BroadcastWorkShare(shareView, b.NodeLocation())
 }
 
-func (b *QuaiAPIBackend) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
-	return b.quai.core.GetPendingBlockBody(sealHash)
+func (b *QuaiAPIBackend) GetPendingBlockBody(powId types.PowID, sealHash common.Hash) *types.WorkObject {
+	return b.quai.core.GetPendingBlockBody(powId, sealHash)
+}
+
+func (b *QuaiAPIBackend) AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxpow *types.AuxPow) {
+	b.quai.core.AddPendingAuxPow(powId, sealHash, auxpow)
 }
 
 func (b *QuaiAPIBackend) SubmitBlock(raw hexutil.Bytes) error {
