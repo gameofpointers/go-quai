@@ -383,11 +383,11 @@ type RavencoinTx struct {
 	*btcdwire.MsgTx
 }
 
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *RavencoinTx {
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *RavencoinTx {
 	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
 
 	// Create the coinbase input with seal hash
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash)
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, signatureTime)
 	coinbaseTx.AddTxIn(&btcdwire.TxIn{
 		PreviousOutPoint: btcdwire.OutPoint{
 			Hash:  btchash.Hash{}, // Coinbase has no previous output

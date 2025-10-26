@@ -637,7 +637,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 
 			// Now deserialize the first transaction (coinbase)
 			// Create an AuxPowTx with correct type (Bitcoin) for deserialization
-			coinbaseTx = types.NewAuxPowCoinbaseTx(types.SHA_BCH, 0, nil, common.Hash{})
+			coinbaseTx = types.NewAuxPowCoinbaseTx(types.SHA_BCH, 0, nil, common.Hash{}, 0)
 			txErr := coinbaseTx.DeserializeNoWitness(reader)
 			if txErr != nil {
 				c.logger.WithFields(log.Fields{
@@ -716,7 +716,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 
 			// Now deserialize the first transaction (coinbase)
 			// Create an AuxPowTx for Ravencoin and deserialize into it
-			coinbaseTx = types.NewAuxPowCoinbaseTx(types.Kawpow, 0, nil, common.Hash{}) // Temporary, will be replaced
+			coinbaseTx = types.NewAuxPowCoinbaseTx(types.Kawpow, 0, nil, common.Hash{}, 0) // Temporary, will be replaced
 			txErr := coinbaseTx.DeserializeNoWitness(reader)
 			if txErr != nil {
 				c.logger.WithFields(log.Fields{

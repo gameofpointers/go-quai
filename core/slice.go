@@ -1044,7 +1044,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 
-				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash())
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), phCopy.SealHash(), uint32(auxTemplate.NTimeMask()))
 				merkleRoot := types.CalculateMerkleRoot(coinbaseTransaction, auxTemplate.MerkleBranch())
 
 				// Create a properly configured Ravencoin header for KAWPOW mining
