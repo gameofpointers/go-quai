@@ -767,7 +767,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 	}
 
 	// Get the pending block body using the seal hash
-	workObject := c.sl.GetPendingBlockBody(sealHash)
+	workObject := c.sl.GetPendingBlockBody(powType, sealHash)
 	if workObject == nil {
 		return nil, fmt.Errorf("could not get the pending block body for seal hash %s", sealHash.Hex())
 	}
@@ -980,8 +980,8 @@ func (c *Core) ConstructLocalMinedBlock(woHeader *types.WorkObject) (*types.Work
 	return c.sl.ConstructLocalMinedBlock(woHeader)
 }
 
-func (c *Core) GetPendingBlockBody(sealHash common.Hash) *types.WorkObject {
-	return c.sl.GetPendingBlockBody(sealHash)
+func (c *Core) GetPendingBlockBody(powId types.PowID, sealHash common.Hash) *types.WorkObject {
+	return c.sl.GetPendingBlockBody(powId, sealHash)
 }
 
 func (c *Core) NewGenesisPendigHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, genesisHash common.Hash) error {
@@ -1519,6 +1519,10 @@ func (c *Core) IsMining() bool { return c.sl.miner.Mining() }
 
 func (c *Core) SendWorkShare(workShare *types.WorkObjectHeader) error {
 	return c.sl.miner.worker.AddWorkShare(workShare)
+}
+
+func (c *Core) AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxpow *types.AuxPow) {
+	c.sl.miner.worker.AddPendingAuxPow(powId, sealHash, auxpow)
 }
 
 //-------------------------//

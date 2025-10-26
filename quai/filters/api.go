@@ -935,6 +935,8 @@ func (api *PublicFilterAPI) PendingHeader(ctx context.Context, powId types.PowID
 
 								// Update the auxpow in the best pending header
 								pendingHeaderForMining.WorkObjectHeader().SetAuxPow(auxPow)
+
+								api.backend.AddPendingAuxPow(powId, pendingHeaderForMining.SealHash(), auxPow)
 							} else {
 								return
 							}
