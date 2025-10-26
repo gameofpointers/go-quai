@@ -1037,7 +1037,7 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 
 		case types.Scrypt:
 
-			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ShaDiffAndCount().Difficulty())
+			workShareTarget := new(big.Int).Div(common.Big2e256, wo.ScryptDiffAndCount().Difficulty())
 			powHash := wo.AuxPow().Header().PowHash()
 			powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
 
