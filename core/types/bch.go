@@ -179,11 +179,11 @@ func (bch *BitcoinCashHeaderWrapper) Copy() AuxHeaderData {
 	return &BitcoinCashHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
-func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *BitcoinCashTxWrapper {
+func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *BitcoinCashTxWrapper {
 	coinbaseTx := &BitcoinCashTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
 
 	// Create the coinbase input with seal hash in scriptSig
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash)
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, signatureTime)
 	coinbaseTx.AddTxIn(&bchdwire.TxIn{
 		PreviousOutPoint: bchdwire.OutPoint{
 			Hash:  bchhash.Hash{}, // Coinbase has no previous output

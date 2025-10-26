@@ -38,7 +38,7 @@ func auxPowTestData(powID PowID) *AuxPow {
 			MixHash:        EmptyRootHash,
 		}
 		coinbaseOut := NewAuxPowCoinbaseOut(Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
-		coinbaseTx := NewAuxPowCoinbaseTx(Kawpow, 100, coinbaseOut, []byte("Test"))
+		coinbaseTx := NewAuxPowCoinbaseTx(Kawpow, 100, coinbaseOut, []byte("Test"), uint32(0))
 		auxPow.SetHeader(NewAuxPowHeader(ravencoinHeader))
 		auxPow.SetTransaction(coinbaseTx)
 	case SHA_BTC:

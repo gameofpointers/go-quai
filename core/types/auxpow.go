@@ -595,16 +595,16 @@ type AuxPowTxData interface {
 	pkScript() []byte
 }
 
-func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *AuxPowTx {
+func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *AuxPowTx {
 	switch powId {
 	case Kawpow:
-		return &AuxPowTx{inner: NewRavencoinCoinbaseTx(height, coinbaseOut, sealHash)}
+		return &AuxPowTx{inner: NewRavencoinCoinbaseTx(height, coinbaseOut, sealHash, signatureTime)}
 	case SHA_BTC:
-		return &AuxPowTx{inner: NewBitcoinCoinbaseTxWrapper(height, coinbaseOut, sealHash)}
+		return &AuxPowTx{inner: NewBitcoinCoinbaseTxWrapper(height, coinbaseOut, sealHash, signatureTime)}
 	case SHA_BCH:
-		return &AuxPowTx{inner: NewBitcoinCashCoinbaseTxWrapper(height, coinbaseOut, sealHash)}
+		return &AuxPowTx{inner: NewBitcoinCashCoinbaseTxWrapper(height, coinbaseOut, sealHash, signatureTime)}
 	case Scrypt:
-		return &AuxPowTx{inner: NewLitecoinCoinbaseTxWrapper(height, coinbaseOut, sealHash)}
+		return &AuxPowTx{inner: NewLitecoinCoinbaseTxWrapper(height, coinbaseOut, sealHash, signatureTime)}
 	default:
 		return &AuxPowTx{}
 	}
@@ -907,8 +907,23 @@ func (ap *AuxPow) ConvertToTemplate() *AuxTemplate {
 	auxTemplate.SetPrevHash(ap.header.PrevBlock())
 	auxTemplate.SetVersion(uint32(ap.header.Version()))
 	auxTemplate.SetNBits(ap.header.Bits())
-	auxTemplate.SetNTimeMask(NTimeMask(ap.header.Timestamp()))
-	auxTemplate.SetHeight(ap.header.Height())
+	signatureTime, err := ExtractSignatureTimeFromCoinbase(ap.transaction.ScriptSig())
+	if err != nil {
+		signatureTime = 0
+	}
+	auxTemplate.SetNTimeMask(NTimeMask(signatureTime))
+	// Height is encoded in the script sig for non kawpow chains
+	switch ap.powID {
+	case Kawpow:
+		// For KAWPOW, set height from header
+		auxTemplate.SetHeight(ap.header.Height())
+	default:
+		height, err := ExtractHeightFromCoinbase(ap.transaction.ScriptSig())
+		if err != nil {
+			height = 0
+		}
+		auxTemplate.SetHeight(height)
+	}
 	auxTemplate.SetCoinbaseOut(ap.transaction.TxOut())
 	auxTemplate.SetMerkleBranch(ap.merkleBranch)
 	auxTemplate.SetSigs(ap.signature)

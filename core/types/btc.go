@@ -184,11 +184,11 @@ func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
 }
 
-func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash) *BitcoinTxWrapper {
+func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *BitcoinTxWrapper {
 	coinbaseTx := &BitcoinTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
 
 	// Create the coinbase input with seal hash in scriptSig
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash)
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, signatureTime)
 	coinbaseTx.AddTxIn(&btcdwire.TxIn{
 		PreviousOutPoint: btcdwire.OutPoint{
 			Hash:  btchash.Hash{}, // Coinbase has no previous output

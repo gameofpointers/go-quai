@@ -292,9 +292,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 
 func CreateAuxPowCache() map[types.PowID]*types.AuxTemplate {
 	auxCache := make(map[types.PowID]*types.AuxTemplate)
-
-	auxCache[types.Kawpow] = types.EmptyAuxTemplate()
-
 	return auxCache
 }
 
