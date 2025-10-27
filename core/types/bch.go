@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 	bchhash "github.com/gcash/bchd/chaincfg/chainhash"
 	bchdwire "github.com/gcash/bchd/wire"
 )
@@ -284,4 +285,9 @@ func (bco *BitcoinCashCoinbaseTxOutWrapper) Value() int64 {
 
 func (bco *BitcoinCashCoinbaseTxOutWrapper) PkScript() []byte {
 	return bco.TxOut.PkScript
+}
+
+// MWEB methods - Bitcoin Cash does not support MWEB, so these return errors
+func (bchb *BitcoinCashBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
+	return errors.New("MWEB is not supported by Bitcoin Cash blocks")
 }
