@@ -7,6 +7,7 @@ import (
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
 
 type BitcoinBlockWrapper struct {
@@ -277,4 +278,9 @@ func (btt *BitcoinTxWrapper) DeserializeNoWitness(r io.Reader) error {
 		return fmt.Errorf("cannot deserialize: MsgTx is nil")
 	}
 	return btt.MsgTx.DeserializeNoWitness(r)
+}
+
+// MWEB methods - Bitcoin does not support MWEB, so these return errors
+func (btb *BitcoinBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
+	return fmt.Errorf("MWEB is not supported by Bitcoin blocks")
 }

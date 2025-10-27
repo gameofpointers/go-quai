@@ -356,6 +356,9 @@ type AuxPowBlockData interface {
 	Copy() AuxPowBlockData
 
 	Header() AuxHeaderData
+
+	// MWEB methods (only supported for Litecoin blocks)
+	SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error
 }
 
 func NewAuxPowBlock(header *AuxPowHeader) *AuxPowBlock {
@@ -397,6 +400,14 @@ func (auxBlock *AuxPowBlock) Serialize(w io.Writer) error {
 		return fmt.Errorf("cannot serialize AuxPowBlock: inner block is nil")
 	}
 	return auxBlock.inner.Serialize(w)
+}
+
+// MWEB methods - delegate to inner implementation with type checking
+func (auxBlock *AuxPowBlock) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
+	if auxBlock.inner == nil {
+		return fmt.Errorf("cannot set MWEB header: inner block is nil")
+	}
+	return auxBlock.inner.SetMwebBlock(header, txBody)
 }
 
 type AuxPowHeader struct {
