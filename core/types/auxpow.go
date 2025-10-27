@@ -356,6 +356,16 @@ type AuxPowBlockData interface {
 	Copy() AuxPowBlockData
 
 	Header() AuxHeaderData
+	
+	// MWEB methods (only supported for Litecoin blocks)
+	GetMwebHeader() *ltcdwire.MwebHeader
+	SetMwebHeader(header *ltcdwire.MwebHeader) error
+	GetMwebTransactions() *ltcdwire.MwebTxBody
+	SetMwebTransactions(txBody *ltcdwire.MwebTxBody) error
+	HasMwebData() bool
+	IsMwebEnabled() bool
+	HasHogExTransaction() bool
+	ClearMwebData() error
 }
 
 func NewAuxPowBlock(header *AuxPowHeader) *AuxPowBlock {
@@ -397,6 +407,63 @@ func (auxBlock *AuxPowBlock) Serialize(w io.Writer) error {
 		return fmt.Errorf("cannot serialize AuxPowBlock: inner block is nil")
 	}
 	return auxBlock.inner.Serialize(w)
+}
+
+// MWEB methods - delegate to inner implementation with type checking
+func (auxBlock *AuxPowBlock) GetMwebHeader() *ltcdwire.MwebHeader {
+	if auxBlock.inner == nil {
+		return nil
+	}
+	return auxBlock.inner.GetMwebHeader()
+}
+
+func (auxBlock *AuxPowBlock) SetMwebHeader(header *ltcdwire.MwebHeader) error {
+	if auxBlock.inner == nil {
+		return fmt.Errorf("cannot set MWEB header: inner block is nil")
+	}
+	return auxBlock.inner.SetMwebHeader(header)
+}
+
+func (auxBlock *AuxPowBlock) GetMwebTransactions() *ltcdwire.MwebTxBody {
+	if auxBlock.inner == nil {
+		return nil
+	}
+	return auxBlock.inner.GetMwebTransactions()
+}
+
+func (auxBlock *AuxPowBlock) SetMwebTransactions(txBody *ltcdwire.MwebTxBody) error {
+	if auxBlock.inner == nil {
+		return fmt.Errorf("cannot set MWEB transactions: inner block is nil")
+	}
+	return auxBlock.inner.SetMwebTransactions(txBody)
+}
+
+func (auxBlock *AuxPowBlock) HasMwebData() bool {
+	if auxBlock.inner == nil {
+		return false
+	}
+	return auxBlock.inner.HasMwebData()
+}
+
+func (auxBlock *AuxPowBlock) IsMwebEnabled() bool {
+	if auxBlock.inner == nil {
+		return false
+	}
+	return auxBlock.inner.IsMwebEnabled()
+}
+
+func (auxBlock *AuxPowBlock) HasHogExTransaction() bool {
+	if auxBlock.inner == nil {
+		return false
+	}
+	return auxBlock.inner.HasHogExTransaction()
+}
+
+func (auxBlock *AuxPowBlock) ClearMwebData() error {
+	if auxBlock.inner == nil {
+		return fmt.Errorf("cannot clear MWEB data: inner block is nil")
+	}
+	return auxBlock.inner.ClearMwebData()
 }
 
 type AuxPowHeader struct {
