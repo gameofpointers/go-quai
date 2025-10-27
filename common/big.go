@@ -18,9 +18,11 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/btcsuite/btcd/blockchain"
 	"github.com/dominant-strategies/go-quai/log"
 	"modernc.org/mathutil"
 )
@@ -103,6 +105,26 @@ func IntrinsicLogEntropy(powHash Hash) *big.Int {
 	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(MantBits), nil))
 	bigBits = new(big.Int).Add(bigBits, m)
 	return bigBits
+}
+
+// GetTarget converts the quai difficulty to the target used in the bitcoin
+// style which has leading zeros, and 3 bytes of mantissa, then zeros
+func GetTarget(diff *big.Int) *big.Int {
+	target := new(big.Int).Div(new(big.Int).Lsh(big.NewInt(1), 256), diff)
+
+	// Convert to Bitcoin compact form using btcd's BigToCompact
+	compact := blockchain.BigToCompact(target)
+	// Conver back to the target to get the full 256-bit target
+	target = new(big.Int).Set(blockchain.CompactToBig(compact))
+
+	return target
+}
+
+// GetTargetInHex calculates the target from the given quai difficulty
+func GetTargetInHex(diff *big.Int) string {
+	target := GetTarget(diff)
+	// Return as 64-character hex string (padded with leading zeros)
+	return fmt.Sprintf("%064x", target)
 }
 
 // DifficultyToBits converts Quai-style difficulty (where difficulty = 2^256/target)
