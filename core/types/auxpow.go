@@ -1209,3 +1209,36 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 
 	return nil
 }
+
+// NewAuxPowTxFromBytes constructs an AuxPowTx for the given powId by deserializing raw bytes
+// into the appropriate chain-specific transaction wrapper.
+func NewAuxPowTxFromBytes(powId PowID, raw []byte) (*AuxPowTx, error) {
+	switch powId {
+	case SHA_BTC:
+		tx := &BitcoinTxWrapper{btcdwire.NewMsgTx(1)}
+		if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
+			return nil, err
+		}
+		return &AuxPowTx{inner: tx}, nil
+	case SHA_BCH:
+		tx := &BitcoinCashTxWrapper{bchdwire.NewMsgTx(2)}
+		if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
+			return nil, err
+		}
+		return &AuxPowTx{inner: tx}, nil
+	case Scrypt:
+		tx := &LitecoinTxWrapper{ltcdwire.NewMsgTx(1)}
+		if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
+			return nil, err
+		}
+		return &AuxPowTx{inner: tx}, nil
+	case Kawpow:
+		tx := &RavencoinTx{btcdwire.NewMsgTx(2)}
+		if err := tx.DeserializeNoWitness(bytes.NewReader(raw)); err != nil {
+			return nil, err
+		}
+		return &AuxPowTx{inner: tx}, nil
+	default:
+		return nil, fmt.Errorf("unsupported powId for AuxPowTx")
+	}
+}
