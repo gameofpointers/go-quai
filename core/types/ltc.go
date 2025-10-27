@@ -69,6 +69,16 @@ func (ltb *LitecoinBlockWrapper) Copy() AuxPowBlockData {
 		copyBlock.Transactions[i] = tx.Copy()
 	}
 
+	// Copy MWEB data if present
+	if ltb.Block.MwebHeader != nil {
+		copyBlock.MwebHeader = &ltcdwire.MwebHeader{}
+		*copyBlock.MwebHeader = *ltb.Block.MwebHeader
+	}
+	if ltb.Block.MwebTransactions != nil {
+		copyBlock.MwebTransactions = &ltcdwire.MwebTxBody{}
+		*copyBlock.MwebTransactions = *ltb.Block.MwebTransactions
+	}
+
 	return &LitecoinBlockWrapper{Block: copyBlock}
 }
 
@@ -89,6 +99,16 @@ func (ltb *LitecoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
 	default:
 		return fmt.Errorf("cannot add transaction: unknown tx type %T", inner)
 	}
+}
+
+// MWEB Header methods
+func (ltb *LitecoinBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
+	if ltb.Block == nil {
+		ltb.Block = &ltcdwire.MsgBlock{}
+	}
+	ltb.Block.MwebHeader = header
+	ltb.Block.MwebTransactions = txBody
+	return nil
 }
 
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {
