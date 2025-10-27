@@ -1153,9 +1153,9 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 	case types.Kawpow:
 		return s.marshalKawpowTemplate(pendingHeader)
 	case types.SHA_BTC:
-		return s.marshalShaTemplate(pendingHeader, true)
+		return s.marshalShaTemplate(pendingHeader)
 	case types.SHA_BCH:
-		return s.marshalShaTemplate(pendingHeader, true)
+		return s.marshalShaTemplate(pendingHeader)
 	case types.Scrypt:
 		return s.marshalScryptTemplate(pendingHeader)
 	default:
@@ -1167,18 +1167,16 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 func (s *PublicBlockChainQuaiAPI) marshalKawpowTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
 	fields := types.RPCMarshalAuxPowForKawPow(wo.AuxPow())
 
-	bits, err := common.DifficultyToBits(wo.Difficulty())
-	if err != nil {
-		return nil, err
-	}
-	fields["target"] = types.GetTargetInHex(bits)
+	// share diff
+	shareDiff := new(big.Int).Div(wo.Difficulty(), new(big.Int).Mul(common.Big2, big.NewInt(int64(params.WorkSharesThresholdDiff))))
+
+	fields["target"] = common.GetTargetInHex(shareDiff)
 
 	return fields, nil
 }
 
 // marshalShaTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
-// useTemplateDifficulty: if true, use the AuxPow template's nBits; if false, use Quai's block difficulty
-func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject, useTemplateDifficulty bool) (map[string]interface{}, error) {
+func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
 	auxPow := wo.AuxPow()
 	if auxPow == nil {
 		return nil, errors.New("no AuxPow in pending header")
@@ -1253,50 +1251,26 @@ func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject, useTe
 	// Convert previousblockhash to hex without 0x prefix
 	prevBlockHex := hex.EncodeToString(prevBlock[:])
 
-	// Determine which difficulty to use based on useTemplateDifficulty parameter
-	var bits uint32
-
-	if useTemplateDifficulty {
-		// Use the template difficulty from AuxPow header
-		bits = auxHeader.Bits()
-	} else {
-		// Convert Quai difficulty to Bitcoin-style nBits
-		// Use the WorkObject's difficulty (Quai difficulty), not the AuxPow header bits
-		// Apply minimum Bitcoin difficulty of 2000 for mining
-		// Bitcoin difficulty 2000 = expected 2000 * 2^32 hashes
-		// Convert to Quai difficulty: quai_diff = (2000 * 2^32 * bitcoin_diff_1_target) / 2^256
-		// Simplified: quai_diff = 2000 * 2^32 * 0xFFFF / 2^(256-208) ≈ 2000 * 2^32 * 0xFFFF / 2^48
-		minBitcoinDifficulty := big.NewInt(2000)
-
-		// Bitcoin difficulty 1 target
-		diff1Target, _ := new(big.Int).SetString("00000000FFFF0000000000000000000000000000000000000000000000000000", 16)
-
-		// Minimum target for Bitcoin difficulty 2000: target = diff1_target / 2000
-		minTarget := new(big.Int).Div(diff1Target, minBitcoinDifficulty)
-
-		// Convert to Quai difficulty: quai_diff = 2^256 / target
-		two256 := new(big.Int).Lsh(big.NewInt(1), 256)
-		minQuaiDifficulty := new(big.Int).Div(two256, minTarget)
-
-		// Use the higher of the two: actual difficulty or minimum
-		miningDifficulty := wo.Difficulty()
-		if miningDifficulty.Cmp(minQuaiDifficulty) < 0 {
-			miningDifficulty = minQuaiDifficulty
-		}
-
-		bits, err = common.DifficultyToBits(miningDifficulty)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert difficulty to bits: %w", err)
-		}
-	}
-
 	// Convert bits to hex without 0x prefix
-	bitsHex := fmt.Sprintf("%08x", bits)
+	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())
 
+	powId := auxPow.PowID()
+
+	var targetHex string
 	// Get target hex from Quai difficulty (not AuxPow bits)
-	targetHex := types.GetTargetInHex(bits)
-	if len(targetHex) > 2 && targetHex[:2] == "0x" {
-		targetHex = targetHex[2:]
+	// based on the powid need to use the correct target calculation
+	switch powId {
+	case types.SHA_BCH, types.SHA_BTC:
+		// Bitcoin-style target calculation
+		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
+		if len(targetHex) > 2 && targetHex[:2] == "0x" {
+			targetHex = targetHex[2:]
+		}
+	case types.Scrypt:
+		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
+		if len(targetHex) > 2 && targetHex[:2] == "0x" {
+			targetHex = targetHex[2:]
+		}
 	}
 
 	return map[string]interface{}{
@@ -1519,7 +1493,7 @@ func extractPayoutScriptFromAuxPowTx(tx *types.AuxPowTx) []byte {
 // marshalScryptTemplate formats a WorkObject as a Scrypt/Litecoin getblocktemplate response
 func (s *PublicBlockChainQuaiAPI) marshalScryptTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
 	// Scrypt uses the same header format as Bitcoin/SHA256d, just different PoW algorithm
-	result, err := s.marshalShaTemplate(wo, false)
+	result, err := s.marshalShaTemplate(wo)
 	if err != nil {
 		return nil, err
 	}

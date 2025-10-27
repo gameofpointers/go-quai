@@ -151,15 +151,14 @@ func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
 	// Get common header fields using the interface
 	version := auxHeader.Version()
 	height := auxHeader.Height()
-	bits := auxHeader.Bits()
 	prevBlock := auxHeader.PrevBlock()
+	bits := auxHeader.Bits()
 
 	return map[string]interface{}{
 		"version":           version,
 		"height":            hexutil.EncodeUint64(uint64(height)),
 		"bits":              hexutil.EncodeUint64(uint64(bits)),
 		"previousblockhash": hexutil.Encode(prevBlock[:]),
-		"target":            GetTargetInHex(bits),
 		"merklebranch":      merkleBranch,
 		"coinbaseaux":       hexutil.Bytes(ap.Transaction().ScriptSig()),            // Added coinbaseaux field
 		"coinbasevalue":     hexutil.EncodeUint64(uint64(ap.Transaction().Value())), // Added coinbasevalue field
@@ -191,7 +190,6 @@ func RPCMarshalAuxPow(ap *AuxPow) map[string]interface{} {
 		"height":            hexutil.EncodeUint64(uint64(height)),
 		"bits":              hexutil.EncodeUint64(uint64(bits)),
 		"previousblockhash": hexutil.Encode(prevBlock[:]),
-		"target":            GetTargetInHex(bits),
 		"merklebranch":      merkleBranch,
 	}
 }
@@ -1241,4 +1239,12 @@ func NewAuxPowTxFromBytes(powId PowID, raw []byte) (*AuxPowTx, error) {
 	default:
 		return nil, fmt.Errorf("unsupported powId for AuxPowTx")
 	}
+}
+
+func reverseBytesCopy(b []byte) []byte {
+	out := make([]byte, len(b))
+	for i := range b {
+		out[i] = b[len(b)-1-i]
+	}
+	return out
 }

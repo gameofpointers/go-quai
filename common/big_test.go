@@ -252,3 +252,9 @@ func TestDifficultyToBits_50Million(t *testing.T) {
 		t.Errorf("difficulty deviates too much from expected. Relative error: %e", relativeErrorFloat)
 	}
 }
+
+func TestGetTarget(t *testing.T) {
+	diff := big.NewInt(1000000) // Example difficulty
+	target := GetTarget(diff)
+	t.Logf("Target for difficulty %s: 0x%064x", diff.String(), target)
+}
