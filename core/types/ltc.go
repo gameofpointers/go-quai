@@ -69,6 +69,16 @@ func (ltb *LitecoinBlockWrapper) Copy() AuxPowBlockData {
 		copyBlock.Transactions[i] = tx.Copy()
 	}
 
+	// Copy MWEB data if present
+	if ltb.Block.MwebHeader != nil {
+		copyBlock.MwebHeader = &ltcdwire.MwebHeader{}
+		*copyBlock.MwebHeader = *ltb.Block.MwebHeader
+	}
+	if ltb.Block.MwebTransactions != nil {
+		copyBlock.MwebTransactions = &ltcdwire.MwebTxBody{}
+		*copyBlock.MwebTransactions = *ltb.Block.MwebTransactions
+	}
+
 	return &LitecoinBlockWrapper{Block: copyBlock}
 }
 
@@ -89,6 +99,70 @@ func (ltb *LitecoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
 	default:
 		return fmt.Errorf("cannot add transaction: unknown tx type %T", inner)
 	}
+}
+
+// MWEB Header methods
+func (ltb *LitecoinBlockWrapper) GetMwebHeader() *ltcdwire.MwebHeader {
+	if ltb.Block == nil {
+		return nil
+	}
+	return ltb.Block.MwebHeader
+}
+
+func (ltb *LitecoinBlockWrapper) SetMwebHeader(header *ltcdwire.MwebHeader) error {
+	if ltb.Block == nil {
+		ltb.Block = &ltcdwire.MsgBlock{}
+	}
+	ltb.Block.MwebHeader = header
+	return nil
+}
+
+func (ltb *LitecoinBlockWrapper) GetMwebTransactions() *ltcdwire.MwebTxBody {
+	if ltb.Block == nil {
+		return nil
+	}
+	return ltb.Block.MwebTransactions
+}
+
+func (ltb *LitecoinBlockWrapper) SetMwebTransactions(txBody *ltcdwire.MwebTxBody) error {
+	if ltb.Block == nil {
+		ltb.Block = &ltcdwire.MsgBlock{}
+	}
+	ltb.Block.MwebTransactions = txBody
+	return nil
+}
+
+// MWEB data access methods - simplified approach without serialization
+// Note: MWEB serialization is handled internally by ltcd when using MsgBlock.BtcEncode/BtcDecode
+func (ltb *LitecoinBlockWrapper) IsMwebEnabled() bool {
+	if ltb.Block == nil {
+		return false
+	}
+	// Check if block header has MWEB version bit set
+	const mwebVer = 0x20000000 // MWEB version bit
+	return ltb.Block.Header.Version&mwebVer != 0
+}
+
+func (ltb *LitecoinBlockWrapper) HasHogExTransaction() bool {
+	if ltb.Block == nil || len(ltb.Block.Transactions) == 0 {
+		return false
+	}
+	// Check if the last transaction is a HogEx transaction
+	lastTx := ltb.Block.Transactions[len(ltb.Block.Transactions)-1]
+	return lastTx != nil && lastTx.IsHogEx
+}
+
+// Helper methods for MWEB data handling
+func (ltb *LitecoinBlockWrapper) HasMwebData() bool {
+	return ltb.Block != nil && (ltb.Block.MwebHeader != nil || ltb.Block.MwebTransactions != nil)
+}
+
+func (ltb *LitecoinBlockWrapper) ClearMwebData() error {
+	if ltb.Block != nil {
+		ltb.Block.MwebHeader = nil
+		ltb.Block.MwebTransactions = nil
+	}
+	return nil
 }
 
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {

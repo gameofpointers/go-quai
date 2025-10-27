@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 	bchhash "github.com/gcash/bchd/chaincfg/chainhash"
 	bchdwire "github.com/gcash/bchd/wire"
 )
@@ -284,4 +285,37 @@ func (bco *BitcoinCashCoinbaseTxOutWrapper) Value() int64 {
 
 func (bco *BitcoinCashCoinbaseTxOutWrapper) PkScript() []byte {
 	return bco.TxOut.PkScript
+}
+
+// MWEB methods - Bitcoin Cash does not support MWEB, so these return errors
+func (bchb *BitcoinCashBlockWrapper) GetMwebHeader() *ltcdwire.MwebHeader {
+	return nil // Bitcoin Cash does not support MWEB
+}
+
+func (bchb *BitcoinCashBlockWrapper) SetMwebHeader(header *ltcdwire.MwebHeader) error {
+	return errors.New("MWEB is not supported by Bitcoin Cash blocks")
+}
+
+func (bchb *BitcoinCashBlockWrapper) GetMwebTransactions() *ltcdwire.MwebTxBody {
+	return nil // Bitcoin Cash does not support MWEB
+}
+
+func (bchb *BitcoinCashBlockWrapper) SetMwebTransactions(txBody *ltcdwire.MwebTxBody) error {
+	return errors.New("MWEB is not supported by Bitcoin Cash blocks")
+}
+
+func (bchb *BitcoinCashBlockWrapper) HasMwebData() bool {
+	return false // Bitcoin Cash does not support MWEB
+}
+
+func (bchb *BitcoinCashBlockWrapper) IsMwebEnabled() bool {
+	return false // Bitcoin Cash does not support MWEB
+}
+
+func (bchb *BitcoinCashBlockWrapper) HasHogExTransaction() bool {
+	return false // Bitcoin Cash does not support HogEx transactions
+}
+
+func (bchb *BitcoinCashBlockWrapper) ClearMwebData() error {
+	return errors.New("MWEB is not supported by Bitcoin Cash blocks")
 }

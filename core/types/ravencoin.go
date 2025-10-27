@@ -14,6 +14,7 @@ import (
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
+	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
 
 type RavencoinBlockWrapper struct {
@@ -497,4 +498,37 @@ func (rco *RavencoinCoinbaseTxOut) Value() int64 {
 // PkScript implements AuxPowCoinbaseOutData interface
 func (rco *RavencoinCoinbaseTxOut) PkScript() []byte {
 	return rco.TxOut.PkScript
+}
+
+// MWEB methods - Ravencoin does not support MWEB, so these return errors
+func (rb *RavencoinBlockWrapper) GetMwebHeader() *ltcdwire.MwebHeader {
+	return nil // Ravencoin does not support MWEB
+}
+
+func (rb *RavencoinBlockWrapper) SetMwebHeader(header *ltcdwire.MwebHeader) error {
+	return fmt.Errorf("mweb is not supported by ravencoin blocks")
+}
+
+func (rb *RavencoinBlockWrapper) GetMwebTransactions() *ltcdwire.MwebTxBody {
+	return nil // Ravencoin does not support MWEB
+}
+
+func (rb *RavencoinBlockWrapper) SetMwebTransactions(txBody *ltcdwire.MwebTxBody) error {
+	return fmt.Errorf("mweb is not supported by ravencoin blocks")
+}
+
+func (rb *RavencoinBlockWrapper) HasMwebData() bool {
+	return false // Ravencoin does not support MWEB
+}
+
+func (rb *RavencoinBlockWrapper) IsMwebEnabled() bool {
+	return false // Ravencoin does not support MWEB
+}
+
+func (rb *RavencoinBlockWrapper) HasHogExTransaction() bool {
+	return false // Ravencoin does not support HogEx transactions
+}
+
+func (rb *RavencoinBlockWrapper) ClearMwebData() error {
+	return fmt.Errorf("mweb is not supported by ravencoin blocks")
 }
