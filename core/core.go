@@ -736,6 +736,14 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 				return nil, errors.New("failed to extract seal hash from KAWPOW block: " + err.Error())
 			}
 
+			heightFromCoinbase, err = types.ExtractHeightFromCoinbase(coinbaseTx.ScriptSig())
+			if err != nil {
+				c.logger.WithFields(log.Fields{
+					"type":  "SHA256d",
+					"error": err.Error(),
+				}).Error("Failed to extract height from SHA256d block")
+			}
+
 			// Create wrapped header for the newer AuxPow API
 			auxHeader = types.NewAuxPowHeader(ravencoinHeader)
 			powType = types.Kawpow
@@ -801,28 +809,6 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 	// Note: PowID and MerkleBranch are already correct from the cached pending block body
 	workObjectCopy.AuxPow().SetHeader(auxHeader)
 	workObjectCopy.AuxPow().SetTransaction(coinbaseTx)
-
-	// Verify the proof of work before accepting the block
-	engine := c.sl.GetEngineForHeader(workObjectCopy.WorkObjectHeader())
-	if engine == nil {
-		return nil, errors.New("could not get consensus engine for block")
-	}
-
-	powHash, err := engine.VerifySeal(workObjectCopy.WorkObjectHeader())
-	if err != nil {
-		c.logger.WithFields(log.Fields{
-			"err":      err.Error(),
-			"powType":  powType,
-			"sealHash": sealHash.Hex(),
-		}).Error("Block failed PoW verification")
-		return nil, fmt.Errorf("block failed proof of work verification: %w", err)
-	}
-
-	c.logger.WithFields(log.Fields{
-		"powHash":  powHash.Hex(),
-		"powType":  powType,
-		"sealHash": sealHash.Hex(),
-	}).Info("Block passed PoW verification")
 
 	return workObjectCopy, nil
 }
