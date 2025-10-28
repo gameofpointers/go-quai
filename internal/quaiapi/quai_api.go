@@ -1150,12 +1150,8 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 
 	// Build the response based on PoW type
 	switch powId {
-	case types.Kawpow:
-		return s.marshalKawpowTemplate(pendingHeader)
-	case types.SHA_BTC:
-		return s.marshalShaTemplate(pendingHeader)
-	case types.SHA_BCH:
-		return s.marshalShaTemplate(pendingHeader)
+	case types.Kawpow, types.SHA_BCH, types.SHA_BTC:
+		return s.marshalAuxPowTemplate(pendingHeader)
 	case types.Scrypt:
 		return s.marshalScryptTemplate(pendingHeader)
 	default:
@@ -1163,20 +1159,8 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 	}
 }
 
-// marshalKawpowTemplate formats a WorkObject as a KAWPOW/Ravencoin getblocktemplate response
-func (s *PublicBlockChainQuaiAPI) marshalKawpowTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
-	fields := types.RPCMarshalAuxPowForKawPow(wo.AuxPow())
-
-	// share diff
-	shareDiff := new(big.Int).Div(wo.Difficulty(), new(big.Int).Mul(common.Big2, big.NewInt(int64(params.WorkSharesThresholdDiff))))
-
-	fields["target"] = common.GetTargetInHex(shareDiff)
-
-	return fields, nil
-}
-
-// marshalShaTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
-func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
+// marshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
+func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
 	auxPow := wo.AuxPow()
 	if auxPow == nil {
 		return nil, errors.New("no AuxPow in pending header")
@@ -1233,6 +1217,13 @@ func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[
 
 	// Get header fields using the typed accessor methods
 	prevBlock := auxHeader.PrevBlock()
+	// prevBlock needs to be big-endian for getblocktemplate
+	for i := 0; i < len(prevBlock)/2; i++ {
+		prevBlock[i], prevBlock[len(prevBlock)-1-i] = prevBlock[len(prevBlock)-1-i], prevBlock[i]
+	}
+
+	// Convert previousblockhash to hex without 0x prefix
+	prevBlockHex := hex.EncodeToString(prevBlock[:])
 
 	// Marshal merkle branch
 	// Note: Internally stored in little-endian, but getblocktemplate expects big-endian (display order)
@@ -1248,9 +1239,6 @@ func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[
 
 	merkleRoot := types.CalculateMerkleRoot(auxPow.Transaction(), auxPow.MerkleBranch())
 
-	// Convert previousblockhash to hex without 0x prefix
-	prevBlockHex := hex.EncodeToString(prevBlock[:])
-
 	// Convert bits to hex without 0x prefix
 	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())
 
@@ -1263,14 +1251,16 @@ func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[
 	case types.SHA_BCH, types.SHA_BTC:
 		// Bitcoin-style target calculation
 		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
-		if len(targetHex) > 2 && targetHex[:2] == "0x" {
-			targetHex = targetHex[2:]
-		}
 	case types.Scrypt:
 		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
-		if len(targetHex) > 2 && targetHex[:2] == "0x" {
-			targetHex = targetHex[2:]
-		}
+	case types.Kawpow:
+		// share diff
+		shareDiff := new(big.Int).Div(wo.Difficulty(), new(big.Int).Mul(common.Big2, big.NewInt(int64(params.WorkSharesThresholdDiff))))
+		targetHex = common.GetTargetInHex(shareDiff)
+	}
+
+	if len(targetHex) > 2 && targetHex[:2] == "0x" {
+		targetHex = targetHex[2:]
 	}
 
 	return map[string]interface{}{
@@ -1291,8 +1281,8 @@ func (s *PublicBlockChainQuaiAPI) marshalShaTemplate(wo *types.WorkObject) (map[
 		"coinb1":            hex.EncodeToString(coinb1),
 		"extranonce1Length": 4, // 4 bytes
 		"extranonce2Length": 8, // 8 bytes
-		// Keep the 32-byte aux extra data inside coinb2; miners do not fill it
-		"coinbaseAuxExtraBytesLength": 32, // 32 bytes
+		// Keep the 30-byte aux extra data inside coinb2; miners do not fill it
+		"coinbaseAuxExtraBytesLength": 30, // 32 bytes
 		"coinb2":                      hex.EncodeToString(coinb2),
 		"merklebranch":                merkleBranch,
 		"merkleroot":                  hex.EncodeToString(merkleRoot[:]),
@@ -1493,7 +1483,7 @@ func extractPayoutScriptFromAuxPowTx(tx *types.AuxPowTx) []byte {
 // marshalScryptTemplate formats a WorkObject as a Scrypt/Litecoin getblocktemplate response
 func (s *PublicBlockChainQuaiAPI) marshalScryptTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
 	// Scrypt uses the same header format as Bitcoin/SHA256d, just different PoW algorithm
-	result, err := s.marshalShaTemplate(wo)
+	result, err := s.marshalAuxPowTemplate(wo)
 	if err != nil {
 		return nil, err
 	}

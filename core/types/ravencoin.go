@@ -143,7 +143,7 @@ func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	first := sha256.Sum256(data)
 	second := sha256.Sum256(first[:])
 
-	return common.BytesToHash(reverseBytesCopy(second[:]))
+	return common.BytesToHash(second[:])
 }
 
 // EncodeBinary encodes the header to Ravencoin's binary format

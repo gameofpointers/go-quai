@@ -206,7 +206,7 @@ search:
 				// Update the Ravencoin header with the found nonce and mix hash
 				workObject.WorkObjectHeader().AuxPow().Header().SetNonce64(nonce)
 				// reverse the digest to little endian before populating the mix hash into the kawpow
-				workObject.WorkObjectHeader().AuxPow().Header().SetMixHash(common.BytesToHash(reverseBytes32(digest)))
+				workObject.WorkObjectHeader().AuxPow().Header().SetMixHash(common.BytesToHash(digest))
 
 				// Create a new AuxPow with the updated header and coinbase
 				updatedAuxPow := types.NewAuxPow(
