@@ -283,6 +283,12 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				log.Global.WithField("err", err).Error("Work object block hash is a bad hash")
 				return pubsub.ValidationReject
 			}
+
+			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() {
+				backend.Logger().Warn("Work share auxpow signature verification failed")
+				return pubsub.ValidationReject
+			}
+
 			return backend.ApplyPoWFilter(block.WorkObject)
 
 		case *types.WorkObjectHeaderView:
@@ -319,6 +325,11 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			if backend.BadHashExistsInChain() {
 				backend.Logger().Warn("Bad Hashes still exist on chain, cannot handle block broadcast yet")
 				return pubsub.ValidationIgnore
+			}
+
+			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() {
+				backend.Logger().Warn("Work share auxpow signature verification failed")
+				return pubsub.ValidationReject
 			}
 
 			// If Block broadcasted by the peer exists in the bad block list drop the peer
@@ -376,6 +387,11 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 			if len(block.WorkObject.Transactions()) > int(backend.GetMaxTxInWorkShare()) {
 				backend.Logger().Errorf("workshare contains more transactions than allowed. Max allowed: %d, actual: %d", backend.GetMaxTxInWorkShare(), len(block.WorkObject.Transactions()))
+				return pubsub.ValidationReject
+			}
+
+			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() {
+				backend.Logger().Warn("Work share auxpow signature verification failed")
 				return pubsub.ValidationReject
 			}
 
