@@ -413,6 +413,22 @@ func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount,
 	return countKawPow, countSha, countScrypt
 }
 
+// DifficultyByAlgo(wo *types.WorkObject) returns the difficulty for each algo in the given block
+func (hc *HeaderChain) DifficultyByAlgo(wo *types.WorkObject) (kawpow, sha, scrypt *big.Int) {
+	kawpow = wo.Difficulty()
+	if wo.WorkObjectHeader().ShaDiffAndCount() != nil {
+		sha = wo.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+	} else {
+		sha = big.NewInt(0)
+	}
+	if wo.WorkObjectHeader().ScryptDiffAndCount() != nil {
+		scrypt = wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+	} else {
+		scrypt = big.NewInt(0)
+	}
+	return kawpow, sha, scrypt
+}
+
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
 // chain in the slice which emitted the given block.
 func (hc *HeaderChain) CollectSubRollup(b *types.WorkObject) (types.Transactions, error) {
