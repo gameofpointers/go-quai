@@ -134,66 +134,6 @@ func EmptyAuxTemplate() *AuxTemplate {
 	}
 }
 
-// This method is for the stratum interaction only
-// RPCMarshalAuxPowForKawPow converts AuxPow to a map for RPC serialization
-func RPCMarshalAuxPowForKawPow(ap *AuxPow) map[string]interface{} {
-	if ap == nil {
-		return nil
-	}
-
-	merkleBranch := make([]string, len(ap.merkleBranch))
-	for i, hash := range ap.merkleBranch {
-		merkleBranch[i] = hexutil.Encode(hash)
-	}
-
-	auxHeader := ap.header
-
-	// Get common header fields using the interface
-	version := auxHeader.Version()
-	height := auxHeader.Height()
-	prevBlock := auxHeader.PrevBlock()
-	bits := auxHeader.Bits()
-
-	return map[string]interface{}{
-		"version":           version,
-		"height":            hexutil.EncodeUint64(uint64(height)),
-		"bits":              hexutil.EncodeUint64(uint64(bits)),
-		"previousblockhash": hexutil.Encode(prevBlock[:]),
-		"merklebranch":      merkleBranch,
-		"coinbaseaux":       hexutil.Bytes(ap.Transaction().ScriptSig()),            // Added coinbaseaux field
-		"coinbasevalue":     hexutil.EncodeUint64(uint64(ap.Transaction().Value())), // Added coinbasevalue field
-		"payoutscript":      hexutil.Bytes(ap.Transaction().PkScript()),             // Payout script from coinbase output
-	}
-}
-
-// RPCMarshalAuxPowForKawPow converts AuxPow to a map for RPC serialization
-func RPCMarshalAuxPow(ap *AuxPow) map[string]interface{} {
-	if ap == nil {
-		return nil
-	}
-
-	merkleBranch := make([]string, len(ap.merkleBranch))
-	for i, hash := range ap.merkleBranch {
-		merkleBranch[i] = hexutil.Encode(hash)
-	}
-
-	auxHeader := ap.header
-
-	// Get common header fields using the interface
-	version := auxHeader.Version()
-	height := auxHeader.Height()
-	bits := auxHeader.Bits()
-	prevBlock := auxHeader.PrevBlock()
-
-	return map[string]interface{}{
-		"version":           version,
-		"height":            hexutil.EncodeUint64(uint64(height)),
-		"bits":              hexutil.EncodeUint64(uint64(bits)),
-		"previousblockhash": hexutil.Encode(prevBlock[:]),
-		"merklebranch":      merkleBranch,
-	}
-}
-
 // Getters for AuxTemplate fields
 func (at *AuxTemplate) PowID() PowID                      { return at.powID }
 func (at *AuxTemplate) PrevHash() [32]byte                { return at.prevHash }
