@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"errors"
 	"io"
 
@@ -180,7 +181,7 @@ func (bch *BitcoinCashHeaderWrapper) Copy() AuxHeaderData {
 	return &BitcoinCashHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
-func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *BitcoinCashTxWrapper {
+func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {
 	coinbaseTx := &BitcoinCashTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
 
 	// Create the coinbase input with seal hash in scriptSig
@@ -194,15 +195,18 @@ func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbas
 		Sequence:        0xffffffff,
 	})
 
-	// Add the coinbase output
-	for _, co := range coinbaseOut {
-		value := co.Value()
-		pkScript := co.PkScript()
-		txOut := NewBitcoinCashCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
-	}
+	var buffer bytes.Buffer
 
-	return coinbaseTx
+	coinbaseTx.Serialize(&buffer)
+
+	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
+	// we need to trim these before appending the coinbaseOut
+	raw := buffer.Bytes()
+	if len(raw) < 5 {
+		return append([]byte{}, coinbaseOut...)
+	}
+	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+	return append(trimmed, coinbaseOut...)
 }
 
 func (bct *BitcoinCashTxWrapper) Copy() AuxPowTxData {
@@ -261,6 +265,14 @@ func (bct *BitcoinCashTxWrapper) Serialize(w io.Writer) error {
 	if bct.MsgTx == nil {
 		return errors.New("cannot serialize: MsgTx is nil")
 	}
+	return bct.MsgTx.Serialize(w)
+}
+
+func (bct *BitcoinCashTxWrapper) SerializeNoWitness(w io.Writer) error {
+	if bct.MsgTx == nil {
+		return errors.New("cannot serialize: MsgTx is nil")
+	}
+	// Bitcoin Cash doesn't use SegWit, so Serialize is the same as SerializeNoWitness
 	return bct.MsgTx.Serialize(w)
 }
 

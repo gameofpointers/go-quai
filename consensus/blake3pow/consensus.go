@@ -235,7 +235,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 
 		if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && uncle.AuxPow() != nil {
 			// Verify the merkle root as well
-			expectedMerkleRoot := types.CalculateMerkleRoot(uncle.AuxPow().Transaction(), uncle.AuxPow().MerkleBranch())
+			expectedMerkleRoot := types.CalculateMerkleRoot(uncle.AuxPow().PowID(), uncle.AuxPow().Transaction(), uncle.AuxPow().MerkleBranch())
 			if uncle.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
 				return errors.New("invalid merkle root in auxpow")
 			}

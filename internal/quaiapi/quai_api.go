@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
@@ -1172,35 +1171,20 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		return nil, errors.New("no header in AuxPow")
 	}
 
-	// Extract coinbase data from the new AuxPowTx type
-	var coinbaseValue uint64
-	var coinbaseAux []byte
-	var payoutScript []byte
 	blockHeight := auxHeader.Height() // Default to header height
 
 	if tx := auxPow.Transaction(); tx != nil {
-		// AuxPowTx.Value() returns int64, convert to uint64
-		if tx.Value() >= 0 {
-			coinbaseValue = uint64(tx.Value())
-		}
-		// Get the scriptSig (coinbase aux data)
-		coinbaseAux = tx.ScriptSig()
-
+		scriptSig := types.ExtractScriptSigFromCoinbaseTx(tx)
 		// Extract the block height from the coinbase scriptSig
-		extractedHeight, err := types.ExtractHeightFromCoinbase(coinbaseAux)
+		extractedHeight, err := types.ExtractHeightFromCoinbase(scriptSig)
 		if err == nil {
 			// Use the extracted height from scriptSig if successful
 			blockHeight = extractedHeight
 		}
 
-		// For the payout script, we need to get it from the coinbase output
-		// Since AuxPowTx doesn't expose the output directly, we'll need to
-		// serialize and deserialize to get it, or add a method to types package
-		// For now, we'll extract it via the Bytes() method and parse
-		payoutScript = extractPayoutScriptFromAuxPowTx(tx)
 	}
 
-	txBytes := auxPow.Transaction().Bytes()
+	txBytes := auxPow.Transaction()
 
 	// Build coinb1/coinb2 following Stratum's mining.notify convention:
 	// - coinb1: entire start of the tx up to the start of the combined extranonce push data
@@ -1237,7 +1221,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		merkleBranch[i] = hexutil.Encode(reversed)
 	}
 
-	merkleRoot := types.CalculateMerkleRoot(auxPow.Transaction(), auxPow.MerkleBranch())
+	merkleRoot := types.CalculateMerkleRoot(auxPow.PowID(), auxPow.Transaction(), auxPow.MerkleBranch())
 
 	// Convert bits to hex without 0x prefix
 	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())
@@ -1266,9 +1250,6 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 	return map[string]interface{}{
 		"version":           auxHeader.Version(),
 		"previousblockhash": prevBlockHex,
-		"coinbasevalue":     coinbaseValue,
-		"payoutscript":      hex.EncodeToString(payoutScript),
-		"coinbaseaux":       hex.EncodeToString(coinbaseAux),
 		// Miner target aligned with AuxPow header nBits (BCH/BTC style)
 		"target":            targetHex,
 		"mintime":           auxHeader.Timestamp(),
@@ -1451,33 +1432,6 @@ func extractCoinb1AndCoinb2FromAuxPowTx(txBytes []byte) ([]byte, []byte, error) 
 	}
 	coinb2 := txBytes[coinb2Start:]
 	return coinb1, coinb2, nil
-}
-
-// extractPayoutScriptFromAuxPowTx extracts the payout script from the first output of an AuxPowTx
-// This is a helper function to work around the fact that AuxPowTx doesn't directly expose outputs
-func extractPayoutScriptFromAuxPowTx(tx *types.AuxPowTx) []byte {
-	if tx == nil {
-		return nil
-	}
-
-	// Serialize the transaction and deserialize it to access the outputs
-	txBytes := tx.Bytes()
-	if len(txBytes) == 0 {
-		return nil
-	}
-
-	// Create a wire.MsgTx to deserialize into
-	wireTx := &wire.MsgTx{}
-	if err := wireTx.DeserializeNoWitness(bytes.NewReader(txBytes)); err != nil {
-		return nil
-	}
-
-	// Extract the first output's PkScript
-	if len(wireTx.TxOut) > 0 {
-		return wireTx.TxOut[0].PkScript
-	}
-
-	return nil
 }
 
 // marshalScryptTemplate formats a WorkObject as a Scrypt/Litecoin getblocktemplate response

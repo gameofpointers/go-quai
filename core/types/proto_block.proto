@@ -109,7 +109,7 @@ message ProtoAuxTemplate {
   optional uint32 height = 6;              // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
   // CoinbaseOut is the coinbase payout
-  repeated ProtoCoinbaseTxOut coinbase_out = 7;        // full coinbase output script (scriptPubKey)
+  optional bytes coinbase_out = 7;        // full coinbase output script (scriptPubKey)
 
   // Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
   repeated bytes merkle_branch = 8;       // siblings for coinbase index=0 up to root (little endian 32-byte hashes)
@@ -118,11 +118,6 @@ message ProtoAuxTemplate {
   optional bytes sigs = 9;
 
   optional bytes aux_pow2 = 10;            // auxiliary proof-of-work data
-}
-
-message ProtoCoinbaseTxOut {
-  optional int64 value = 1;      // in satoshis
-  optional bytes script_pub_key = 2; // full scriptPubKey
 }
 
 message ProtoPowShareDiffAndCount {

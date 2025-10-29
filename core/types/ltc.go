@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -207,7 +208,7 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 
 // CoinbaseTx functions
 
-func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *LitecoinTxWrapper {
+func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32, witness bool) []byte {
 	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
 	// Create the coinbase input with seal hash in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, signatureTime)
@@ -220,16 +221,21 @@ func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOu
 		Sequence:        0xffffffff,
 	})
 
-	// Add the coinbase output
-	for _, co := range coinbaseOut {
-		value := co.Value()
-		pkScript := co.PkScript()
-		txOut := NewLitecoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+	var buffer bytes.Buffer
+	if witness {
+		coinbaseTx.Serialize(&buffer)
+	} else {
+		coinbaseTx.SerializeNoWitness(&buffer)
 	}
 
-	return coinbaseTx
-
+	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
+	// we need to trim these before appending the coinbaseOut
+	raw := buffer.Bytes()
+	if len(raw) < 5 {
+		return append([]byte{}, coinbaseOut...)
+	}
+	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+	return append(trimmed, coinbaseOut...)
 }
 
 func (lct *LitecoinTxWrapper) Copy() AuxPowTxData {
@@ -288,6 +294,14 @@ func (lct *LitecoinTxWrapper) Serialize(w io.Writer) error {
 	if lct.MsgTx == nil {
 		return fmt.Errorf("cannot serialize: MsgTx is nil")
 	}
+	return lct.MsgTx.Serialize(w)
+}
+
+func (lct *LitecoinTxWrapper) SerializeNoWitness(w io.Writer) error {
+	if lct.MsgTx == nil {
+		return fmt.Errorf("cannot serialize: MsgTx is nil")
+	}
+	// Litecoin doesn't use SegWit, so Serialize is the same as SerializeNoWitness
 	return lct.MsgTx.Serialize(w)
 }
 
