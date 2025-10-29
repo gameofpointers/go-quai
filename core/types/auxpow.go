@@ -246,6 +246,13 @@ func (at *AuxTemplate) Hash() [32]byte {
 	tempTemplate := proto.Clone(protoTemplate).(*ProtoAuxTemplate)
 	tempTemplate.Sigs = nil
 
+	// Since for chains other than ravencoin, version can be grinded for mining,
+	// need to mask them before signing
+	versionMask := uint32(0xE0000000)
+	if at.powID != Kawpow {
+		tempTemplate.Version = proto.Uint32(*tempTemplate.Version & versionMask)
+	}
+
 	// Marshal the template without signatures to get the message hash
 	templateData, err := proto.Marshal(tempTemplate)
 	if err != nil {
