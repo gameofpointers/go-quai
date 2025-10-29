@@ -384,29 +384,36 @@ type RavencoinTx struct {
 	*btcdwire.MsgTx
 }
 
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *RavencoinTx {
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32, witness bool) []byte {
 	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
 
 	// Create the coinbase input with seal hash
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, signatureTime)
-	coinbaseTx.AddTxIn(&btcdwire.TxIn{
+	coinbaseIn := &btcdwire.TxIn{
 		PreviousOutPoint: btcdwire.OutPoint{
 			Hash:  btchash.Hash{}, // Coinbase has no previous output
 			Index: 0xffffffff,     // Coinbase has no previous output
 		},
 		SignatureScript: scriptSig,
 		Sequence:        0xffffffff,
-	})
+	}
+	coinbaseTx.AddTxIn(coinbaseIn)
 
-	// Add the coinbase output
-	for _, co := range coinbaseOut {
-		value := co.Value()
-		pkScript := co.PkScript()
-		txOut := NewRavencoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+	var buffer bytes.Buffer
+	if witness {
+		coinbaseTx.Serialize(&buffer)
+	} else {
+		coinbaseTx.SerializeNoWitness(&buffer)
 	}
 
-	return coinbaseTx
+	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
+	// we need to trim these before appending the coinbaseOut
+	raw := buffer.Bytes()
+	if len(raw) < 5 {
+		return append([]byte{}, coinbaseOut...)
+	}
+	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+	return append(trimmed, coinbaseOut...)
 }
 
 func (rct *RavencoinTx) Copy() AuxPowTxData {

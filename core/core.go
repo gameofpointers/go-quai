@@ -604,9 +604,8 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 		powType            types.PowID
 		heightFromCoinbase uint32
 		err                error
+		coinbaseTx         []byte
 	)
-
-	var coinbaseTx *types.AuxPowTx // Store the parsed coinbase transaction
 
 	// Try SHA256d/Bitcoin format (80 byte header) FIRST
 	if len(data) >= bitcoinHeaderSize {
@@ -637,18 +636,14 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 
 			// Now deserialize the first transaction (coinbase)
 			// Create an AuxPowTx with correct type (Bitcoin) for deserialization
-			coinbaseTx = types.NewAuxPowCoinbaseTx(types.SHA_BCH, 0, nil, common.Hash{}, 0)
-			txErr := coinbaseTx.DeserializeNoWitness(reader)
-			if txErr != nil {
-				c.logger.WithFields(log.Fields{
-					"type":  "SHA256d",
-					"error": txErr.Error(),
-				}).Error("Failed to decode as SHA256d transaction, will try KAWPOW")
-				// Don't return error yet - might be KAWPOW
+			coinbaseTx = extra[1:] // Skip var_int byte(s)
+			scriptSig := types.ExtractScriptSigFromCoinbaseTx(coinbaseTx)
+			if len(scriptSig) == 0 {
+				c.logger.Error("Failed to extract scriptSig from SHA256d coinbase transaction, will try KAWPOW")
 				coinbaseTx = nil
 			} else {
 				// Extract seal hash from the parsed transaction
-				sealHash, err = types.ExtractSealHashFromCoinbase(coinbaseTx.ScriptSig())
+				sealHash, err = types.ExtractSealHashFromCoinbase(scriptSig)
 				if err != nil {
 					c.logger.WithFields(log.Fields{
 						"type":  "SHA256d",
@@ -662,7 +657,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 					auxHeader = types.NewAuxPowHeader(btcHeaderWrapper)
 					powType = types.SHA_BCH
 
-					heightFromCoinbase, err = types.ExtractHeightFromCoinbase(coinbaseTx.ScriptSig())
+					heightFromCoinbase, err = types.ExtractHeightFromCoinbase(scriptSig)
 					if err != nil {
 						c.logger.WithFields(log.Fields{
 							"type":  "SHA256d",
@@ -714,20 +709,16 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 				return nil, errors.New("KAWPOW block must have at least one transaction (coinbase)")
 			}
 
-			// Now deserialize the first transaction (coinbase)
-			// Create an AuxPowTx for Ravencoin and deserialize into it
-			coinbaseTx = types.NewAuxPowCoinbaseTx(types.Kawpow, 0, nil, common.Hash{}, 0) // Temporary, will be replaced
-			txErr := coinbaseTx.DeserializeNoWitness(reader)
-			if txErr != nil {
-				c.logger.WithFields(log.Fields{
-					"type":  "KAWPOW",
-					"error": txErr.Error(),
-				}).Error("Failed to decode KAWPOW transaction")
-				return nil, errors.New("failed to decode KAWPOW transaction: " + txErr.Error())
+			coinbaseTx = extra[1:] // Skip var_int byte(s)
+
+			scriptSig := types.ExtractScriptSigFromCoinbaseTx(coinbaseTx)
+			if len(scriptSig) == 0 {
+				c.logger.Error("Failed to extract scriptSig from KAWPOW coinbase transaction")
+				return nil, errors.New("failed to extract scriptSig from KAWPOW coinbase transaction")
 			}
 
 			// Extract seal hash from the parsed transaction
-			sealHash, err = types.ExtractSealHashFromCoinbase(coinbaseTx.ScriptSig())
+			sealHash, err = types.ExtractSealHashFromCoinbase(scriptSig)
 			if err != nil {
 				c.logger.WithFields(log.Fields{
 					"type":  "KAWPOW",
@@ -736,7 +727,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 				return nil, errors.New("failed to extract seal hash from KAWPOW block: " + err.Error())
 			}
 
-			heightFromCoinbase, err = types.ExtractHeightFromCoinbase(coinbaseTx.ScriptSig())
+			heightFromCoinbase, err = types.ExtractHeightFromCoinbase(scriptSig)
 			if err != nil {
 				c.logger.WithFields(log.Fields{
 					"type":  "SHA256d",
@@ -781,7 +772,14 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes) (*types.WorkObject, error) {
 	}
 
 	workObjectCopy := types.CopyWorkObject(workObject)
-	heightFromWorkObject, err := types.ExtractHeightFromCoinbase(workObjectCopy.AuxPow().Transaction().ScriptSig())
+
+	scriptSig := types.ExtractScriptSigFromCoinbaseTx(workObjectCopy.AuxPow().Transaction())
+	if len(scriptSig) == 0 {
+		c.logger.Error("Failed to extract scriptSig from coinbase transaction in work object")
+		return nil, errors.New("failed to extract scriptSig from coinbase transaction in work object")
+	}
+
+	heightFromWorkObject, err := types.ExtractHeightFromCoinbase(scriptSig)
 	if err != nil {
 		c.logger.WithFields(log.Fields{
 			"error": err.Error(),

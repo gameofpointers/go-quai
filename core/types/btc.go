@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -185,7 +186,7 @@ func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
 }
 
-func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut, sealHash common.Hash, signatureTime uint32) *BitcoinTxWrapper {
+func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32, witness bool) []byte {
 	coinbaseTx := &BitcoinTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
 
 	// Create the coinbase input with seal hash in scriptSig
@@ -199,15 +200,21 @@ func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []*AuxPowCoinbaseOut
 		Sequence:        0xffffffff,
 	})
 
-	// Add the coinbase output
-	for _, co := range coinbaseOut {
-		value := co.Value()
-		pkScript := co.PkScript()
-		txOut := NewBitcoinCoinbaseTxOut(value, pkScript)
-		coinbaseTx.AddTxOut(txOut.TxOut)
+	var buffer bytes.Buffer
+	if witness {
+		coinbaseTx.Serialize(&buffer)
+	} else {
+		coinbaseTx.SerializeNoWitness(&buffer)
 	}
 
-	return coinbaseTx
+	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
+	// we need to trim these before appending the coinbaseOut
+	raw := buffer.Bytes()
+	if len(raw) < 5 {
+		return append([]byte{}, coinbaseOut...)
+	}
+	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+	return append(trimmed, coinbaseOut...)
 }
 
 func (btt *BitcoinTxWrapper) Copy() AuxPowTxData {

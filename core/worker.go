@@ -762,7 +762,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	}
 
 	// If there is no auxpow template, then just fill the pow id for now
-	auxPow := types.NewAuxPow(types.Kawpow, &types.AuxPowHeader{}, []byte{}, nil, &types.AuxPowTx{})
+	auxPow := types.NewAuxPow(types.Kawpow, &types.AuxPowHeader{}, []byte{}, nil, []byte{})
 
 	// Setting the auxpow so that pow id is registered properly
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 
 	btcblockchain "github.com/btcsuite/btcd/blockchain"
 	btcutil "github.com/btcsuite/btcd/btcutil"
@@ -135,61 +136,6 @@ func ExtractSignatureTimeFromCoinbase(scriptSig []byte) (uint32, error) {
 	return binary.LittleEndian.Uint32(signatureTimeData), nil
 }
 
-// SetSealHashInCoinbase updates the seal hash in an existing coinbase scriptSig.
-// This is used by miners to insert the actual seal hash into the placeholder.
-// Returns the modified scriptSig or an error if the format is invalid.
-func SetSealHashInCoinbase(scriptSig []byte, sealHash common.Hash) ([]byte, error) {
-	if len(scriptSig) == 0 {
-		return nil, errors.New("coinbase scriptSig empty")
-	}
-
-	cursor := 0
-
-	// 1. Skip height (variable length - BIP34 minimal encoding)
-	heightData, consumed, err := parseScriptPush(scriptSig[cursor:])
-	if err != nil {
-		return nil, fmt.Errorf("decode coinbase height: %w", err)
-	}
-	// Height can be 0-5 bytes (BIP34 allows minimal encoding)
-	if len(heightData) > 5 {
-		return nil, fmt.Errorf("invalid height length: expected 0-5 bytes, got %d", len(heightData))
-	}
-	cursor += consumed
-
-	// 2. Skip magic marker (4 bytes)
-	magicData, consumed, err := parseScriptPush(scriptSig[cursor:])
-	if err != nil {
-		return nil, fmt.Errorf("decode magic marker: %w", err)
-	}
-	if len(magicData) != 4 {
-		return nil, fmt.Errorf("invalid magic marker length: expected 4, got %d", len(magicData))
-	}
-	cursor += consumed
-
-	// 3. Find the seal hash position (should be OP_PUSH32 followed by 32 bytes)
-	if cursor >= len(scriptSig) {
-		return nil, errors.New("scriptSig too short to contain seal hash")
-	}
-	if scriptSig[cursor] != 0x20 { // OP_PUSH32
-		return nil, fmt.Errorf("expected OP_PUSH32 (0x20) at seal hash position, got 0x%x", scriptSig[cursor])
-	}
-
-	// Calculate the position where the seal hash data starts (after the OP_PUSH32 opcode)
-	sealHashStart := cursor + 1
-	sealHashEnd := sealHashStart + 32
-
-	if sealHashEnd > len(scriptSig) {
-		return nil, errors.New("scriptSig too short to contain 32-byte seal hash")
-	}
-
-	// Create a copy of the scriptSig and update the seal hash
-	result := make([]byte, len(scriptSig))
-	copy(result, scriptSig)
-	copy(result[sealHashStart:sealHashEnd], sealHash[:])
-
-	return result, nil
-}
-
 func parseScriptPush(script []byte) ([]byte, int, error) {
 	if len(script) == 0 {
 		return nil, 0, errors.New("empty script segment")
@@ -287,12 +233,12 @@ func BuildCoinbaseScriptSigWithNonce(blockHeight uint32, extraNonce1 uint32, ext
 
 // VerifyMerkleProof verifies a merkle proof for a transaction at index 0 (coinbase)
 // merkleBranch contains the sibling hashes from leaf to root
-func CalculateMerkleRoot(coinbaseTx *AuxPowTx, merkleBranch [][]byte) [common.HashLength]byte {
+func CalculateMerkleRoot(powId PowID, coinbaseTx []byte, merkleBranch [][]byte) [common.HashLength]byte {
 
-	switch coinbaseTx.inner.(type) {
-	case *RavencoinTx, *BitcoinTxWrapper:
+	switch powId {
+	case Kawpow, SHA_BTC:
 		// Start with the transaction hash
-		currentHash := chainhash.Hash(coinbaseTx.TxHash())
+		currentHash := chainhash.Hash(AuxPowTxHash(powId, coinbaseTx))
 
 		// For coinbase (index 0), we always take the right branch
 		// and our hash goes on the left
@@ -304,9 +250,9 @@ func CalculateMerkleRoot(coinbaseTx *AuxPowTx, merkleBranch [][]byte) [common.Ha
 			currentHash = btcblockchain.HashMerkleBranches(&currentHash, &sibling)
 		}
 		return currentHash
-	case *LitecoinTxWrapper:
+	case Scrypt:
 		// Start with the transaction hash
-		currentHash := ltcchainhash.Hash(coinbaseTx.TxHash())
+		currentHash := ltcchainhash.Hash(AuxPowTxHash(powId, coinbaseTx))
 
 		// For coinbase (index 0), we always take the right branch
 		// and our hash goes on the left
@@ -318,9 +264,9 @@ func CalculateMerkleRoot(coinbaseTx *AuxPowTx, merkleBranch [][]byte) [common.Ha
 			currentHash = ltcblockchain.HashMerkleBranches(&currentHash, &sibling)
 		}
 		return currentHash
-	case *BitcoinCashTxWrapper:
+	case SHA_BCH:
 		// Start with the transaction hash
-		currentHash := bchchainhash.Hash(coinbaseTx.TxHash())
+		currentHash := bchchainhash.Hash(AuxPowTxHash(powId, coinbaseTx))
 
 		// For coinbase (index 0), we always take the right branch
 		// and our hash goes on the left
@@ -475,6 +421,116 @@ func encodeHeightForBIP34(height uint32) []byte {
 	}
 
 	return result
+}
+
+// TODO: Replace with a method from btcd/ltcd/bchd if available
+// readVarInt decodes Bitcoin-style VarInts and returns the decoded value along with the number of bytes consumed.
+func readVarInt(buf *bytes.Reader) (uint64, int, error) {
+	b, err := buf.ReadByte()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	switch b {
+	case 0xfd:
+		var v uint16
+		if err := binary.Read(buf, binary.LittleEndian, &v); err != nil {
+			return 0, 0, err
+		}
+		return uint64(v), 3, nil
+	case 0xfe:
+		var v uint32
+		if err := binary.Read(buf, binary.LittleEndian, &v); err != nil {
+			return 0, 0, err
+		}
+		return uint64(v), 5, nil
+	case 0xff:
+		var v uint64
+		if err := binary.Read(buf, binary.LittleEndian, &v); err != nil {
+			return 0, 0, err
+		}
+		return v, 9, nil
+	default:
+		return uint64(b), 1, nil
+	}
+}
+
+// ExtractScriptSigFromCoinbaseTx extracts scriptSig from the first input.
+func ExtractScriptSigFromCoinbaseTx(coinbaseTx []byte) []byte {
+	r := bytes.NewReader(coinbaseTx)
+
+	// Skip version (4 bytes)
+	if _, err := r.Seek(4, io.SeekStart); err != nil {
+		return nil
+	}
+
+	// Read input count (value unused, only advance reader)
+	if _, _, err := readVarInt(r); err != nil {
+		return nil
+	}
+
+	// Skip prev_txid (32) + prev_vout (4)
+	if _, err := r.Seek(36, io.SeekCurrent); err != nil {
+		return nil
+	}
+
+	// Read scriptSig length
+	scriptLen, _, err := readVarInt(r)
+	if err != nil {
+		return nil
+	}
+
+	if scriptLen == 0 {
+		return []byte{}
+	}
+
+	if scriptLen > uint64(r.Len()) {
+		return nil
+	}
+
+	// Read scriptSig
+	script := make([]byte, scriptLen)
+	if _, err := io.ReadFull(r, script); err != nil {
+		return nil
+	}
+	return script
+}
+
+// ExtractCoinbaseOutFromCoinbaseTx extracts all the outputs including the outputs length (varint + serialized outputs).
+func ExtractCoinbaseOutFromCoinbaseTx(coinbaseTx []byte) []byte {
+	r := bytes.NewReader(coinbaseTx)
+
+	// Skip version
+	if _, err := r.Seek(4, io.SeekStart); err != nil {
+		return nil
+	}
+
+	// Skip input count + first input (we can reuse above but inline for simplicity)
+	if _, _, err := readVarInt(r); err != nil {
+		return nil
+	}
+	if _, err := r.Seek(36, io.SeekCurrent); err != nil { // prev_txid + vout
+		return nil
+	}
+
+	scriptLen, _, err := readVarInt(r)
+	if err != nil {
+		return nil
+	}
+	if int64(scriptLen) < 0 || scriptLen > uint64(r.Len()) {
+		return nil
+	}
+	if _, err := r.Seek(int64(scriptLen), io.SeekCurrent); err != nil { // skip script
+		return nil
+	}
+	if _, err := r.Seek(4, io.SeekCurrent); err != nil { // skip sequence
+		return nil
+	}
+
+	// Record the start of the outputs (includes the outputs count varint)
+	outputsStart := int(r.Size()) - r.Len()
+
+	return coinbaseTx[outputsStart:]
 }
 
 // ExtractHeightFromCoinbase extracts the block height from the coinbase scriptSig.
