@@ -914,6 +914,34 @@ func (ap *AuxPow) UnmarshalJSON(data []byte) error {
 	}
 
 	ap.powID = PowID(*dec.PowID)
+
+	switch ap.powID {
+	case Kawpow:
+		header := &RavencoinBlockHeader{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+	case SHA_BTC:
+		header := &BitcoinHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+	case SHA_BCH:
+		header := &BitcoinCashHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+	case Scrypt:
+		header := &LitecoinHeaderWrapper{}
+		if err := header.Deserialize(bytes.NewReader(*dec.Header)); err != nil {
+			return err
+		}
+		ap.header = NewAuxPowHeader(header)
+	}
+
 	// Decode signature
 	ap.signature = *dec.Signature
 	// Decode merkle branch
