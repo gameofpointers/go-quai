@@ -901,22 +901,24 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 		"template_coinbaseOut":    hex.EncodeToString(reconTemplate.CoinbaseOut()),
 	}).Info("Received work object with auxpow2")
 
-	expectedAuxMerkleRoot := types.CreateAuxMerkleRoot(common.Hash(workObjectCopy.AuxPow().AuxPow2()), workObjectCopy.SealHash())
-	if expectedAuxMerkleRoot != sealHash {
-		c.logger.WithFields(log.Fields{
-			"expected": expectedAuxMerkleRoot.Hex(),
-			"received": sealHash.Hex(),
-			"auxPow2":  hex.EncodeToString(workObjectCopy.AuxPow().AuxPow2()),
-			"sealHash": workObjectCopy.SealHash().Hex(),
-		}).Error("AuxMerkleRoot mismatch between work object and decoded auxMerkleRoot")
-		return nil, fmt.Errorf("auxMerkleRoot mismatch between work object and decoded auxMerkleRoot")
-	} else {
-		c.logger.WithFields(log.Fields{
-			"expected": expectedAuxMerkleRoot.Hex(),
-			"received": sealHash.Hex(),
-			"auxPow2":  hex.EncodeToString(workObjectCopy.AuxPow().AuxPow2()),
-			"sealHash": workObjectCopy.SealHash().Hex(),
-		}).Info("AuxMerkleRoot matches between work object and decoded auxMerkleRoot")
+	if len(workObjectCopy.AuxPow().AuxPow2()) == 32 {
+		expectedAuxMerkleRoot := types.CreateAuxMerkleRoot(common.Hash(workObjectCopy.AuxPow().AuxPow2()), workObjectCopy.SealHash())
+		if expectedAuxMerkleRoot != sealHash {
+			c.logger.WithFields(log.Fields{
+				"expected": expectedAuxMerkleRoot.Hex(),
+				"received": sealHash.Hex(),
+				"auxPow2":  hex.EncodeToString(workObjectCopy.AuxPow().AuxPow2()),
+				"sealHash": workObjectCopy.SealHash().Hex(),
+			}).Error("AuxMerkleRoot mismatch between work object and decoded auxMerkleRoot")
+			return nil, fmt.Errorf("auxMerkleRoot mismatch between work object and decoded auxMerkleRoot")
+		} else {
+			c.logger.WithFields(log.Fields{
+				"expected": expectedAuxMerkleRoot.Hex(),
+				"received": sealHash.Hex(),
+				"auxPow2":  hex.EncodeToString(workObjectCopy.AuxPow().AuxPow2()),
+				"sealHash": workObjectCopy.SealHash().Hex(),
+			}).Info("AuxMerkleRoot matches between work object and decoded auxMerkleRoot")
+		}
 	}
 
 	return workObjectCopy, nil
