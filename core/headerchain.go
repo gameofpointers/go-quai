@@ -271,16 +271,8 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 
 			// TODO: NEED TO CALCULATE THE ENTROPY CONTRIBUTED BY SHA AND SCRYPT SHARES properly
 			var thresholdBigBits *big.Int
-			var shaTarget, scryptTarget *big.Int
 			if ws.AuxPow() != nil && ws.AuxPow().PowID() > types.Kawpow {
-				if ws.AuxPow().PowID() == types.SHA_BCH || ws.AuxPow().PowID() == types.SHA_BTC {
-					shaTarget = new(big.Int).Div(common.Big2e256, wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
-					thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(shaTarget.Bytes()))
-				} else if ws.AuxPow().PowID() == types.Scrypt {
-					scryptTarget = new(big.Int).Div(common.Big2e256, wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
-					thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(scryptTarget.Bytes()))
-				}
-				wsEntropy = new(big.Int).Sub(cBigBits, thresholdBigBits) // Extra bits after the threshold for sha and scrypt
+				continue // skip sha and scrypt workshares for now
 			} else {
 				thresholdBigBits = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 				wsEntropy = new(big.Int).Sub(thresholdBigBits, cBigBits)
