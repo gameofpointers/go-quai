@@ -2230,20 +2230,6 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 					uncles = append(uncles, &uncle)
 				}
 			}
-			// sort the uncles in the decreasing order of entropy
-			sort.Slice(uncles, func(i, j int) bool {
-				intrinsic1, err := w.hc.IntrinsicLogEntropy(uncles[i])
-				if err != nil {
-					w.logger.WithField("err", err).Error("Failed to get intrinsic log entropy")
-					return false
-				}
-				intrinsic2, err := w.hc.IntrinsicLogEntropy(uncles[j])
-				if err != nil {
-					w.logger.WithField("err", err).Error("Failed to get intrinsic log entropy")
-					return false
-				}
-				return intrinsic1.Cmp(intrinsic2) > 0
-			})
 			for _, uncle := range uncles {
 				env.uncleMu.RLock()
 				if len(env.uncles) == params.MaxWorkShareCount {
