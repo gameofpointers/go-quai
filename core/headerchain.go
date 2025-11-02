@@ -346,9 +346,9 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCou
 	var error *big.Int
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
-		error = new(big.Int).Sub(shares.Count(), params.TargetShaShares)
+		error = new(big.Int).Sub(params.TargetShaShares, shares.Count())
 	case types.Scrypt:
-		error = new(big.Int).Sub(shares.Count(), params.TargetScryptShares)
+		error = new(big.Int).Sub(params.TargetScryptShares, shares.Count())
 	default:
 		return big.NewInt(0), big.NewInt(0)
 	}
