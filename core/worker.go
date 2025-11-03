@@ -2269,19 +2269,31 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 				if i < len(kawpowKeys) {
 					if value, exist := kawpowCache.Peek(kawpowKeys[i]); exist {
 						uncle := value
-						uncles = append(uncles, &uncle)
+						if uncle.NumberU64()+uint64(params.WorkSharesInclusionDepth) < wo.NumberU64(common.ZONE_CTX) {
+							kawpowCache.Remove(kawpowKeys[i])
+						} else {
+							uncles = append(uncles, &uncle)
+						}
 					}
 				}
 				if i < len(shaKeys) {
 					if value, exist := shaCache.Peek(shaKeys[i]); exist {
 						uncle := value
-						uncles = append(uncles, &uncle)
+						if uncle.NumberU64()+uint64(params.WorkSharesInclusionDepth) < wo.NumberU64(common.ZONE_CTX) {
+							shaCache.Remove(shaKeys[i])
+						} else {
+							uncles = append(uncles, &uncle)
+						}
 					}
 				}
 				if i < len(scryptKeys) {
 					if value, exist := scryptCache.Peek(scryptKeys[i]); exist {
 						uncle := value
-						uncles = append(uncles, &uncle)
+						if uncle.NumberU64()+uint64(params.WorkSharesInclusionDepth) < wo.NumberU64(common.ZONE_CTX) {
+							scryptCache.Remove(scryptKeys[i])
+						} else {
+							uncles = append(uncles, &uncle)
+						}
 					}
 				}
 			}
