@@ -39,6 +39,7 @@ const (
 
 var (
 	errInvalidEfficiencyScore = errors.New("unable to compute efficiency score")
+	errInvalidWorkShareDist   = errors.New("workshare is at distance more than WorkSharesInclusionDepth")
 )
 
 type calcOrderResponse struct {
@@ -1107,7 +1108,7 @@ func (hc *HeaderChain) WorkShareDistance(wo *types.WorkObject, ws *types.WorkObj
 
 	// If distance is greater than the WorkSharesInclusionDepth, reject the workshare
 	if distance > int64(params.WorkSharesInclusionDepth) {
-		return big.NewInt(0), errors.New("workshare is at distance more than WorkSharesInclusionDepth")
+		return big.NewInt(0), errInvalidWorkShareDist
 	}
 
 	return big.NewInt(distance), nil

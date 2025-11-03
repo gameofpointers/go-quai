@@ -159,7 +159,10 @@ type worker struct {
 
 	wg sync.WaitGroup
 
-	uncles  *lru.Cache[common.Hash, types.WorkObjectHeader]
+	kawpowShares *lru.Cache[common.Hash, types.WorkObjectHeader]
+	shaShares    *lru.Cache[common.Hash, types.WorkObjectHeader]
+	scryptShares *lru.Cache[common.Hash, types.WorkObjectHeader]
+
 	uncleMu sync.RWMutex
 
 	mu                    sync.RWMutex // The lock used to protect the coinbase and extra fields
@@ -257,8 +260,13 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		logger.Infof("Using lockup contract address %s", worker.lockupContractAddress.String())
 	}
 	// initialize a uncle cache
-	uncles, _ := lru.New[common.Hash, types.WorkObjectHeader](c_uncleCacheSize)
-	worker.uncles = uncles
+	kawpowShares, _ := lru.New[common.Hash, types.WorkObjectHeader](c_uncleCacheSize)
+	shaShares, _ := lru.New[common.Hash, types.WorkObjectHeader](c_uncleCacheSize)
+	scryptShares, _ := lru.New[common.Hash, types.WorkObjectHeader](c_uncleCacheSize)
+	worker.kawpowShares = kawpowShares
+	worker.shaShares = shaShares
+	worker.scryptShares = scryptShares
+
 	// Set the GasFloor of the worker to the minGasLimit
 	worker.config.GasFloor = params.MinGasLimit(headerchain.CurrentHeader().NumberU64(common.ZONE_CTX))
 
@@ -532,10 +540,10 @@ func (w *worker) asyncStateLoop() {
 				}()
 				for _, wo := range side.Blocks {
 					// Short circuit for duplicate side blocks
-					if exists := w.uncles.Contains(wo.Hash()); exists {
+					if exists := w.kawpowShares.Contains(wo.Hash()); exists {
 						continue
 					}
-					w.uncles.Add(wo.Hash(), *wo.WorkObjectHeader())
+					w.kawpowShares.Add(wo.Hash(), *wo.WorkObjectHeader())
 				}
 			}()
 		case <-w.exitCh:
@@ -902,6 +910,27 @@ func (w *worker) commitUncle(env *environment, uncle *types.WorkObjectHeader) er
 
 	_, err := w.hc.WorkShareDistance(env.wo, uncle)
 	if err != nil {
+
+		if errors.Is(err, errInvalidWorkShareDist) {
+			// If uncle is found to be invalid because of distance, remove it from
+			// the share cache
+			var powid types.PowID
+			if uncle.AuxPow() == nil {
+				powid = types.Progpow
+			} else {
+				powid = uncle.AuxPow().PowID()
+			}
+
+			switch powid {
+			case types.Progpow, types.Kawpow:
+				w.kawpowShares.Remove(uncle.Hash())
+			case types.SHA_BCH, types.SHA_BTC:
+				w.shaShares.Remove(uncle.Hash())
+			case types.Scrypt:
+				w.scryptShares.Remove(uncle.Hash())
+			}
+		}
+
 		return err
 	}
 	if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
@@ -2221,15 +2250,42 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 		env.parentOrder = &order
 		// Accumulate the uncles for the sealing work.
-		commitUncles := func(wos *lru.Cache[common.Hash, types.WorkObjectHeader]) {
+		commitUncles := func(kawpowCache, shaCache, scryptCache *lru.Cache[common.Hash, types.WorkObjectHeader]) {
 			var uncles []*types.WorkObjectHeader
-			keys := wos.Keys()
-			for _, hash := range keys {
-				if value, exist := wos.Peek(hash); exist {
-					uncle := value
-					uncles = append(uncles, &uncle)
+			kawpowKeys := kawpowCache.Keys()
+			shaKeys := shaCache.Keys()
+			scryptKeys := scryptCache.Keys()
+
+			// Select uncles in a round robin fashion from the three caches
+			maxLen := len(kawpowKeys)
+			if len(shaKeys) > maxLen {
+				maxLen = len(shaKeys)
+			}
+			if len(scryptKeys) > maxLen {
+				maxLen = len(scryptKeys)
+			}
+
+			for i := 0; i < maxLen; i++ {
+				if i < len(kawpowKeys) {
+					if value, exist := kawpowCache.Peek(kawpowKeys[i]); exist {
+						uncle := value
+						uncles = append(uncles, &uncle)
+					}
+				}
+				if i < len(shaKeys) {
+					if value, exist := shaCache.Peek(shaKeys[i]); exist {
+						uncle := value
+						uncles = append(uncles, &uncle)
+					}
+				}
+				if i < len(scryptKeys) {
+					if value, exist := scryptCache.Peek(scryptKeys[i]); exist {
+						uncle := value
+						uncles = append(uncles, &uncle)
+					}
 				}
 			}
+
 			for _, uncle := range uncles {
 				env.uncleMu.RLock()
 				if len(env.uncles) == params.MaxWorkShareCount {
@@ -2250,7 +2306,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 			w.uncleMu.RLock()
 			// Prefer to locally generated uncle
-			commitUncles(w.uncles)
+			commitUncles(w.kawpowShares, w.shaShares, w.scryptShares)
 			w.uncleMu.RUnlock()
 		}
 		return env, nil
@@ -2507,7 +2563,13 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 		return errors.New("work share received from peer is not valid")
 	}
 
-	w.uncles.ContainsOrAdd(workShare.Hash(), *workShare)
+	if workShare.AuxPow() == nil || workShare.AuxPow().PowID() == types.Kawpow {
+		w.kawpowShares.ContainsOrAdd(workShare.Hash(), *workShare)
+	} else if workShare.AuxPow().PowID() == types.SHA_BTC || workShare.AuxPow().PowID() == types.SHA_BCH {
+		w.shaShares.ContainsOrAdd(workShare.Hash(), *workShare)
+	} else if workShare.AuxPow().PowID() == types.Scrypt {
+		w.scryptShares.ContainsOrAdd(workShare.Hash(), *workShare)
+	}
 
 	if w.hc.NodeCtx() == common.ZONE_CTX {
 		telemetry.RecordCandidateHeader(workShare)
