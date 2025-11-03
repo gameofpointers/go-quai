@@ -61,14 +61,14 @@ for the first supported entry.
 | Field | Type | Description |
 | --- | --- | --- |
 | `bits` | string | Compact representation of the current target difficulty. Must not be changed. |
-| `coinb1` | string | First half of the serialized coinbase transaction up to (but excluding) `extranonce1`. |
-| `coinb2` | string | Remaining bytes of the coinbase transaction after `extranonce2`. Includes coinbase outputs and default padding. |
-| `coinbaseAuxExtraBytesLength` | number | Maximum number of extra bytes the pool may set inside the coinbase auxiliary data segment. |
+| `coinb1` | string | First half of the serialized coinbase transaction up to (but excluding) `extranonce1`. Supplied by go-quai and must remain unchanged. |
+| `coinb2` | string | Remaining bytes of the coinbase transaction after `extranonce2`. Includes coinbase outputs and default padding. Only the first `coinbaseAuxExtraBytesLength` bytes may be replaced with pool metadata; the remainder must stay intact. |
+| `coinbaseAuxExtraBytesLength` | number | Length (in bytes) of the mutable prefix at the start of `coinb2` reserved for pool-supplied auxiliary data. |
 | `curtime` | number | Current Unix timestamp used when the template was generated. Pools may update it within consensus rules. |
 | `extranonce1Length` | number | Expected byte length for `extranonce1`. |
 | `extranonce2Length` | number | Expected byte length for `extranonce2`. |
 | `height` | number | Block height the miner is targeting. Read-only donor chain information. |
-| `merklebranch` | array | Merkle branches required to recompute the block merkle root once the coinbase is finalized. |
+| `merklebranch` | array | Merkle branches (big-endian hex strings) required to recompute the block merkle root once the coinbase is finalized. |
 | `merkleroot` | string | Merkle root computed with the provided `coinb1/coinb2`. Update after customizing the coinbase. |
 | `mintime` | number | Earliest valid timestamp for the block. |
 | `noncerange` | string | Hex-encoded inclusive nonce range miners may iterate through. |
@@ -89,14 +89,39 @@ coinbase = coinb1 + extranonce1 + extranonce2 + coinb2
 ```
 
 - `extranonce1` and `extranonce2` may be chosen by the pool. If they are omitted,
-  insert zero bytes matching `extranonce1Length` and `extranonce2Length`.
+  insert zero bytes matching `extranonce1Length` and `extranonce2Length`. Pools
+  typically set `extranonce1`; individual miners supply `extranonce2`. Both values
+  must match the advertised byte lengths.
 - Ensure that any auxiliary metadata fits within `coinbaseAuxExtraBytesLength`. This
-  flexible segment is already allocated inside `coinb2`; replace those bytes as needed.
+  flexible segment is already allocated inside `coinb2`; replace those bytes as
+  needed (for example, to embed a pool identifier).
 - After altering the coinbase, recompute the merkle root using the updated coinbase
   hash and the provided `merklebranch`.
 
 Refresh the template frequently (≈ once per second) to pick up new transactions,
 difficulty adjustments, and parent hashes.
+
+### Coinbase Example
+
+Using the template above (`extranonce1Length = 4`, `extranonce2Length = 8`,
+`coinbaseAuxExtraBytesLength = 30`):
+
+- `coinb1`  
+  `02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a`
+- Pool-selected `extranonce1`: `00123456`
+- Miner-selected `extranonce2`: `1223432122346789`
+- Pool identifier `abcpool` encoded as ASCII hex: `616263706f6f6c`
+- `coinb2` with pool metadata packed into the 30-byte mutable prefix (padded with zeros):
+  `616263706f6f6c000000000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000`
+
+Final serialized coinbase transaction:
+```
+02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a001234561223432122346789616263706f6f6c000000000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000
+```
+
+Include this transaction as the first entry in the block template’s transaction list,
+recompute the merkle root using the supplied `merklebranch`, and proceed with header
+hashing for the selected Proof-of-Work algorithm.
 
 ## Block Submission Methods
 
