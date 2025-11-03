@@ -1,0 +1,166 @@
+# Quai Mining RPC Specification
+
+This document defines the JSON-RPC surface that mining pools use to interact with
+go-quai. Quai produces blocks roughly every 5 seconds; pools should refresh their
+work at least once per second to keep up with the current tip and difficulty.
+
+## Mining Workflow
+- Request a block template for the desired Proof-of-Work algorithm.
+- Insert pool-specific data into the coinbase transaction and update the merkle root.
+- Run Proof-of-Work on the header using the algorithm specified by the template.
+- Submit the fully serialized block through the matching submission method.
+
+## `quai_getBlockTemplate`
+
+### Request
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "quai_getBlockTemplate",
+  "params": [
+    {
+      "rules": ["kawpow"]
+    }
+  ]
+}
+```
+
+`powType` (supplied inside `rules`) selects the target algorithm. Supported values:
+`"kawpow"`, `"sha"`, `"scrypt"`. If multiple values are supplied, the template is built
+for the first supported entry.
+
+### Response Example
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "bits": "1b0127c1",
+    "coinb1": "02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a",
+    "coinb2": "00000000000000000000000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000",
+    "coinbaseAuxExtraBytesLength": 30,
+    "curtime": 1761945041,
+    "extranonce1Length": 4,
+    "extranonce2Length": 8,
+    "height": 4087754,
+    "merklebranch": [],
+    "merkleroot": "6c25e5bdebb5e25a87ed456383589607a8bc35f2afe708ff8e98db018d9be7ed",
+    "mintime": 1761945041,
+    "noncerange": "00000000ffffffff",
+    "previousblockhash": "000000000000d6d9eb436d5330aaea517f4a0fe4886ec67a1d83c057ed67d96d",
+    "sigoplimit": 80000,
+    "sizelimit": 1000000,
+    "target": "000000674a1f0000000000000000000000000000000000000000000000000000",
+    "version": 805306368
+  }
+}
+```
+
+### Response Fields
+| Field | Type | Description |
+| --- | --- | --- |
+| `bits` | string | Compact representation of the current target difficulty. Must not be changed. |
+| `coinb1` | string | First half of the serialized coinbase transaction up to (but excluding) `extranonce1`. |
+| `coinb2` | string | Remaining bytes of the coinbase transaction after `extranonce2`. Includes coinbase outputs and default padding. |
+| `coinbaseAuxExtraBytesLength` | number | Maximum number of extra bytes the pool may set inside the coinbase auxiliary data segment. |
+| `curtime` | number | Current Unix timestamp used when the template was generated. Pools may update it within consensus rules. |
+| `extranonce1Length` | number | Expected byte length for `extranonce1`. |
+| `extranonce2Length` | number | Expected byte length for `extranonce2`. |
+| `height` | number | Block height the miner is targeting. Read-only donor chain information. |
+| `merklebranch` | array | Merkle branches required to recompute the block merkle root once the coinbase is finalized. |
+| `merkleroot` | string | Merkle root computed with the provided `coinb1/coinb2`. Update after customizing the coinbase. |
+| `mintime` | number | Earliest valid timestamp for the block. |
+| `noncerange` | string | Hex-encoded inclusive nonce range miners may iterate through. |
+| `previousblockhash` | string | Hash of the parent block. Must not be changed. |
+| `sigoplimit` | number | Maximum allowed sigops count for the block. |
+| `sizelimit` | number | Maximum serialized block size. |
+| `target` | string | Full 256-bit target corresponding to `bits`. |
+| `version` | number | Block header version to use. Must not be changed. |
+
+`bits`, `height`, `previousblockhash`, and `version` are signed donor-chain data.
+Changing them will result in an invalid block.
+
+### Coinbase Assembly
+Construct the coinbase transaction by concatenating:
+
+```
+coinbase = coinb1 + extranonce1 + extranonce2 + coinb2
+```
+
+- `extranonce1` and `extranonce2` may be chosen by the pool. If they are omitted,
+  insert zero bytes matching `extranonce1Length` and `extranonce2Length`.
+- Ensure that any auxiliary metadata fits within `coinbaseAuxExtraBytesLength`. This
+  flexible segment is already allocated inside `coinb2`; replace those bytes as needed.
+- After altering the coinbase, recompute the merkle root using the updated coinbase
+  hash and the provided `merklebranch`.
+
+Refresh the template frequently (≈ once per second) to pick up new transactions,
+difficulty adjustments, and parent hashes.
+
+## Block Submission Methods
+
+Each submission method accepts a single parameter containing the fully serialized
+block (header + transactions) as a hex string prefixed with `0x`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "quai_submitKawpowBlock",
+  "params": ["0x...serialized block bytes..."]
+}
+```
+
+| Algorithm | Method | Notes |
+| --- | --- | --- |
+| KawPow | `quai_submitKawpowBlock` | Default submission path for KawPow work. |
+| SHA | `quai_submitShaBlock` | Use when the template was requested with `powType = "sha"`. |
+| Scrypt | `quai_submitScryptBlock` | Use when the template was requested with `powType = "scrypt"`. |
+
+The RPC returns `null` on success. Errors are surfaced through standard JSON-RPC
+error objects; miners should retry with a fresh template if the node reports that
+the block is stale or the parent has changed.
+
+Upon successful submission, the node relays the block across the network and credits
+the pool according to the block reward encoded in the coinbase transaction.
+
+## Reference Implementations
+
+Two public pool codebases already integrate these RPCs. Reviewing their diffs can
+speed up custom deployments.
+
+### SHA & Scrypt Reference (ckpool)
+- Repository: `https://github.com/jdowning100/ckpool`
+- Key updates:
+  - Switched JSON-RPC calls from `getblocktemplate` to `quai_getBlockTemplate` and
+    added support for selecting `rules` based on the pool’s configured algorithm.
+  - Normalized extranonce handling to respect `extranonce1Length`/`extranonce2Length`
+    coming from go-quai and padded zero bytes when not set by workers.
+  - Updated template parsing to use the `coinb1`/`coinb2` split directly rather than
+    reconstructing the coinbase transaction from Bitcoin-style fields.
+  - Adjusted block submission paths to call `quai_submitShaBlock` or
+    `quai_submitScryptBlock`, wrapping the serialized block hex string with a `0x`
+    prefix.
+  - Converted target/difficulty helpers to use the `bits` and `target` values issued
+    by go-quai so share difficulty matches chain validation.
+
+### KawPow Reference (Ravencoin Stratum Proxy)
+- Repository: `https://github.com/gameofpointers/ravencoin-stratum-proxy`
+- Relevant commit: see history mentioning “go-quai” or “Quai KawPow support”.
+- Key updates:
+  - Added a Quai-specific upstream driver that fetches work with
+    `quai_getBlockTemplate` (requesting `rules: ["kawpow"]`) and caches the resulting
+    template on the same 1-second cadence the daemon expects.
+  - Patched the coinbase builder to splice `extranonce1`/`extranonce2` between
+    `coinb1` and `coinb2`, and to propagate the recomputed merkle root back into the
+    header before hashing.
+  - Replaced Ravencoin’s submission endpoint with `quai_submitKawpowBlock`, ensuring
+    the stratum proxy forwards the fully serialized block (header + transactions) to
+    go-quai.
+  - Wired up KawPow header hashing so the mix-hash and nonce returned by miners map to
+    the template’s `target` and can be inserted into the header format go-quai expects.
+
+When implementing a custom pool, replicate the above changes: honor the Quai block
+template schema, preserve donor-chain fields, and submit completed blocks through the
+algorithm-specific RPC entry points described in this spec.
