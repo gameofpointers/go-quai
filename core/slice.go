@@ -1451,6 +1451,9 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		combinedPendingHeader.WorkObjectHeader().SetLock(header.Lock())
 		combinedPendingHeader.WorkObjectHeader().SetPrimaryCoinbase(header.PrimaryCoinbase())
 		combinedPendingHeader.WorkObjectHeader().SetData(header.Data())
+
+		// These are the fields that were added on the kawpow fork block, so
+		// checking its not nil to preserve backwards compatibility
 		if header.AuxPow() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetAuxPow(header.AuxPow())
 		}
@@ -1460,7 +1463,12 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		if header.WorkObjectHeader().ScryptDiffAndCount() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetScryptDiffAndCount(header.WorkObjectHeader().ScryptDiffAndCount())
 		}
-		combinedPendingHeader.WorkObjectHeader().SetShareTarget(header.WorkObjectHeader().ShareTarget())
+		if header.WorkObjectHeader().KawpowShareTarget() != nil {
+			combinedPendingHeader.WorkObjectHeader().SetKawpowShareTarget(header.WorkObjectHeader().KawpowShareTarget())
+		}
+		if header.WorkObjectHeader().ScryptShareTarget() != nil {
+			combinedPendingHeader.WorkObjectHeader().SetScryptShareTarget(header.WorkObjectHeader().ScryptShareTarget())
+		}
 
 		combinedPendingHeader.Header().SetEtxRollupHash(header.EtxRollupHash())
 		combinedPendingHeader.Header().SetUncledEntropy(header.Header().UncledEntropy())

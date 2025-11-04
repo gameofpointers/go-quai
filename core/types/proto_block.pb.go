@@ -1049,7 +1049,8 @@ type ProtoWorkObjectHeader struct {
 	AuxPow              *ProtoAuxPow               `protobuf:"bytes,14,opt,name=aux_pow,json=auxPow,proto3,oneof" json:"aux_pow,omitempty"` // New field for auxiliary proof-of-work
 	ScryptDiffAndCount  *ProtoPowShareDiffAndCount `protobuf:"bytes,15,opt,name=scrypt_diff_and_count,json=scryptDiffAndCount,proto3,oneof" json:"scrypt_diff_and_count,omitempty"`
 	ShaDiffAndCount     *ProtoPowShareDiffAndCount `protobuf:"bytes,16,opt,name=sha_diff_and_count,json=shaDiffAndCount,proto3,oneof" json:"sha_diff_and_count,omitempty"`
-	ShareTarget         []byte                     `protobuf:"bytes,17,opt,name=share_target,json=shareTarget,proto3,oneof" json:"share_target,omitempty"`
+	KawpowShareTarget   []byte                     `protobuf:"bytes,17,opt,name=kawpow_share_target,json=kawpowShareTarget,proto3,oneof" json:"kawpow_share_target,omitempty"`
+	ScryptShareTarget   []byte                     `protobuf:"bytes,18,opt,name=scrypt_share_target,json=scryptShareTarget,proto3,oneof" json:"scrypt_share_target,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1196,9 +1197,16 @@ func (x *ProtoWorkObjectHeader) GetShaDiffAndCount() *ProtoPowShareDiffAndCount 
 	return nil
 }
 
-func (x *ProtoWorkObjectHeader) GetShareTarget() []byte {
+func (x *ProtoWorkObjectHeader) GetKawpowShareTarget() []byte {
 	if x != nil {
-		return x.ShareTarget
+		return x.KawpowShareTarget
+	}
+	return nil
+}
+
+func (x *ProtoWorkObjectHeader) GetScryptShareTarget() []byte {
+	if x != nil {
+		return x.ScryptShareTarget
 	}
 	return nil
 }
@@ -3529,7 +3537,7 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"difficulty\x88\x01\x01\x12\x19\n" +
 	"\x05count\x18\x02 \x01(\fH\x01R\x05count\x88\x01\x01B\r\n" +
 	"\v_difficultyB\b\n" +
-	"\x06_count\"\xc8\b\n" +
+	"\x06_count\"\xa9\t\n" +
 	"\x15ProtoWorkObjectHeader\x127\n" +
 	"\vheader_hash\x18\x01 \x01(\v2\x11.common.ProtoHashH\x00R\n" +
 	"headerHash\x88\x01\x01\x127\n" +
@@ -3552,8 +3560,9 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\x04data\x18\r \x01(\fR\x04data\x120\n" +
 	"\aaux_pow\x18\x0e \x01(\v2\x12.block.ProtoAuxPowH\fR\x06auxPow\x88\x01\x01\x12X\n" +
 	"\x15scrypt_diff_and_count\x18\x0f \x01(\v2 .block.ProtoPowShareDiffAndCountH\rR\x12scryptDiffAndCount\x88\x01\x01\x12R\n" +
-	"\x12sha_diff_and_count\x18\x10 \x01(\v2 .block.ProtoPowShareDiffAndCountH\x0eR\x0fshaDiffAndCount\x88\x01\x01\x12&\n" +
-	"\fshare_target\x18\x11 \x01(\fH\x0fR\vshareTarget\x88\x01\x01B\x0e\n" +
+	"\x12sha_diff_and_count\x18\x10 \x01(\v2 .block.ProtoPowShareDiffAndCountH\x0eR\x0fshaDiffAndCount\x88\x01\x01\x123\n" +
+	"\x13kawpow_share_target\x18\x11 \x01(\fH\x0fR\x11kawpowShareTarget\x88\x01\x01\x123\n" +
+	"\x13scrypt_share_target\x18\x12 \x01(\fH\x10R\x11scryptShareTarget\x88\x01\x01B\x0e\n" +
 	"\f_header_hashB\x0e\n" +
 	"\f_parent_hashB\t\n" +
 	"\a_numberB\r\n" +
@@ -3570,8 +3579,9 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\n" +
 	"\b_aux_powB\x18\n" +
 	"\x16_scrypt_diff_and_countB\x15\n" +
-	"\x13_sha_diff_and_countB\x0f\n" +
-	"\r_share_target\"U\n" +
+	"\x13_sha_diff_and_countB\x16\n" +
+	"\x14_kawpow_share_targetB\x16\n" +
+	"\x14_scrypt_share_target\"U\n" +
 	"\x16ProtoWorkObjectHeaders\x12;\n" +
 	"\n" +
 	"wo_headers\x18\x01 \x03(\v2\x1c.block.ProtoWorkObjectHeaderR\twoHeaders\"\xe0\x03\n" +

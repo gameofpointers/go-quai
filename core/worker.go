@@ -2191,7 +2191,8 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	}
 
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-		newWo.WorkObjectHeader().SetShareTarget([4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget})
+		newWo.WorkObjectHeader().SetKawpowShareTarget(w.hc.CalculateShareTarget(types.Kawpow))
+		newWo.WorkObjectHeader().SetScryptShareTarget(w.hc.CalculateShareTarget(types.Scrypt))
 	}
 
 	// Only zone should calculate state
@@ -2230,7 +2231,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			w.logger.WithField("err", err).Error("Failed to prepare header for sealing")
 			return nil, err
 		}
-		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), newWo.TxHash(), newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.WorkObjectHeader().ScryptDiffAndCount(), newWo.WorkObjectHeader().ShaDiffAndCount(), newWo.WorkObjectHeader().ShareTarget())
+		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), newWo.TxHash(), newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
 		proposedWoBody := types.NewWoBody(newWo.Header(), nil, nil, nil, nil, nil)
 		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, nil)
 		env, err := w.makeEnv(parent, proposedWo, w.GetPrimaryCoinbase())
@@ -2323,7 +2324,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 		return env, nil
 	} else {
-		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), types.EmptyRootHash, newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.WorkObjectHeader().ScryptDiffAndCount(), newWo.WorkObjectHeader().ShaDiffAndCount(), newWo.WorkObjectHeader().ShareTarget())
+		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), types.EmptyRootHash, newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
 		proposedWoBody := types.NewWoBody(newWo.Header(), nil, nil, nil, nil, nil)
 		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, nil)
 		return &environment{wo: proposedWo}, nil

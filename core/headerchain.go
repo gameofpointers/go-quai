@@ -583,6 +583,11 @@ func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader
 	return nil
 }
 
+func (hc *HeaderChain) CalculateShareTarget(powId types.PowID) *big.Int {
+	// Placeholder implementation, replace with actual calculation logic
+	return big.NewInt(0)
+}
+
 // Append
 func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 	nodeCtx := hc.NodeCtx()
