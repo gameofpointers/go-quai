@@ -363,7 +363,8 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		AuxPow              *AuxPow               `json:"auxpow,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
-		ShareTarget        hexutil.Bytes         `json:"shareTarget,omitempty"`
+		KawpowShareTarget   *hexutil.Big          `json:"kawpowShareTarget,omitempty"`
+		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -386,17 +387,22 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 
 	// Only include these fields if they are non-nil and non-empty (for backward compatibility)
 	scrypt := wh.ScryptDiffAndCount()
-	if scrypt != nil && (scrypt.Difficulty() != nil || scrypt.Count() != nil) {
+	if scrypt != nil {
 		enc.ScryptDiffAndCount = scrypt
 	}
 	sha := wh.ShaDiffAndCount()
-	if sha != nil && (sha.Difficulty() != nil || sha.Count() != nil) {
+	if sha != nil {
 		enc.ShaDiffAndCount = sha
 	}
 
-	// Include ShareTarget if it's non-zero
-	if wh.ShareTarget() != [4]byte{0,0,0,0} {
-		enc.ShareTarget = hexutil.Bytes(wh.ShareTargetBytes())
+	kawpowShareTarget := wh.KawpowShareTarget()
+	scryptShareTarget := wh.ScryptShareTarget()
+
+	if kawpowShareTarget != nil {
+		enc.KawpowShareTarget = (*hexutil.Big)(kawpowShareTarget)
+	}
+	if scryptShareTarget != nil {
+		enc.ScryptShareTarget = (*hexutil.Big)(scryptShareTarget)
 	}
 
 	raw, err := json.Marshal(&enc)
@@ -421,7 +427,8 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		AuxPow              *AuxPow               `json:"auxpow,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
-		ShareTarget         hexutil.Bytes          `json:"shareTarget,omitempty"`
+		KawpowShareTarget   *hexutil.Big          `json:"kawpowShareTarget,omitempty"`
+		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -466,8 +473,11 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	}
 
 	// Handle ShareTarget if present
-	if len(dec.ShareTarget) == 4 {
-		wh.SetShareTarget([4]byte(dec.ShareTarget))
+	if dec.KawpowShareTarget != nil {
+		wh.SetKawpowShareTarget((*big.Int)(dec.KawpowShareTarget))
+	}
+	if dec.ScryptShareTarget != nil {
+		wh.SetScryptShareTarget((*big.Int)(dec.ScryptShareTarget))
 	}
 
 	return nil

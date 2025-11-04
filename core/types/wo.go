@@ -56,7 +56,8 @@ type WorkObjectHeader struct {
 	auxPow              *AuxPow // New field for auxiliary proof-of-work
 	scryptDiffAndCount  *PowShareDiffAndCount
 	shaDiffAndCount     *PowShareDiffAndCount
-	shareTarget         [4]byte
+	kawpowShareTarget   *big.Int
+	scryptShareTarget   *big.Int
 	PowHash             atomic.Value
 	PowDigest           atomic.Value
 }
@@ -344,8 +345,25 @@ func (wo *WorkObject) Time() uint64 {
 	return wo.WorkObjectHeader().Time()
 }
 
+// New fields that were added on the kawpow fork block
 func (wo *WorkObject) AuxPow() *AuxPow {
 	return wo.WorkObjectHeader().AuxPow()
+}
+
+func (wo *WorkObject) ShaDiffAndCount() *PowShareDiffAndCount {
+	return wo.WorkObjectHeader().ShaDiffAndCount()
+}
+
+func (wo *WorkObject) ScryptDiffAndCount() *PowShareDiffAndCount {
+	return wo.WorkObjectHeader().ScryptDiffAndCount()
+}
+
+func (wo *WorkObject) KawpowShareTarget() *big.Int {
+	return wo.WorkObjectHeader().KawpowShareTarget()
+}
+
+func (wo *WorkObject) ScryptShareTarget() *big.Int {
+	return wo.WorkObjectHeader().ScryptShareTarget()
 }
 
 func (wo *WorkObject) Header() *Header {
@@ -738,12 +756,12 @@ func (wh *WorkObjectHeader) ShaDiffAndCount() *PowShareDiffAndCount {
 	return wh.shaDiffAndCount.Clone()
 }
 
-func (wh *WorkObjectHeader) ShareTarget() [4]byte {
-	return wh.shareTarget
+func (wh *WorkObjectHeader) KawpowShareTarget() *big.Int {
+	return wh.kawpowShareTarget
 }
 
-func (wh *WorkObjectHeader) ShareTargetBytes() []byte {
-	return wh.shareTarget[:]
+func (wh *WorkObjectHeader) ScryptShareTarget() *big.Int {
+	return wh.scryptShareTarget
 }
 
 ////////////////////////////////////////////////////////////
@@ -814,8 +832,12 @@ func (wh *WorkObjectHeader) SetShaDiffAndCount(val *PowShareDiffAndCount) {
 	wh.shaDiffAndCount = val.Clone()
 }
 
-func (wh *WorkObjectHeader) SetShareTarget(val [4]byte) {
-	wh.shareTarget = val
+func (wh *WorkObjectHeader) SetKawpowShareTarget(val *big.Int) {
+	wh.kawpowShareTarget = val
+}
+
+func (wh *WorkObjectHeader) SetScryptShareTarget(val *big.Int) {
+	wh.scryptShareTarget = val
 }
 
 type WorkObjectBody struct {
@@ -1036,7 +1058,8 @@ func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, w
 		header.WorkObjectHeader().AuxPow(),
 		header.WorkObjectHeader().ScryptDiffAndCount(),
 		header.WorkObjectHeader().ShaDiffAndCount(),
-		header.WorkObjectHeader().ShareTarget())
+		header.WorkObjectHeader().KawpowShareTarget(),
+		header.WorkObjectHeader().ScryptShareTarget())
 	woBody, _ := NewWorkObjectBody(header.Body().Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
 }
@@ -1210,7 +1233,7 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Locatio
 	return nil
 }
 
-func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, scryptDiffAndCount *PowShareDiffAndCount, shaDiffAndCount *PowShareDiffAndCount, shareTarget [4]byte) *WorkObjectHeader {
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, scryptDiffAndCount, shaDiffAndCount *PowShareDiffAndCount, kawpowShareTarget, scryptShareTarget *big.Int) *WorkObjectHeader {
 	return &WorkObjectHeader{
 		headerHash:          headerHash,
 		parentHash:          parentHash,
@@ -1227,7 +1250,8 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 		auxPow:              auxpow,
 		scryptDiffAndCount:  scryptDiffAndCount.Clone(),
 		shaDiffAndCount:     shaDiffAndCount.Clone(),
-		shareTarget:         shareTarget,
+		kawpowShareTarget:   kawpowShareTarget,
+		scryptShareTarget:   scryptShareTarget,
 	}
 }
 
@@ -1254,7 +1278,12 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 		cpy.SetShaDiffAndCount(wh.ShaDiffAndCount())
 	}
 
-	cpy.SetShareTarget(wh.ShareTarget())
+	if wh.KawpowShareTarget() != nil {
+		cpy.SetKawpowShareTarget(wh.KawpowShareTarget())
+	}
+	if wh.ScryptShareTarget() != nil {
+		cpy.SetScryptShareTarget(wh.ScryptShareTarget())
+	}
 
 	// Deep copy AuxPow if present
 	if wh.auxPow != nil {
@@ -1286,16 +1315,18 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 	if wh.AuxPow() != nil {
 		result["auxpow"] = wh.AuxPow().RPCMarshal()
 	}
-
 	if wh.ShaDiffAndCount() != nil {
 		result["shaDiffAndCount"] = wh.ShaDiffAndCount().RPCMarshal()
 	}
-
 	if wh.ScryptDiffAndCount() != nil {
 		result["scryptDiffAndCount"] = wh.ScryptDiffAndCount().RPCMarshal()
 	}
-
-	result["shareTarget"] = hexutil.Bytes(wh.ShareTargetBytes())
+	if wh.KawpowShareTarget() != nil {
+		result["kawpowShareTarget"] = (*hexutil.Big)(wh.KawpowShareTarget())
+	}
+	if wh.ScryptShareTarget() != nil {
+		result["scryptShareTarget"] = (*hexutil.Big)(wh.ScryptShareTarget())
+	}
 
 	return result
 }
@@ -1401,7 +1432,8 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 	if wh.KawpowActivationHappened() {
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
-		protoWh.ShareTarget = wh.ShareTargetBytes()
+		protoWh.KawpowShareTarget = wh.KawpowShareTarget().Bytes()
+		protoWh.ScryptShareTarget = wh.ScryptShareTarget().Bytes()
 	}
 
 	return protoWh
@@ -1447,7 +1479,8 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 		}
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
-		protoWh.ShareTarget = wh.ShareTargetBytes()
+		protoWh.KawpowShareTarget = wh.KawpowShareTarget().Bytes()
+		protoWh.ScryptShareTarget = wh.ScryptShareTarget().Bytes()
 	}
 
 	return protoWh, nil
@@ -1496,12 +1529,15 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 			}
 		}
 
-		// Decode ShareTarget if present
-		if len(data.GetShareTarget()) == 4 {
-			wh.SetShareTarget([4]byte(data.GetShareTarget()))
-		} else {
-			return errors.New("invalid share target length")
+		if data.GetKawpowShareTarget() == nil {
+			return errors.New("kawpow share target is nil")
 		}
+		if data.GetScryptShareTarget() == nil {
+			return errors.New("scrypt share target is nil")
+		}
+
+		wh.SetKawpowShareTarget(new(big.Int).SetBytes(data.GetKawpowShareTarget()))
+		wh.SetScryptShareTarget(new(big.Int).SetBytes(data.GetScryptShareTarget()))
 	}
 
 	return nil

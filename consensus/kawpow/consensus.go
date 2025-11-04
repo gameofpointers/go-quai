@@ -560,12 +560,20 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		}
 
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-			if header.WorkObjectHeader().ShareTarget() != [4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget} {
-				return fmt.Errorf("invalid share target: have %v, want %v", header.WorkObjectHeader().ShareTarget(), [4]byte{params.ProgpowShareTarget, params.KawpowShareTarget, params.ShaShareTarget, params.ScryptShareTarget})
+			kawpowShareTarget := chain.CalculateShareTarget(types.Kawpow)
+			if header.WorkObjectHeader().KawpowShareTarget().Cmp(kawpowShareTarget) != 0 {
+				return fmt.Errorf("invalid kawpow share target: have %v, want %v", header.WorkObjectHeader().KawpowShareTarget(), kawpowShareTarget)
+			}
+			scryptShareTarget := chain.CalculateShareTarget(types.Scrypt)
+			if header.WorkObjectHeader().ScryptShareTarget().Cmp(scryptShareTarget) != 0 {
+				return fmt.Errorf("invalid scrypt share target: have %v, want %v", header.WorkObjectHeader().ScryptShareTarget(), scryptShareTarget)
 			}
 		} else {
-			if header.WorkObjectHeader().ShareTarget() != [4]byte{0, 0, 0, 0} {
-				return fmt.Errorf("share target must be nil before kawpow fork block")
+			if header.WorkObjectHeader().KawpowShareTarget() != nil {
+				return fmt.Errorf("kawpow share target must be nil before kawpow fork block")
+			}
+			if header.WorkObjectHeader().ScryptShareTarget() != nil {
+				return fmt.Errorf("scrypt share target must be nil before kawpow fork block")
 			}
 		}
 	}
