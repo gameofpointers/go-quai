@@ -2,7 +2,7 @@
 
 This document defines the JSON-RPC surface that mining pools use to interact with
 go-quai. Quai produces blocks roughly every 5 seconds; pools should refresh their
-work at least once per second to keep up with the current tip and difficulty.
+work once per second to keep producing fresh shares and get paid.
 
 ## Mining Workflow
 - Request a block template for the desired Proof-of-Work algorithm.
@@ -76,9 +76,9 @@ for the first supported entry.
 | `sigoplimit` | number | Maximum allowed sigops count for the block. |
 | `sizelimit` | number | Maximum serialized block size. |
 | `target` | string | Full 256-bit target corresponding to `bits`. |
-| `version` | number | Block header version to use. Must not be changed. |
+| `version` | number | Block header version to use. First byte of version cannot be changed, last three bytes can be changed in compliance with bip320 (i.e asicboost). |
 
-`bits`, `height`, `previousblockhash`, and `version` are signed donor-chain data.
+`bits`, `height`, `previousblockhash`, `coinb1`, `coinb2` from byte 31 till end and first byte of `version` are signed donor-chain data.
 Changing them will result in an invalid block.
 
 ### Coinbase Assembly
@@ -98,8 +98,8 @@ coinbase = coinb1 + extranonce1 + extranonce2 + coinb2
 - After altering the coinbase, recompute the merkle root using the updated coinbase
   hash and the provided `merklebranch`.
 
-Refresh the template frequently (≈ once per second) to pick up new transactions,
-difficulty adjustments, and parent hashes.
+Refresh the template frequently (≈ once per second) to get paid for the shares.
+If refreshed any slower, will result in stale shares which will not be paid.
 
 ### Coinbase Example
 
@@ -110,13 +110,13 @@ Using the template above (`extranonce1Length = 4`, `extranonce2Length = 8`,
   `02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a`
 - Pool-selected `extranonce1`: `00123456`
 - Miner-selected `extranonce2`: `1223432122346789`
-- Pool identifier `abcpool` encoded as ASCII hex: `616263706f6f6c`
+  - Pool name `/abcpool/` encoded as ASCII hex: `2f616263706f6f6c2f` (follows bip34, but has to be below 30 bytes)
 - `coinb2` with pool metadata packed into the 30-byte mutable prefix (padded with zeros):
   `616263706f6f6c000000000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000`
 
 Final serialized coinbase transaction:
 ```
-02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a001234561223432122346789616263706f6f6c000000000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000
+02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6403ca5f3e04fabe6d6d206cdda0b4680e7beefa2db3313c6bd4b38fc30b8cc45d57e4e8507ca1246b55bd040100000004000000002a0012345612234321223467892f616263706f6f6c2f00000000000000000000000000000000000000000004d1250569ffffffff01004429353a0000001976a9143da104bf8e6560ba325d4d301e366c9e9a5f70fa88ac00000000
 ```
 
 Include this transaction as the first entry in the block template’s transaction list,
@@ -149,6 +149,12 @@ the block is stale or the parent has changed.
 
 Upon successful submission, the node relays the block across the network and credits
 the pool according to the block reward encoded in the coinbase transaction.
+
+## Block Reward 
+
+Payment for these shares will happen to Quai coinbase set in the go-quai node.
+There is no need to set coinbase in stratum. Quai block reward will follow the current
+structure after the soap/kawpow upgrade.
 
 ## Reference Implementations
 
