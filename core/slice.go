@@ -780,8 +780,8 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 		coinbaseType = "QiCoinbase"
 	}
 
-	_, shaDiff, scryptDiff := sl.hc.DifficultyByAlgo(header)
-	kawpowShares, shaShares, scryptShares := sl.hc.CountWorkSharesByAlgo(header)
+	_, shaDiff, scryptDiff := sl.hc.DifficultyByAlgo(block)
+	kawpowShares, shaShares, scryptShares := sl.hc.CountWorkSharesByAlgo(block)
 	sl.logger.WithFields(log.Fields{
 		"number":               block.NumberArray(),
 		"hash":                 block.Hash(),
