@@ -266,11 +266,13 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiff    = big.NewInt(20e12) // Minimum difficulty for a SHA work share, With 4TH/s, diff to get a share every 5 secs 20e12
 	InitialScryptDiff = big.NewInt(5e9)   // Minimum difficulty for a Scrypt work share, With 1GH/s, diff to get a share every 5 secs is 5e9
+	InitialKawpowDiff = big.NewInt(1e12)  // Minimum difficulty for a Kawpow work share
 	MinPowDivisor     = big.NewInt(20)    // Minimum multiple of the target difficulty that a share must meet to be valid
 
 	// Target number of shares per algo times 2^32
 	TargetShaShares    = big.NewInt(12884901888)
 	TargetScryptShares = big.NewInt(12884901888)
+	TargetKawpowShares = big.NewInt(12884901888)
 
 	// The number of blocks to use in the exponential moving average
 	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks

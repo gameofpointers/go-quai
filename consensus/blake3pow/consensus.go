@@ -500,20 +500,25 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 			// Get the sha and scrypt share counts from the tx pool
-			_, countSha, countScrypt := chain.CountWorkSharesByAlgo(parent)
+			countKawpow, countSha, countScrypt := chain.CountWorkSharesByAlgo(parent)
 
 			//Convert counts to 2^32 base
+			bigCountKawpow := new(big.Int).Mul(big.NewInt(int64(countKawpow)), common.Big2e32)
 			bigCountSha := new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
 			bigCountScrypt := new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
 
-			var newShaDiff *big.Int
-			var newScryptDiff *big.Int
-			var newShaCount *big.Int
-			var newScryptCount *big.Int
+			var (
+				newKawpowDiff, newKawpowCount *big.Int
+				newShaDiff, newShaCount       *big.Int
+				newScryptDiff, newScryptCount *big.Int
+			)
+
 			// Check if shares is nil
-			if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock { //parent.WorkObjectHeader().ScryptDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ScryptDiffAndCount().Count() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Count() == nil {
+			if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 
 				//Initialize the diff and count values
+				newKawpowDiff = params.InitialKawpowDiff
+				newKawpowCount = params.TargetKawpowShares
 				newShaDiff = params.InitialShaDiff
 				newShaCount = params.TargetShaShares
 				newScryptDiff = params.InitialScryptDiff
@@ -521,10 +526,17 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 
 			} else {
 				//Calculate the new diff and count values
+				newKawpowDiff, newKawpowCount = chain.CalculatePowDiffAndCount(parent.WorkObjectHeader().KawpowDiffAndCount(), bigCountKawpow, types.Kawpow)
 				newShaDiff, newShaCount = chain.CalculatePowDiffAndCount(parent.WorkObjectHeader().ShaDiffAndCount(), bigCountSha, types.SHA_BTC)
 				newScryptDiff, newScryptCount = chain.CalculatePowDiffAndCount(parent.WorkObjectHeader().ScryptDiffAndCount(), bigCountScrypt, types.Scrypt)
 			}
 
+			if header.WorkObjectHeader().KawpowDiffAndCount().Difficulty().Cmp(newKawpowDiff) != 0 {
+				return fmt.Errorf("invalid kawpow difficulty: have %v, want %v", header.WorkObjectHeader().KawpowDiffAndCount().Difficulty(), newKawpowDiff)
+			}
+			if header.WorkObjectHeader().KawpowDiffAndCount().Count().Cmp(newKawpowCount) != 0 {
+				return fmt.Errorf("invalid kawpow count: have %v, want %v", header.WorkObjectHeader().KawpowDiffAndCount().Count(), newKawpowCount)
+			}
 			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty().Cmp(newShaDiff) != 0 {
 				return fmt.Errorf("invalid sha difficulty: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Difficulty(), newShaDiff)
 			}
@@ -538,8 +550,14 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 				return fmt.Errorf("invalid scrypt count: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Count(), newScryptCount)
 			}
 		} else {
-			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ShaDiffAndCount().Count() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Count() != nil {
-				return fmt.Errorf("sha and scrypt diff and count must be nil before kawpow fork block")
+			if header.WorkObjectHeader().KawpowDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().KawpowDiffAndCount().Count() != nil {
+				return fmt.Errorf("kawpow diff and count must be nil before kawpow fork block")
+			}
+			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ShaDiffAndCount().Count() != nil {
+				return fmt.Errorf("sha diff and count must be nil before kawpow fork block")
+			}
+			if header.WorkObjectHeader().ScryptDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Count() != nil {
+				return fmt.Errorf("scrypt diff and count must be nil before kawpow fork block")
 			}
 		}
 
