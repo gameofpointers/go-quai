@@ -2160,20 +2160,25 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 		// Get the sha and scrypt share counts from the tx pool
-		_, countSha, countScrypt := w.hc.CountWorkSharesByAlgo(parent)
+		countKawpow, countSha, countScrypt := w.hc.CountWorkSharesByAlgo(parent)
 
 		//Convert counts to 2^32 base
+		bigCountKawpow := new(big.Int).Mul(big.NewInt(int64(countKawpow)), common.Big2e32)
 		bigCountSha := new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
 		bigCountScrypt := new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
 
-		var newShaDiff *big.Int
-		var newScryptDiff *big.Int
-		var newShaCount *big.Int
-		var newScryptCount *big.Int
+		var (
+			newKawpowDiff, newKawpowCount *big.Int
+			newShaDiff, newShaCount       *big.Int
+			newScryptDiff, newScryptCount *big.Int
+		)
+
 		// Check if shares is nil
 		if newWo.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock { //parent.WorkObjectHeader().ScryptDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ScryptDiffAndCount().Count() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Count() == nil {
 
 			//Initialize the diff and count values
+			newKawpowDiff = params.InitialKawpowDiff
+			newKawpowCount = params.TargetKawpowShares
 			newShaDiff = params.InitialShaDiff
 			newShaCount = params.TargetShaShares
 			newScryptDiff = params.InitialScryptDiff
@@ -2181,11 +2186,13 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 		} else {
 			//Calculate the new diff and count values
+			newKawpowDiff, newKawpowCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().KawpowDiffAndCount(), bigCountKawpow, types.Kawpow)
 			newShaDiff, newShaCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ShaDiffAndCount(), bigCountSha, types.SHA_BTC)
 			newScryptDiff, newScryptCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ScryptDiffAndCount(), bigCountScrypt, types.Scrypt)
 		}
 
 		// Set the new diff and count values
+		newWo.WorkObjectHeader().SetKawpowDiffAndCount(types.NewPowShareDiffAndCount(newKawpowDiff, newKawpowCount))
 		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
 		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount))
 	}
@@ -2231,7 +2238,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			w.logger.WithField("err", err).Error("Failed to prepare header for sealing")
 			return nil, err
 		}
-		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), newWo.TxHash(), newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
+		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), newWo.TxHash(), newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.KawpowDiffAndCount(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
 		proposedWoBody := types.NewWoBody(newWo.Header(), nil, nil, nil, nil, nil)
 		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, nil)
 		env, err := w.makeEnv(parent, proposedWo, w.GetPrimaryCoinbase())
@@ -2324,7 +2331,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 		return env, nil
 	} else {
-		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), types.EmptyRootHash, newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
+		proposedWoHeader := types.NewWorkObjectHeader(newWo.Hash(), newWo.ParentHash(nodeCtx), newWo.Number(nodeCtx), newWo.Difficulty(), newWo.WorkObjectHeader().PrimeTerminusNumber(), types.EmptyRootHash, newWo.Nonce(), newWo.Lock(), newWo.Time(), newWo.Location(), newWo.PrimaryCoinbase(), newWo.Data(), newWo.AuxPow(), newWo.KawpowDiffAndCount(), newWo.ScryptDiffAndCount(), newWo.ShaDiffAndCount(), newWo.KawpowShareTarget(), newWo.ScryptShareTarget())
 		proposedWoBody := types.NewWoBody(newWo.Header(), nil, nil, nil, nil, nil)
 		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, nil)
 		return &environment{wo: proposedWo}, nil

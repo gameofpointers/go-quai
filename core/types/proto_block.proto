@@ -134,10 +134,11 @@ message ProtoWorkObjectHeader {
   optional common.ProtoAddress primary_coinbase = 12;
   bytes data = 13;
   optional ProtoAuxPow aux_pow = 14;  // New field for auxiliary proof-of-work
-  optional ProtoPowShareDiffAndCount scrypt_diff_and_count = 15;
-  optional ProtoPowShareDiffAndCount sha_diff_and_count = 16;
-  optional bytes kawpow_share_target = 17;
-  optional bytes scrypt_share_target = 18;
+  optional ProtoPowShareDiffAndCount kawpow_diff_and_count = 15;
+  optional ProtoPowShareDiffAndCount scrypt_diff_and_count = 16;
+  optional ProtoPowShareDiffAndCount sha_diff_and_count = 17;
+  optional bytes kawpow_share_target = 18;
+  optional bytes scrypt_share_target = 19;
 }
 
 message ProtoWorkObjectHeaders {
