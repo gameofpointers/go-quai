@@ -199,6 +199,7 @@ func EmptyWorkObject(nodeCtx int) *WorkObject {
 	wo.woHeader.SetLock(0)
 	wo.woHeader.SetPrimaryCoinbase(common.Address{})
 	wo.woHeader.SetTime(0)
+	wo.woHeader.SetKawpowDiffAndCount(NewPowShareDiffAndCount(params.InitialKawpowDiff, big.NewInt(0)))
 	wo.woHeader.SetShaDiffAndCount(NewPowShareDiffAndCount(params.InitialShaDiff, big.NewInt(0)))
 	wo.woHeader.SetScryptDiffAndCount(NewPowShareDiffAndCount(params.InitialScryptDiff, big.NewInt(0)))
 	wo.woHeader.SetKawpowShareTarget(big.NewInt(0))
