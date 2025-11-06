@@ -415,8 +415,7 @@ func (hc *HierarchicalCoordinator) startNode(logPath string, quaiBackend quai.Co
 		hc.p2p.Subscribe(location, &types.WorkObjectBlockView{})
 	}
 
-	// After the transition period has passed, or maybe slightly before that, we
-	// have to pass the aux templates??
+	// Nodes need to subscribe to the aux template on the upgrade to kawpow
 	if location.Context() == common.ZONE_CTX {
 		hc.p2p.Subscribe(location, &types.AuxTemplate{})
 	}
