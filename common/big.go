@@ -17,7 +17,6 @@
 package common
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -125,47 +124,6 @@ func GetTargetInHex(diff *big.Int) string {
 	target := GetTarget(diff)
 	// Return as 64-character hex string (padded with leading zeros)
 	return fmt.Sprintf("%064x", target)
-}
-
-// DifficultyToBits converts Quai-style difficulty (where difficulty = 2^256/target)
-// to Bitcoin-style compact target (nBits).
-func DifficultyToBits(difficulty *big.Int) (uint32, error) {
-	if difficulty == nil || difficulty.Sign() <= 0 {
-		return 0, errors.New("difficulty must be positive")
-	}
-
-	// In Quai: difficulty = 2^256/target, so target = 2^256/difficulty
-	two256 := new(big.Int).Lsh(big.NewInt(1), 256)
-	target := new(big.Int).Quo(two256, difficulty)
-
-	// Encode target into compact form: nBits = (exponent << 24) | coefficient
-	targetBytes := target.Bytes() // big-endian, no leading zeros
-	exponent := len(targetBytes)
-
-	var coefficient uint32
-	if exponent == 0 {
-		// target = 0; represent as exponent=0, coef=0
-		return 0, nil
-	}
-
-	if exponent <= 3 {
-		// Pack into 3 bytes (left-pad)
-		coef := new(big.Int).Lsh(new(big.Int).SetBytes(targetBytes), uint(8*(3-exponent)))
-		coefficient = uint32(coef.Uint64())
-	} else {
-		coefficient = uint32(targetBytes[0])<<16 |
-			uint32(targetBytes[1])<<8 |
-			uint32(targetBytes[2])
-	}
-
-	// If highest bit of coefficient is set, shift down 1 byte and bump exponent.
-	if (coefficient & 0x00800000) != 0 {
-		coefficient >>= 8
-		exponent++
-	}
-
-	nBits := uint32(exponent<<24) | (coefficient & 0x007fffff)
-	return nBits, nil
 }
 
 // Continously verify that the common values have not been overwritten.
