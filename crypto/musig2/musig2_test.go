@@ -16,7 +16,7 @@ import (
 
 // Test constants
 const (
-	testMessage = "test message for musig2 signing"
+	testMessage  = "test message for musig2 signing"
 	testPrivKey0 = "6c8adb7ffbcb3a819bd54ef44734f73977c1e63ef930f8598993917d980e214a"
 	testPrivKey1 = "23ff6833b48e876dad7a4669907013a0cc89a0dc793d5728a605754da067e4f6"
 	testPrivKey2 = "a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890"
@@ -143,8 +143,10 @@ func TestNewSigningSession(t *testing.T) {
 	manager, err := NewManager(privKey)
 	require.NoError(t, err)
 
+	message := sha256.Sum256([]byte(testMessage))
+
 	t.Run("ValidSession", func(t *testing.T) {
-		session, err := manager.NewSigningSession([]byte(testMessage), 1)
+		session, err := manager.NewSigningSession(message[:], 1)
 		require.NoError(t, err)
 		require.NotNil(t, session)
 		assert.Equal(t, manager, session.GetManager())
@@ -156,7 +158,7 @@ func TestNewSigningSession(t *testing.T) {
 		session, err := manager.NewSigningSession([]byte{}, 1)
 		assert.Error(t, err)
 		assert.Nil(t, session)
-		assert.Contains(t, err.Error(), "message cannot be empty")
+		assert.Contains(t, err.Error(), "message digest must be 32 bytes")
 	})
 
 	t.Run("MessageTooLarge", func(t *testing.T) {
@@ -168,19 +170,19 @@ func TestNewSigningSession(t *testing.T) {
 	})
 
 	t.Run("InvalidParticipantIndex", func(t *testing.T) {
-		session, err := manager.NewSigningSession([]byte(testMessage), -1)
+		session, err := manager.NewSigningSession(message[:], -1)
 		assert.Error(t, err)
 		assert.Nil(t, session)
 		assert.Contains(t, err.Error(), "invalid other participant index")
 
-		session, err = manager.NewSigningSession([]byte(testMessage), 3)
+		session, err = manager.NewSigningSession(message[:], 3)
 		assert.Error(t, err)
 		assert.Nil(t, session)
 		assert.Contains(t, err.Error(), "invalid other participant index")
 	})
 
 	t.Run("SelfSigning", func(t *testing.T) {
-		session, err := manager.NewSigningSession([]byte(testMessage), 0)
+		session, err := manager.NewSigningSession(message[:], 0)
 		assert.Error(t, err)
 		assert.Nil(t, session)
 		assert.Contains(t, err.Error(), "cannot sign with ourselves")
@@ -212,11 +214,13 @@ func TestCreatePartialSignature(t *testing.T) {
 	manager1, err := NewManager(privKey1)
 	require.NoError(t, err)
 
+	message := sha256.Sum256([]byte(testMessage))
+
 	// Create sessions
-	session0, err := manager0.NewSigningSession([]byte(testMessage), 1)
+	session0, err := manager0.NewSigningSession(message[:], 1)
 	require.NoError(t, err)
 
-	session1, err := manager1.NewSigningSession([]byte(testMessage), 0)
+	session1, err := manager1.NewSigningSession(message[:], 0)
 	require.NoError(t, err)
 
 	t.Run("ValidPartialSignature", func(t *testing.T) {
@@ -273,11 +277,13 @@ func TestCombinePartialSignatures(t *testing.T) {
 	manager1, err := NewManager(privKey1)
 	require.NoError(t, err)
 
+	message := sha256.Sum256([]byte(testMessage))
+
 	// Create sessions
-	session0, err := manager0.NewSigningSession([]byte(testMessage), 1)
+	session0, err := manager0.NewSigningSession(message[:], 1)
 	require.NoError(t, err)
 
-	session1, err := manager1.NewSigningSession([]byte(testMessage), 0)
+	session1, err := manager1.NewSigningSession(message[:], 0)
 	require.NoError(t, err)
 
 	// Exchange nonces
@@ -383,14 +389,14 @@ func TestVerifyCompositeSignature(t *testing.T) {
 	defer func() { params.MuSig2PublicKeys = originalKeys }()
 
 	t.Run("ValidSignature", func(t *testing.T) {
-		err := VerifyCompositeSignature(message, validSignature, []int{0, 1})
+		err := VerifyCompositeSignature(msgHash[:], validSignature, []int{0, 1})
 		assert.NoError(t, err)
 	})
 
 	t.Run("EmptyMessage", func(t *testing.T) {
 		err := VerifyCompositeSignature([]byte{}, validSignature, []int{0, 1})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "message cannot be empty")
+		assert.Contains(t, err.Error(), "message digest must be 32 bytes")
 	})
 
 	t.Run("MessageTooLarge", func(t *testing.T) {
@@ -402,19 +408,19 @@ func TestVerifyCompositeSignature(t *testing.T) {
 
 	t.Run("InvalidSignatureSize", func(t *testing.T) {
 		invalidSig := make([]byte, 32) // Wrong size
-		err := VerifyCompositeSignature(message, invalidSig, []int{0, 1})
+		err := VerifyCompositeSignature(msgHash[:], invalidSig, []int{0, 1})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid signature length")
 	})
 
 	t.Run("InvalidSignerCount", func(t *testing.T) {
-		err := VerifyCompositeSignature(message, validSignature, []int{0})
+		err := VerifyCompositeSignature(msgHash[:], validSignature, []int{0})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly 2 signers required")
 	})
 
 	t.Run("InvalidSignerIndex", func(t *testing.T) {
-		err := VerifyCompositeSignature(message, validSignature, []int{0, 3})
+		err := VerifyCompositeSignature(msgHash[:], validSignature, []int{0, 3})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid signer index")
 	})
@@ -424,7 +430,7 @@ func TestVerifyCompositeSignature(t *testing.T) {
 		for i := range invalidSig {
 			invalidSig[i] = 0xFF
 		}
-		err := VerifyCompositeSignature(message, invalidSig, []int{0, 1})
+		err := VerifyCompositeSignature(msgHash[:], invalidSig, []int{0, 1})
 		assert.Error(t, err)
 		// The error could be either parsing failure or verification failure
 		assert.True(t, strings.Contains(err.Error(), "failed to parse signature") ||
@@ -443,7 +449,7 @@ func TestInterfaceCompliance(t *testing.T) {
 
 func TestFullSigningFlow(t *testing.T) {
 	// This test demonstrates the complete MuSig2 signing flow
-	message := []byte("complete musig2 signing test")
+	message := sha256.Sum256([]byte("complete musig2 signing test"))
 
 	// Setup two participants
 	privKey0Bytes, err := hex.DecodeString(testPrivKey0)
@@ -471,10 +477,10 @@ func TestFullSigningFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create signing sessions
-	session0, err := manager0.NewSigningSession(message, 1)
+	session0, err := manager0.NewSigningSession(message[:], 1)
 	require.NoError(t, err)
 
-	session1, err := manager1.NewSigningSession(message, 0)
+	session1, err := manager1.NewSigningSession(message[:], 0)
 	require.NoError(t, err)
 
 	// Exchange nonces
@@ -507,7 +513,7 @@ func TestFullSigningFlow(t *testing.T) {
 	require.Len(t, finalSig, SignatureSize)
 
 	// Verify the signature
-	err = VerifyCompositeSignature(message, finalSig, []int{0, 1})
+	err = VerifyCompositeSignature(message[:], finalSig, []int{0, 1})
 	require.NoError(t, err)
 
 	// Additional verification using the underlying library
@@ -518,8 +524,7 @@ func TestFullSigningFlow(t *testing.T) {
 	sig, err := schnorr.ParseSignature(finalSig)
 	require.NoError(t, err)
 
-	msgHash := sha256.Sum256(message)
-	valid := sig.Verify(msgHash[:], aggKey.FinalKey)
+	valid := sig.Verify(message[:], aggKey.FinalKey)
 	assert.True(t, valid, "Signature should be valid")
 }
 
@@ -539,7 +544,7 @@ func TestSortKeys(t *testing.T) {
 
 	// Should be sorted lexicographically
 	assert.Equal(t, key3, sorted[0]) // 02afc... comes first
-	assert.Equal(t, key2, sorted[1]) // 02f68... comes second  
+	assert.Equal(t, key2, sorted[1]) // 02f68... comes second
 	assert.Equal(t, key1, sorted[2]) // 0325f... comes third
 }
 
