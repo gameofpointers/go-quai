@@ -338,18 +338,13 @@ func (ec *Client) SignAuxTemplate(ctx context.Context, chainID string, templateD
 	return result, err
 }
 
-func (ec *Client) SubmitAuxTemplate(ctx context.Context, chainID string, auxTemplate *types.AuxTemplate, signerEnvelope *types.SignerEnvelope) error {
+func (ec *Client) SubmitAuxTemplate(ctx context.Context, chainID string, auxTemplate *types.AuxTemplate) error {
 	protoTemplate := auxTemplate.ProtoEncode()
 	bytesTemplate, err := proto.Marshal(protoTemplate)
 	if err != nil {
 		return fmt.Errorf("unable to marshal AuxTemplate: %w", err)
 	}
-	protoSignerEnv := signerEnvelope.ProtoEncode()
-	bytesSignerEnv, err := proto.Marshal(protoSignerEnv)
-	if err != nil {
-		return fmt.Errorf("unable to marshal SignerEnvelope: %w", err)
-	}
-	return ec.c.CallContext(ctx, nil, "workshare_submitAuxTemplate", chainID, hexutil.Bytes(bytesTemplate), hexutil.Bytes(bytesSignerEnv))
+	return ec.c.CallContext(ctx, nil, "workshare_submitAuxTemplate", chainID, hexutil.Bytes(bytesTemplate))
 }
 
 func (ec *Client) CalcOrder(ctx context.Context, header *types.WorkObject) (int, error) {
