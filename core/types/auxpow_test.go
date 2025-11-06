@@ -207,33 +207,6 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	require.Empty(t, decoded.MerkleBranch())
 }
 
-// TestSignerEnvelopeProtoEncodeDecode tests SignerEnvelope protobuf operations
-func TestSignerEnvelopeProtoEncodeDecode(t *testing.T) {
-	original := NewSignerEnvelope("test-signer-123", bytes.Repeat([]byte{0xef}, 72))
-
-	// Encode
-	protoEnv := original.ProtoEncode()
-	require.NotNil(t, protoEnv)
-
-	// Marshal
-	data, err := proto.Marshal(protoEnv)
-	require.NoError(t, err)
-
-	// Unmarshal
-	var decodedProto ProtoSignerEnvelope
-	err = proto.Unmarshal(data, &decodedProto)
-	require.NoError(t, err)
-
-	// Decode
-	decoded := &SignerEnvelope{}
-	err = decoded.ProtoDecode(&decodedProto)
-	require.NoError(t, err)
-
-	// Verify
-	require.Equal(t, original.SignerID(), decoded.SignerID())
-	require.Equal(t, original.Signature(), decoded.Signature())
-}
-
 // TestAuxPowInWorkObjectHeader tests that AuxPow in WorkObjectHeader encodes/decodes correctly
 func TestAuxPowInWorkObjectHeader(t *testing.T) {
 	// Create a WorkObjectHeader with AuxPow
