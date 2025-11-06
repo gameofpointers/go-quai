@@ -59,7 +59,7 @@ func createTestAuxTemplate(nonce uint64) *types.AuxTemplate {
 	var prevHash [32]byte
 	copy(prevHash[:], bytes.Repeat([]byte{byte(nonce % 256)}, 32))
 
-	coinbaseOut := []*types.AuxPowCoinbaseOut{types.NewAuxPowCoinbaseOut(types.Kawpow, 1000022, []byte{0x76, 0xa9, 0x14, byte(nonce)})}
+	coinbaseOut := []byte{0x76, 0xa9, 0x14, byte(nonce)}
 
 	template := &types.AuxTemplate{}
 	template.SetPowID(types.PowID(1000 + nonce))

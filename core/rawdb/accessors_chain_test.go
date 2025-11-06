@@ -29,12 +29,13 @@ func testAuxPow() *types.AuxPow {
 		MixHash:        types.EmptyRootHash,
 	}
 	header := types.NewAuxPowHeader(ravencoinHeader)
-	coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
-	coinbaseTx := types.NewAuxPowCoinbaseTx(types.Kawpow, 100, coinbaseOut, []byte("Test"))
+	coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
+	coinbaseTx := types.NewAuxPowCoinbaseTx(types.Kawpow, 100, coinbaseOut, types.EmptyRootHash, 123, true)
 
 	return types.NewAuxPow(
 		100,
 		header,
+		[]byte{},
 		[]byte{0x03, 0x04},
 		[][]byte{},
 		coinbaseTx,

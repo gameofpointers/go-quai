@@ -17,7 +17,7 @@ func createTestAuxTemplate() *types.AuxTemplate {
 
 	nonce := uint32(42) // Sample nonce to vary data
 
-	coinbaseOut := []*types.AuxPowCoinbaseOut{types.NewAuxPowCoinbaseOut(types.Kawpow, 1000022, []byte{0x76, 0xa9, 0x14, byte(nonce)})}
+	coinbaseOut := []byte{0x76, 0xa9, 0x14, byte(nonce)}
 
 	template := &types.AuxTemplate{}
 	template.SetPowID(types.Kawpow)
@@ -66,8 +66,6 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.NotNil(t, decoded.AuxTemplate)
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.AuxTemplate.GetChainId())
 	require.Equal(t, protoAuxTemplate.GetPrevHash(), decoded.AuxTemplate.GetPrevHash())
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut()[0].ScriptPubKey, decoded.AuxTemplate.GetCoinbaseOut()[0].ScriptPubKey)
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut()[0].Value, decoded.AuxTemplate.GetCoinbaseOut()[0].Value)
 	require.Equal(t, protoAuxTemplate.GetMerkleBranch(), decoded.AuxTemplate.GetMerkleBranch())
 
 	// Decode back to types.AuxTemplate
@@ -151,8 +149,6 @@ func TestQuaiResponseMessageWithAuxTemplate(t *testing.T) {
 	require.Equal(t, uint32(5678), decoded.GetId())
 	require.NotNil(t, decoded.GetAuxTemplate())
 	require.Equal(t, protoAuxTemplate.GetChainId(), decoded.GetAuxTemplate().GetChainId())
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut()[0].ScriptPubKey, decoded.GetAuxTemplate().GetCoinbaseOut()[0].ScriptPubKey)
-	require.Equal(t, protoAuxTemplate.GetCoinbaseOut()[0].Value, decoded.GetAuxTemplate().GetCoinbaseOut()[0].Value)
 }
 
 // TestEmptyGossipAuxTemplate tests encoding/decoding of empty GossipAuxTemplate

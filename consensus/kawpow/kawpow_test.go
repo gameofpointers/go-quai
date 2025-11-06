@@ -1,35 +1,15 @@
 package kawpow
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"testing"
 
-	"github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 )
-
-// Helper function to serialize TxOut to wire format
-func serializeKawpowTxOut(value int64, pkScript []byte) []byte {
-	txOut := wire.NewTxOut(value, pkScript)
-	var buf bytes.Buffer
-
-	// Write value (8 bytes, little-endian)
-	binary.Write(&buf, binary.LittleEndian, txOut.Value)
-
-	// Write script length (varint)
-	wire.WriteVarInt(&buf, 0, uint64(len(txOut.PkScript)))
-
-	// Write script
-	buf.Write(txOut.PkScript)
-
-	return buf.Bytes()
-}
 
 // TestKAWPOWImplementation tests our KAWPOW implementation with various scenarios
 func TestKAWPOWImplementation(t *testing.T) {
@@ -120,17 +100,20 @@ func TestKAWPOWImplementation(t *testing.T) {
 		}
 		auxHeader := types.NewAuxPowHeader(header)
 
-		coinbaseOut := types.NewAuxPowCoinbaseOut(types.Kawpow, 2500000000, []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac})
+		coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
 		coinbaseTx := types.NewAuxPowCoinbaseTx(
 			types.Kawpow,
 			uint32(blockHeight),
 			coinbaseOut,
-			[]byte("Test"),
+			types.EmptyRootHash,
+			100,
+			false,
 		)
 
 		auxPow := types.NewAuxPow(
 			types.Kawpow,
 			auxHeader,
+			[]byte{},
 			[]byte{},
 			[][]byte{},
 			coinbaseTx,
@@ -151,12 +134,12 @@ func TestKAWPOWImplementation(t *testing.T) {
 		}
 
 		kawpowHeaderHash := header.GetKAWPOWHeaderHash()
-		digest1, result1 := kawpowLight(size, cache.cache, kawpowHeaderHash.Bytes(), nonce64, blockHeight, cache.cDag)
+		digest1, result1 := kawpowLight(size, cache.cache, reverseBytes32(kawpowHeaderHash.Bytes()), nonce64, blockHeight, cache.cDag)
 
 		// Method 2: ComputePowLight (validation path)
 		mixHash, powHash := kawpow.ComputePowLight(workHeader)
 
-		if hex.EncodeToString(digest1) == mixHash.Hex()[2:] && hex.EncodeToString(result1) == powHash.Hex()[2:] {
+		if hex.EncodeToString(reverseBytes32(digest1)) == mixHash.Hex()[2:] && hex.EncodeToString(result1) == powHash.Hex()[2:] {
 			t.Logf("✅ Mining and validation produce identical results")
 		} else {
 			t.Errorf("Mining and validation results differ")

@@ -206,6 +206,10 @@ func (b *testBackend) GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate {
 	return nil
 }
 
+func (b *testBackend) AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxPow *types.AuxPow) {
+	// Implementation goes here
+}
+
 // TestPendingTxFilter tests whether pending tx filters retrieve all pending transactions that are posted to the event mux.
 func TestPendingTxFilter(t *testing.T) {
 	t.Skip("Todo: Fix broken test")

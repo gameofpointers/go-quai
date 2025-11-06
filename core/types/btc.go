@@ -8,12 +8,7 @@ import (
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
-	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
-
-type BitcoinBlockWrapper struct {
-	Block *btcdwire.MsgBlock
-}
 
 // BitcoinHeaderWrapper wraps btcdwire.BlockHeader to implement AuxHeaderData
 type BitcoinHeaderWrapper struct {
@@ -28,60 +23,12 @@ type BitcoinCoinbaseTxOutWrapper struct {
 	*btcdwire.TxOut
 }
 
-func NewBitcoinBlockWrapper(header *btcdwire.BlockHeader) *BitcoinBlockWrapper {
-	return &BitcoinBlockWrapper{Block: &btcdwire.MsgBlock{Header: *header}}
-}
-
 func NewBitcoinHeaderWrapper(header *btcdwire.BlockHeader) *BitcoinHeaderWrapper {
 	return &BitcoinHeaderWrapper{BlockHeader: header}
 }
 
 func NewBitcoinCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCoinbaseTxOutWrapper {
 	return &BitcoinCoinbaseTxOutWrapper{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
-}
-
-func (btb *BitcoinBlockWrapper) Header() AuxHeaderData {
-	return &BitcoinHeaderWrapper{BlockHeader: &btb.Block.Header}
-}
-
-func (btb *BitcoinBlockWrapper) Copy() AuxPowBlockData {
-
-	copyBlock := &btcdwire.MsgBlock{
-		Header:       btb.Block.Header,
-		Transactions: make([]*btcdwire.MsgTx, len(btb.Block.Transactions)),
-	}
-
-	for i, tx := range btb.Block.Transactions {
-		if tx == nil {
-			continue
-		}
-		copyBlock.Transactions[i] = tx.Copy()
-	}
-
-	return &BitcoinBlockWrapper{Block: copyBlock}
-}
-
-func (btb *BitcoinBlockWrapper) Serialize(w io.Writer) error {
-	return btb.Block.Serialize(w)
-}
-
-func (btb *BitcoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
-	if tx == nil || tx.inner == nil {
-		return fmt.Errorf("cannot add transaction: tx is nil")
-	}
-
-	switch inner := tx.inner.(type) {
-	case *BitcoinTxWrapper:
-		if inner.MsgTx == nil {
-			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
-		}
-		if btb.Block == nil {
-			return fmt.Errorf("cannot add transaction: block is nil")
-		}
-		return btb.Block.AddTransaction(inner.MsgTx.Copy())
-	default:
-		return fmt.Errorf("unsupported transaction type %T for Bitcoin block", inner)
-	}
 }
 
 func (bth *BitcoinHeaderWrapper) PowHash() common.Hash {
@@ -221,51 +168,6 @@ func (btt *BitcoinTxWrapper) Copy() AuxPowTxData {
 	return &BitcoinTxWrapper{MsgTx: btt.MsgTx.Copy()}
 }
 
-func (btt *BitcoinTxWrapper) scriptSig() []byte {
-	if btt.MsgTx == nil || len(btt.MsgTx.TxIn) == 0 {
-		return nil
-	}
-	return btt.MsgTx.TxIn[0].SignatureScript
-}
-
-func (btt *BitcoinTxWrapper) txOut() []*AuxPowCoinbaseOut {
-	if btt.MsgTx == nil {
-		return nil
-	}
-	txOuts := make([]*AuxPowCoinbaseOut, 0, len(btt.MsgTx.TxOut))
-	for _, txOut := range btt.MsgTx.TxOut {
-		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewBitcoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
-	}
-	return txOuts
-}
-
-func (btt *BitcoinTxWrapper) value() int64 {
-	var totalValue int64
-	for _, txOut := range btt.MsgTx.TxOut {
-		totalValue += txOut.Value
-	}
-	return totalValue
-}
-
-func (btt *BitcoinTxWrapper) version() int32 {
-	return btt.MsgTx.Version
-}
-
-// txHash return the little endian hash of the transaction
-func (btt *BitcoinTxWrapper) txHash() [32]byte {
-	if btt.MsgTx == nil {
-		return [32]byte{}
-	}
-	return btt.MsgTx.TxHash()
-}
-
-func (btt *BitcoinTxWrapper) pkScript() []byte {
-	if btt.MsgTx == nil || len(btt.MsgTx.TxOut) == 0 {
-		return nil
-	}
-	return btt.MsgTx.TxOut[0].PkScript
-}
-
 func (btt *BitcoinTxWrapper) Serialize(w io.Writer) error {
 	if btt.MsgTx == nil {
 		return fmt.Errorf("cannot serialize: MsgTx is nil")
@@ -285,9 +187,4 @@ func (btt *BitcoinTxWrapper) DeserializeNoWitness(r io.Reader) error {
 		return fmt.Errorf("cannot deserialize: MsgTx is nil")
 	}
 	return btt.MsgTx.DeserializeNoWitness(r)
-}
-
-// MWEB methods - Bitcoin does not support MWEB, so these return errors
-func (btb *BitcoinBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
-	return fmt.Errorf("MWEB is not supported by Bitcoin blocks")
 }
