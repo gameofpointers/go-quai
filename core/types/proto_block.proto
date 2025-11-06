@@ -91,13 +91,6 @@ message ProtoAuxPow {
   optional bytes auxpow2 = 7; // Dogecoin block hash
 }
 
-// Removed ProtoRavencoinTransaction messages as we're using btcd wire.MsgTx serialization
-
-message ProtoSignerEnvelope {
-  optional string signer_id = 1;
-  optional bytes signature = 2;
-}
-
 message ProtoAuxTemplate {
   // === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
   optional uint32 chain_id = 1;            // must match ap.Chain (RVN)

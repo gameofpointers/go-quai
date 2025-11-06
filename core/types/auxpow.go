@@ -52,50 +52,6 @@ func (p PowID) String() string {
 // NTimeMask represents a time mask for mining operations
 type NTimeMask uint32
 
-// SignerEnvelope contains a signer ID and their signature
-type SignerEnvelope struct {
-	signerID  string
-	signature []byte
-}
-
-// Getters for SignerEnvelope
-func (se *SignerEnvelope) SignerID() string  { return se.signerID }
-func (se *SignerEnvelope) Signature() []byte { return se.signature }
-
-// Setters for SignerEnvelope
-func (se *SignerEnvelope) SetSignerID(id string)   { se.signerID = id }
-func (se *SignerEnvelope) SetSignature(sig []byte) { se.signature = sig }
-
-// NewSignerEnvelope creates a new SignerEnvelope with the given ID and signature
-func NewSignerEnvelope(id string, signature []byte) SignerEnvelope {
-	return SignerEnvelope{
-		signerID:  id,
-		signature: signature,
-	}
-}
-
-// ProtoEncode converts SignerEnvelope to its protobuf representation
-func (se *SignerEnvelope) ProtoEncode() *ProtoSignerEnvelope {
-	if se == nil {
-		return nil
-	}
-	signerID := se.signerID
-	return &ProtoSignerEnvelope{
-		SignerId:  &signerID,
-		Signature: se.signature,
-	}
-}
-
-// ProtoDecode populates SignerEnvelope from its protobuf representation
-func (se *SignerEnvelope) ProtoDecode(data *ProtoSignerEnvelope) error {
-	if data == nil {
-		return nil
-	}
-	se.signerID = data.GetSignerId()
-	se.signature = data.GetSignature()
-	return nil
-}
-
 // AuxTemplate defines the template structure for auxiliary proof-of-work
 type AuxTemplate struct {
 	// === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
