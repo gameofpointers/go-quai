@@ -14,13 +14,7 @@ import (
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
 	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
-	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
-
-type RavencoinBlockWrapper struct {
-	BlockHeader  *RavencoinBlockHeader
-	Transactions []*btcdwire.MsgTx
-}
 
 // RavencoinBlockHeader represents the Ravencoin KAWPOW block header structure
 type RavencoinBlockHeader struct {
@@ -50,67 +44,6 @@ type RavencoinKAWPOWInput struct {
 
 type RavencoinAddress struct {
 	Address btcdutil.Address
-}
-
-func NewRavencoinBlock(header *RavencoinBlockHeader) *RavencoinBlockWrapper {
-	return &RavencoinBlockWrapper{BlockHeader: header}
-}
-
-func (rb *RavencoinBlockWrapper) Header() AuxHeaderData {
-	return rb.BlockHeader
-}
-
-func (rb *RavencoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
-	if tx == nil || tx.inner == nil {
-		return fmt.Errorf("cannot add transaction: tx is nil")
-	}
-
-	switch inner := tx.inner.(type) {
-	case *RavencoinTx:
-		if inner.MsgTx == nil {
-			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
-		}
-		rb.Transactions = append(rb.Transactions, inner.MsgTx.Copy())
-		return nil
-	default:
-		return fmt.Errorf("unsupported transaction type %T for Ravencoin block", inner)
-	}
-}
-
-func (rb *RavencoinBlockWrapper) Copy() AuxPowBlockData {
-	block := &RavencoinBlockWrapper{
-		BlockHeader:  rb.BlockHeader,
-		Transactions: make([]*btcdwire.MsgTx, len(rb.Transactions)),
-	}
-
-	for i, tx := range rb.Transactions {
-		block.Transactions[i] = tx.Copy()
-	}
-	return block
-}
-
-func (rb *RavencoinBlockWrapper) Serialize(w io.Writer) error {
-	if rb.BlockHeader == nil {
-		return fmt.Errorf("cannot serialize Ravencoin block: header is nil")
-	}
-	if err := rb.BlockHeader.Serialize(w); err != nil {
-		return err
-	}
-
-	// Write the number of transactions as a VarInt
-	txCount := uint64(len(rb.Transactions))
-	if err := btcdwire.WriteVarInt(w, 0, txCount); err != nil {
-		return err
-	}
-
-	// Write each transaction
-	for _, tx := range rb.Transactions {
-		if err := tx.SerializeNoWitness(w); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // NewBlockHeader creates a new Ravencoin block header
@@ -420,54 +353,6 @@ func (rct *RavencoinTx) Copy() AuxPowTxData {
 	return &RavencoinTx{MsgTx: rct.MsgTx.Copy()}
 }
 
-func (rct *RavencoinTx) scriptSig() []byte {
-	if rct.MsgTx == nil || len(rct.MsgTx.TxIn) == 0 {
-		return nil
-	}
-	return rct.MsgTx.TxIn[0].SignatureScript
-}
-
-func (rct *RavencoinTx) value() int64 {
-	var totalValue int64
-	for _, txOut := range rct.MsgTx.TxOut {
-		totalValue += txOut.Value
-	}
-	return totalValue
-}
-
-func (rct *RavencoinTx) version() int32 {
-	if rct.MsgTx == nil {
-		return 0
-	}
-	return rct.MsgTx.Version
-}
-
-// txHash returns the little endian hash of the transaction
-func (rct *RavencoinTx) txHash() [32]byte {
-	if rct.MsgTx == nil {
-		return [32]byte{}
-	}
-	return rct.MsgTx.TxHash()
-}
-
-func (rct *RavencoinTx) pkScript() []byte {
-	if rct.MsgTx == nil || len(rct.MsgTx.TxOut) == 0 {
-		return nil
-	}
-	return rct.MsgTx.TxOut[0].PkScript
-}
-
-func (rct *RavencoinTx) txOut() []*AuxPowCoinbaseOut {
-	if rct.MsgTx == nil {
-		return nil
-	}
-	txOuts := make([]*AuxPowCoinbaseOut, 0, len(rct.MsgTx.TxOut))
-	for _, txOut := range rct.MsgTx.TxOut {
-		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewRavencoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
-	}
-	return txOuts
-}
-
 func (rct *RavencoinTx) Serialize(w io.Writer) error {
 	if rct.MsgTx == nil {
 		return fmt.Errorf("cannot serialize: MsgTx is nil")
@@ -505,9 +390,4 @@ func (rco *RavencoinCoinbaseTxOut) Value() int64 {
 // PkScript implements AuxPowCoinbaseOutData interface
 func (rco *RavencoinCoinbaseTxOut) PkScript() []byte {
 	return rco.TxOut.PkScript
-}
-
-// MWEB methods - Ravencoin does not support MWEB, so these return errors
-func (rb *RavencoinBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
-	return fmt.Errorf("mweb is not supported by ravencoin blocks")
 }

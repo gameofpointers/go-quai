@@ -10,10 +10,6 @@ import (
 	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
 
-type LitecoinBlockWrapper struct {
-	Block *ltcdwire.MsgBlock
-}
-
 // LitecoinHeaderWrapper wraps ltcdwire.BlockHeader to implement AuxHeaderData
 type LitecoinHeaderWrapper struct {
 	*ltcdwire.BlockHeader
@@ -27,89 +23,12 @@ type LitecoinCoinbaseTxOutWrapper struct {
 	*ltcdwire.TxOut
 }
 
-func NewLitecoinBlockWrapper(header *ltcdwire.BlockHeader) *LitecoinBlockWrapper {
-	return &LitecoinBlockWrapper{Block: &ltcdwire.MsgBlock{Header: *header}}
-}
-
 func NewLitecoinHeaderWrapper(header *ltcdwire.BlockHeader) *LitecoinHeaderWrapper {
 	return &LitecoinHeaderWrapper{BlockHeader: header}
 }
 
 func NewLitecoinCoinbaseTxOut(value int64, pkScript []byte) *LitecoinCoinbaseTxOutWrapper {
 	return &LitecoinCoinbaseTxOutWrapper{TxOut: &ltcdwire.TxOut{Value: value, PkScript: pkScript}}
-}
-
-func (ltb *LitecoinBlockWrapper) Header() AuxHeaderData {
-	if ltb.Block == nil {
-		return &LitecoinHeaderWrapper{}
-	}
-	return &LitecoinHeaderWrapper{BlockHeader: &ltb.Block.Header}
-}
-
-func (ltb *LitecoinBlockWrapper) Serialize(w io.Writer) error {
-	if ltb.Block == nil {
-		return fmt.Errorf("cannot serialize Litecoin block: block is nil")
-	}
-	return ltb.Block.Serialize(w)
-}
-
-func (ltb *LitecoinBlockWrapper) Copy() AuxPowBlockData {
-	if ltb.Block == nil {
-		return &LitecoinBlockWrapper{}
-	}
-
-	copyBlock := &ltcdwire.MsgBlock{
-		Header:       ltb.Block.Header,
-		Transactions: make([]*ltcdwire.MsgTx, len(ltb.Block.Transactions)),
-	}
-
-	for i, tx := range ltb.Block.Transactions {
-		if tx == nil {
-			continue
-		}
-		copyBlock.Transactions[i] = tx.Copy()
-	}
-
-	// Copy MWEB data if present
-	if ltb.Block.MwebHeader != nil {
-		copyBlock.MwebHeader = &ltcdwire.MwebHeader{}
-		*copyBlock.MwebHeader = *ltb.Block.MwebHeader
-	}
-	if ltb.Block.MwebTransactions != nil {
-		copyBlock.MwebTransactions = &ltcdwire.MwebTxBody{}
-		*copyBlock.MwebTransactions = *ltb.Block.MwebTransactions
-	}
-
-	return &LitecoinBlockWrapper{Block: copyBlock}
-}
-
-func (ltb *LitecoinBlockWrapper) AddTransaction(tx *AuxPowTx) error {
-	if tx == nil || tx.inner == nil {
-		return fmt.Errorf("cannot add transaction: tx is nil")
-	}
-
-	switch inner := tx.inner.(type) {
-	case *LitecoinTxWrapper:
-		if inner.MsgTx == nil {
-			return fmt.Errorf("cannot add transaction: underlying MsgTx is nil")
-		}
-		if ltb.Block == nil {
-			return fmt.Errorf("cannot add transaction: block is nil")
-		}
-		return ltb.Block.AddTransaction(inner.MsgTx.Copy())
-	default:
-		return fmt.Errorf("cannot add transaction: unknown tx type %T", inner)
-	}
-}
-
-// MWEB Header methods
-func (ltb *LitecoinBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
-	if ltb.Block == nil {
-		ltb.Block = &ltcdwire.MsgBlock{}
-	}
-	ltb.Block.MwebHeader = header
-	ltb.Block.MwebTransactions = txBody
-	return nil
 }
 
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {
@@ -240,54 +159,6 @@ func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, auxMerkleRo
 
 func (lct *LitecoinTxWrapper) Copy() AuxPowTxData {
 	return &LitecoinTxWrapper{MsgTx: lct.MsgTx.Copy()}
-}
-
-func (lct *LitecoinTxWrapper) scriptSig() []byte {
-	if lct.MsgTx == nil || len(lct.MsgTx.TxIn) == 0 {
-		return nil
-	}
-	return lct.MsgTx.TxIn[0].SignatureScript
-}
-
-func (lct *LitecoinTxWrapper) value() int64 {
-	var totalValue int64
-	for _, txOut := range lct.MsgTx.TxOut {
-		totalValue += txOut.Value
-	}
-	return totalValue
-}
-
-func (lct *LitecoinTxWrapper) version() int32 {
-	if lct.MsgTx == nil {
-		return 0
-	}
-	return lct.MsgTx.Version
-}
-
-// txHash returns the little endian hash of the transaction
-func (lct *LitecoinTxWrapper) txHash() [32]byte {
-	if lct.MsgTx == nil {
-		return [32]byte{}
-	}
-	return lct.MsgTx.TxHash()
-}
-
-func (lct *LitecoinTxWrapper) pkScript() []byte {
-	if lct.MsgTx == nil || len(lct.MsgTx.TxOut) == 0 {
-		return nil
-	}
-	return lct.MsgTx.TxOut[0].PkScript
-}
-
-func (lct *LitecoinTxWrapper) txOut() []*AuxPowCoinbaseOut {
-	if lct.MsgTx == nil {
-		return nil
-	}
-	txOuts := make([]*AuxPowCoinbaseOut, 0, len(lct.MsgTx.TxOut))
-	for _, txOut := range lct.MsgTx.TxOut {
-		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewLitecoinCoinbaseTxOut(txOut.Value, txOut.PkScript)})
-	}
-	return txOuts
 }
 
 func (lct *LitecoinTxWrapper) Serialize(w io.Writer) error {

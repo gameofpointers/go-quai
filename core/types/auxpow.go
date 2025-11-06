@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 
 	btcchainhash "github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -241,70 +240,6 @@ func (at *AuxTemplate) VerifySignature() bool {
 	return false
 }
 
-type AuxPowBlock struct {
-	inner AuxPowBlockData
-}
-
-type AuxPowBlockData interface {
-	Serialize(w io.Writer) error
-	AddTransaction(tx *AuxPowTx) error
-	Copy() AuxPowBlockData
-
-	Header() AuxHeaderData
-
-	// MWEB methods (only supported for Litecoin blocks)
-	SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error
-}
-
-func NewAuxPowBlock(header *AuxPowHeader) *AuxPowBlock {
-	auxBlock := &AuxPowBlock{}
-	if header.inner == nil {
-		return auxBlock
-	}
-	switch inner := header.inner.(type) {
-	case *RavencoinBlockHeader:
-		auxBlock.inner = NewRavencoinBlock(inner)
-	case *BitcoinHeaderWrapper:
-		auxBlock.inner = NewBitcoinBlockWrapper(inner.BlockHeader)
-	case *BitcoinCashHeaderWrapper:
-		auxBlock.inner = NewBitcoinCashBlockWrapper(inner.BlockHeader)
-	case *LitecoinHeaderWrapper:
-		auxBlock.inner = NewLitecoinBlockWrapper(inner.BlockHeader)
-	default:
-		return nil
-	}
-	return auxBlock
-}
-
-func (auxBlock *AuxPowBlock) Header() AuxHeaderData {
-	if auxBlock.inner == nil {
-		return &BitcoinHeaderWrapper{}
-	}
-	return auxBlock.inner.Header()
-}
-
-func (auxBlock *AuxPowBlock) AddTransaction(tx *AuxPowTx) error {
-	if auxBlock.inner == nil {
-		return fmt.Errorf("cannot add transaction: block is nil")
-	}
-	return auxBlock.inner.AddTransaction(tx)
-}
-
-func (auxBlock *AuxPowBlock) Serialize(w io.Writer) error {
-	if auxBlock.inner == nil {
-		return fmt.Errorf("cannot serialize AuxPowBlock: inner block is nil")
-	}
-	return auxBlock.inner.Serialize(w)
-}
-
-// MWEB methods - delegate to inner implementation with type checking
-func (auxBlock *AuxPowBlock) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
-	if auxBlock.inner == nil {
-		return fmt.Errorf("cannot set MWEB header: inner block is nil")
-	}
-	return auxBlock.inner.SetMwebBlock(header, txBody)
-}
-
 type AuxPowHeader struct {
 	inner AuxHeaderData
 }
@@ -493,13 +428,6 @@ type AuxPowTxData interface {
 	Deserialize(r io.Reader) error
 	DeserializeNoWitness(r io.Reader) error
 	Copy() AuxPowTxData
-	txHash() [32]byte
-	txOut() []*AuxPowCoinbaseOut
-
-	scriptSig() []byte
-	value() int64
-	version() int32
-	pkScript() []byte
 }
 
 func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32, witness bool) []byte {
@@ -556,48 +484,6 @@ func (ac *AuxPowTx) Deserialize(r io.Reader, witness bool) error {
 		return ac.inner.Deserialize(r)
 	}
 	return ac.inner.DeserializeNoWitness(r)
-}
-
-func (ac *AuxPowTx) ScriptSig() []byte {
-	if ac.inner == nil {
-		return nil
-	}
-	return ac.inner.scriptSig()
-}
-
-func (ac *AuxPowTx) Value() int64 {
-	if ac.inner == nil {
-		return 0
-	}
-	return ac.inner.value()
-}
-
-func (ac *AuxPowTx) Version() int32 {
-	if ac.inner == nil {
-		return 0
-	}
-	return ac.inner.version()
-}
-
-func (ac *AuxPowTx) TxHash() [common.HashLength]byte {
-	if ac.inner == nil {
-		return common.Hash{}
-	}
-	return ac.inner.txHash()
-}
-
-func (ac *AuxPowTx) PkScript() []byte {
-	if ac.inner == nil {
-		return nil
-	}
-	return ac.inner.pkScript()
-}
-
-func (ac *AuxPowTx) TxOut() []*AuxPowCoinbaseOut {
-	if ac.inner == nil {
-		return nil
-	}
-	return ac.inner.txOut()
 }
 
 type AuxPowCoinbaseOut struct {
@@ -1006,63 +892,6 @@ func (ap *AuxPow) ProtoDecode(data *ProtoAuxPow) error {
 	ap.auxPow2 = data.GetAuxpow2()
 
 	return nil
-}
-
-// NewAuxPowTxFromBytes constructs an AuxPowTx for the given powId by deserializing raw bytes
-// into the appropriate chain-specific transaction wrapper.
-func NewAuxPowTxFromBytes(powId PowID, raw []byte, witness bool) (*AuxPowTx, error) {
-	switch powId {
-	case SHA_BTC:
-		tx := &BitcoinTxWrapper{btcdwire.NewMsgTx(1)}
-		if witness {
-			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := tx.DeserializeNoWitness(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		}
-		return &AuxPowTx{inner: tx}, nil
-	case SHA_BCH:
-		tx := &BitcoinCashTxWrapper{bchdwire.NewMsgTx(2)}
-		if witness {
-			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := tx.DeserializeNoWitness(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		}
-		return &AuxPowTx{inner: tx}, nil
-	case Scrypt:
-		tx := &LitecoinTxWrapper{ltcdwire.NewMsgTx(1)}
-		if witness {
-			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := tx.DeserializeNoWitness(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		}
-		return &AuxPowTx{inner: tx}, nil
-	case Kawpow:
-		tx := &RavencoinTx{btcdwire.NewMsgTx(2)}
-		if witness {
-			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := tx.DeserializeNoWitness(bytes.NewReader(raw)); err != nil {
-				return nil, err
-			}
-		}
-		return &AuxPowTx{inner: tx}, nil
-	default:
-		return nil, fmt.Errorf("unsupported powId for AuxPowTx")
-	}
 }
 
 func AuxPowTxHash(PowID PowID, tx []byte) common.Hash {

@@ -6,14 +6,9 @@ import (
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
-	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 	bchhash "github.com/gcash/bchd/chaincfg/chainhash"
 	bchdwire "github.com/gcash/bchd/wire"
 )
-
-type BitcoinCashBlockWrapper struct {
-	Block *bchdwire.MsgBlock
-}
 
 // BitcoinCashHeaderWrapper wraps bchdwire.BlockHeader to implement AuxHeaderData
 type BitcoinCashHeaderWrapper struct {
@@ -28,63 +23,12 @@ type BitcoinCashCoinbaseTxOutWrapper struct {
 	*bchdwire.TxOut
 }
 
-func NewBitcoinCashBlockWrapper(header *bchdwire.BlockHeader) *BitcoinCashBlockWrapper {
-	return &BitcoinCashBlockWrapper{&bchdwire.MsgBlock{Header: *header}}
-}
-
 func NewBitcoinCashHeaderWrapper(header *bchdwire.BlockHeader) *BitcoinCashHeaderWrapper {
 	return &BitcoinCashHeaderWrapper{BlockHeader: header}
 }
 
 func NewBitcoinCashCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCashCoinbaseTxOutWrapper {
 	return &BitcoinCashCoinbaseTxOutWrapper{TxOut: &bchdwire.TxOut{Value: value, PkScript: pkScript}}
-}
-
-func (bcb *BitcoinCashBlockWrapper) Header() AuxHeaderData {
-	if bcb.Block == nil {
-		return &BitcoinCashHeaderWrapper{}
-	}
-	return &BitcoinCashHeaderWrapper{BlockHeader: &bcb.Block.Header}
-}
-
-func (bcb *BitcoinCashBlockWrapper) Serialize(w io.Writer) error {
-	return bcb.Block.Serialize(w)
-}
-
-func (bcb *BitcoinCashBlockWrapper) Copy() AuxPowBlockData {
-
-	copyBlock := &bchdwire.MsgBlock{
-		Header:       bcb.Block.Header,
-		Transactions: make([]*bchdwire.MsgTx, len(bcb.Block.Transactions)),
-	}
-
-	for i, tx := range bcb.Block.Transactions {
-		if tx == nil {
-			continue
-		}
-		copyBlock.Transactions[i] = tx.Copy()
-	}
-
-	return &BitcoinCashBlockWrapper{copyBlock}
-}
-
-func (bcb *BitcoinCashBlockWrapper) AddTransaction(tx *AuxPowTx) error {
-	if tx == nil || tx.inner == nil {
-		return errors.New("cannot add transaction: tx is nil")
-	}
-
-	switch inner := tx.inner.(type) {
-	case *BitcoinCashTxWrapper:
-		if inner.MsgTx == nil {
-			return errors.New("cannot add transaction: underlying MsgTx is nil")
-		}
-		if bcb.Block == nil {
-			return errors.New("cannot add transaction: block is nil")
-		}
-		return bcb.Block.AddTransaction(inner.MsgTx.Copy())
-	default:
-		return errors.New("unsupported transaction type for Bitcoin Cash block")
-	}
 }
 
 func NewBitcoinCashBlockHeader(version int32, prevBlockHash [32]byte, merkleRootHash [32]byte, time uint32, bits uint32, nonce uint32) *BitcoinCashHeaderWrapper {
@@ -213,54 +157,6 @@ func (bct *BitcoinCashTxWrapper) Copy() AuxPowTxData {
 	return &BitcoinCashTxWrapper{MsgTx: bct.MsgTx.Copy()}
 }
 
-func (bct *BitcoinCashTxWrapper) scriptSig() []byte {
-	if bct.MsgTx == nil || len(bct.MsgTx.TxIn) == 0 {
-		return nil
-	}
-	return bct.MsgTx.TxIn[0].SignatureScript
-}
-
-func (bct *BitcoinCashTxWrapper) value() int64 {
-	var totalValue int64
-	for _, txOut := range bct.MsgTx.TxOut {
-		totalValue += txOut.Value
-	}
-	return totalValue
-}
-
-func (bct *BitcoinCashTxWrapper) version() int32 {
-	if bct.MsgTx == nil {
-		return 0
-	}
-	return bct.MsgTx.Version
-}
-
-// txHash returns the little endian hash of the transaction
-func (bct *BitcoinCashTxWrapper) txHash() [32]byte {
-	if bct.MsgTx == nil {
-		return [32]byte{}
-	}
-	return bct.MsgTx.TxHash()
-}
-
-func (bct *BitcoinCashTxWrapper) pkScript() []byte {
-	if bct.MsgTx == nil || len(bct.MsgTx.TxOut) == 0 {
-		return nil
-	}
-	return bct.MsgTx.TxOut[0].PkScript
-}
-
-func (bct *BitcoinCashTxWrapper) txOut() []*AuxPowCoinbaseOut {
-	if bct.MsgTx == nil {
-		return nil
-	}
-	txOuts := make([]*AuxPowCoinbaseOut, 0, len(bct.MsgTx.TxOut))
-	for _, txOut := range bct.MsgTx.TxOut {
-		txOuts = append(txOuts, &AuxPowCoinbaseOut{NewBitcoinCashCoinbaseTxOut(txOut.Value, txOut.PkScript)})
-	}
-	return txOuts
-}
-
 func (bct *BitcoinCashTxWrapper) Serialize(w io.Writer) error {
 	if bct.MsgTx == nil {
 		return errors.New("cannot serialize: MsgTx is nil")
@@ -297,9 +193,4 @@ func (bco *BitcoinCashCoinbaseTxOutWrapper) Value() int64 {
 
 func (bco *BitcoinCashCoinbaseTxOutWrapper) PkScript() []byte {
 	return bco.TxOut.PkScript
-}
-
-// MWEB methods - Bitcoin Cash does not support MWEB, so these return errors
-func (bchb *BitcoinCashBlockWrapper) SetMwebBlock(header *ltcdwire.MwebHeader, txBody *ltcdwire.MwebTxBody) error {
-	return errors.New("MWEB is not supported by Bitcoin Cash blocks")
 }
