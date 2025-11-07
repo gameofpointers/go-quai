@@ -126,6 +126,7 @@ type Backend interface {
 	GetWorkShareP2PThreshold() int
 	SetWorkShareP2PThreshold(threshold int)
 	GetWorkshareLRUDump(limit int) map[string]interface{}
+	UncleWorkShareClassification(workshare *types.WorkObjectHeader) types.WorkShareValidity
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool

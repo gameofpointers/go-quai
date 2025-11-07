@@ -48,7 +48,6 @@ import (
 	"os/exec"
 
 	"github.com/dominant-strategies/go-quai/common"
-	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/types"
@@ -103,7 +102,7 @@ type backend interface {
 	NodeLocation() common.Location
 	Logger() *log.Logger
 	Database() ethdb.Database
-	Engine(header *types.WorkObjectHeader) consensus.Engine
+	UncleWorkShareClassification(workshare *types.WorkObjectHeader) types.WorkShareValidity
 }
 
 // fullNodeBackend encompasses the functionality necessary for a full node
@@ -120,7 +119,6 @@ type fullNodeBackend interface {
 // chain statistics up to a monitoring server.
 type Service struct {
 	backend backend
-	engine  consensus.Engine // Consensus engine to retrieve variadic block fields
 
 	node          string // Name of the node to display on the monitoring page
 	pass          string // Password to authorize access to the monitoring page
@@ -1273,10 +1271,11 @@ func (s *Service) assembleBlockDetailStats(block *types.WorkObject) *blockDetail
 	uncleCount := uint64(0)
 	woCount := uint64(0)
 	for _, uncle := range block.Uncles() {
-		_, err := s.backend.Engine(uncle).VerifySeal(uncle)
-		if err == nil {
+		validity := s.backend.UncleWorkShareClassification(uncle)
+		switch validity {
+		case types.Block:
 			uncleCount += 1
-		} else {
+		case types.Valid:
 			woCount += 1
 		}
 	}

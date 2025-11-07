@@ -868,6 +868,10 @@ func (b *QuaiAPIBackend) GetBestAuxTemplate(powId types.PowID) *types.AuxTemplat
 	return b.quai.core.GetBestAuxTemplate(powId)
 }
 
+func (b *QuaiAPIBackend) UncleWorkShareClassification(workshare *types.WorkObjectHeader) types.WorkShareValidity {
+	return b.quai.core.UncleWorkShareClassification(workshare)
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////
