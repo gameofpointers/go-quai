@@ -280,16 +280,6 @@ func (s *PublicBlockChainQuaiAPI) GetSupplyAnalyticsForBlock(ctx context.Context
 	}, nil
 }
 
-// GetWorkshareLRUDump returns a JSON-encoded dump of all workshares in the LRU caches.
-// The limit parameter caps the number of entries returned per list (0 or negative means no limit).
-func (s *PublicBlockChainQuaiAPI) GetWorkshareLRUDump(ctx context.Context, limit int) (map[string]interface{}, error) {
-	if limit <= 0 {
-		limit = 0 // No limit
-	}
-	dump := s.b.GetWorkshareLRUDump(limit)
-	return dump, nil
-}
-
 func (s *PublicBlockChainQuaiAPI) GetOutPointsByAddressAndRange(ctx context.Context, address common.Address, start, end hexutil.Uint64) (map[string][]interface{}, error) {
 	if start > end {
 		return nil, fmt.Errorf("start is greater than end")
