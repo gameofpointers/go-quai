@@ -1630,6 +1630,16 @@ func (api *PublicDebugAPI) SeedHash(ctx context.Context, number uint64) (string,
 	return fmt.Sprintf("0x%x", progpow.SeedHash(number)), nil
 }
 
+// GetWorkshareLRUDump returns a JSON-encoded dump of all workshares in the LRU caches.
+// The limit parameter caps the number of entries returned per list (0 or negative means no limit).
+func (s *PublicDebugAPI) GetWorkshareLRUDump(ctx context.Context, limit int) (map[string]interface{}, error) {
+	if limit <= 0 {
+		limit = 0 // No limit
+	}
+	dump := s.b.GetWorkshareLRUDump(limit)
+	return dump, nil
+}
+
 // PrivateDebugAPI is the collection of Quai APIs exposed over the private
 // debugging endpoint.
 type PrivateDebugAPI struct {
