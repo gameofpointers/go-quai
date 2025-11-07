@@ -2583,7 +2583,7 @@ func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 		w.scryptShares.ContainsOrAdd(workShare.Hash(), *workShare)
 	}
 
-	if w.hc.NodeCtx() == common.ZONE_CTX {
+	if w.hc.NodeCtx() == common.ZONE_CTX && w.hc.config.TelemetryEnabled {
 		telemetry.RecordCandidateHeader(workShare)
 	}
 
