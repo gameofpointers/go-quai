@@ -1487,6 +1487,9 @@ func (c *Core) UncleWorkShareClassification(header *types.WorkObjectHeader) type
 }
 
 func (c *Core) GetWorkshareLRUDump(limit int) map[string]interface{} {
+	if !c.sl.config.TelemetryEnabled {
+		return make(map[string]interface{})
+	}
 	return telemetry.BuildWorkshareLRUDump(limit)
 }
 

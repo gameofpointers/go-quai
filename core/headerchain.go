@@ -736,9 +736,11 @@ func (hc *HeaderChain) AppendBlock(block *types.WorkObject) error {
 
 	if hc.NodeCtx() == common.ZONE_CTX {
 		// Telemetry: move candidate workshares to 'candidate' LRU
-		for _, u := range block.Uncles() {
-			if hc.UncleWorkShareClassification(u) == types.Valid {
-				telemetry.RemoveCandidateShare(u.Hash())
+		if hc.config.TelemetryEnabled {
+			for _, u := range block.Uncles() {
+				if hc.UncleWorkShareClassification(u) == types.Valid {
+					telemetry.RemoveCandidateShare(u.Hash())
+				}
 			}
 		}
 	}
