@@ -364,7 +364,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		KawpowDiffAndCount  *PowShareDiffAndCount `json:"kawpowDiffAndCount,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
-		KawpowShareTarget   *hexutil.Big          `json:"kawpowShareTarget,omitempty"`
+		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
 		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
 	}
 
@@ -400,11 +400,11 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		enc.ShaDiffAndCount = sha
 	}
 
-	kawpowShareTarget := wh.KawpowShareTarget()
+	shaShareTarget := wh.ShaShareTarget()
 	scryptShareTarget := wh.ScryptShareTarget()
 
-	if kawpowShareTarget != nil {
-		enc.KawpowShareTarget = (*hexutil.Big)(kawpowShareTarget)
+	if shaShareTarget != nil {
+		enc.ShaShareTarget = (*hexutil.Big)(shaShareTarget)
 	}
 	if scryptShareTarget != nil {
 		enc.ScryptShareTarget = (*hexutil.Big)(scryptShareTarget)
@@ -433,7 +433,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		KawpowDiffAndCount  *PowShareDiffAndCount `json:"kawpowDiffAndCount,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
-		KawpowShareTarget   *hexutil.Big          `json:"kawpowShareTarget,omitempty"`
+		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
 		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
 	}
 
@@ -483,8 +483,8 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	}
 
 	// Handle ShareTarget if present
-	if dec.KawpowShareTarget != nil {
-		wh.SetKawpowShareTarget((*big.Int)(dec.KawpowShareTarget))
+	if dec.ShaShareTarget != nil {
+		wh.SetShaShareTarget((*big.Int)(dec.ShaShareTarget))
 	}
 	if dec.ScryptShareTarget != nil {
 		wh.SetScryptShareTarget((*big.Int)(dec.ScryptShareTarget))

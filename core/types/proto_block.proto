@@ -137,7 +137,7 @@ message ProtoWorkObjectHeader {
   optional ProtoPowShareDiffAndCount kawpow_diff_and_count = 15;
   optional ProtoPowShareDiffAndCount scrypt_diff_and_count = 16;
   optional ProtoPowShareDiffAndCount sha_diff_and_count = 17;
-  optional bytes kawpow_share_target = 18;
+  optional bytes sha_share_target = 18;
   optional bytes scrypt_share_target = 19;
 }
 
