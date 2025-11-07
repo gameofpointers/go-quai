@@ -1552,7 +1552,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw h
 		return err
 	}
 
-	if nodeCtx == common.ZONE_CTX {
+	if nodeCtx == common.ZONE_CTX && s.b.ChainConfig().TelemetryEnabled {
 		// Track mined workshare (mined LRU)
 		telemetry.RecordMinedHeader(workShareHeader)
 	}

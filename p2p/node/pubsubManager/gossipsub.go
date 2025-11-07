@@ -367,7 +367,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				}).Error("no backend found for this location")
 			}
 
-			if backend.NodeCtx() == common.ZONE_CTX {
+			if backend.NodeCtx() == common.ZONE_CTX && backend.ChainConfig().TelemetryEnabled {
 				// If broadcasting a workshare, track it as received (by network)
 				if wsv, ok := data.(*types.WorkObjectShareView); ok && wsv != nil && wsv.WorkObject != nil && wsv.WorkObject.WorkObjectHeader() != nil {
 					telemetry.RecordReceivedHeader(wsv.WorkObject.WorkObjectHeader())
@@ -570,7 +570,14 @@ func (g *PubsubManager) Broadcast(location common.Location, data interface{}) er
 		return err
 	}
 
-	if location.Context() == common.ZONE_CTX {
+	backend := *g.consensus.GetBackend(location)
+	if backend == nil {
+		log.Global.WithFields(log.Fields{
+			"location": location,
+		}).Error("no backend found for this location")
+	}
+
+	if location.Context() == common.ZONE_CTX && backend.ChainConfig().TelemetryEnabled {
 		// If broadcasting a workshare, track it as received (by network)
 		if wsv, ok := data.(*types.WorkObjectShareView); ok && wsv != nil && wsv.WorkObject != nil && wsv.WorkObject.WorkObjectHeader() != nil {
 			telemetry.RemoveMinedShare(wsv.WorkObject.WorkObjectHeader().Hash())
