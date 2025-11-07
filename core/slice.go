@@ -1478,8 +1478,8 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		if header.WorkObjectHeader().ScryptDiffAndCount() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetScryptDiffAndCount(header.WorkObjectHeader().ScryptDiffAndCount())
 		}
-		if header.WorkObjectHeader().KawpowShareTarget() != nil {
-			combinedPendingHeader.WorkObjectHeader().SetKawpowShareTarget(header.WorkObjectHeader().KawpowShareTarget())
+		if header.WorkObjectHeader().ShaShareTarget() != nil {
+			combinedPendingHeader.WorkObjectHeader().SetShaShareTarget(header.WorkObjectHeader().ShaShareTarget())
 		}
 		if header.WorkObjectHeader().ScryptShareTarget() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetScryptShareTarget(header.WorkObjectHeader().ScryptShareTarget())

@@ -57,7 +57,7 @@ type WorkObjectHeader struct {
 	kawpowDiffAndCount  *PowShareDiffAndCount
 	scryptDiffAndCount  *PowShareDiffAndCount
 	shaDiffAndCount     *PowShareDiffAndCount
-	kawpowShareTarget   *big.Int
+	shaShareTarget      *big.Int
 	scryptShareTarget   *big.Int
 	PowHash             atomic.Value
 	PowDigest           atomic.Value
@@ -363,8 +363,8 @@ func (wo *WorkObject) ScryptDiffAndCount() *PowShareDiffAndCount {
 	return wo.WorkObjectHeader().ScryptDiffAndCount()
 }
 
-func (wo *WorkObject) KawpowShareTarget() *big.Int {
-	return wo.WorkObjectHeader().KawpowShareTarget()
+func (wo *WorkObject) ShaShareTarget() *big.Int {
+	return wo.WorkObjectHeader().ShaShareTarget()
 }
 
 func (wo *WorkObject) ScryptShareTarget() *big.Int {
@@ -768,8 +768,8 @@ func (wh *WorkObjectHeader) ShaDiffAndCount() *PowShareDiffAndCount {
 	return wh.shaDiffAndCount.Clone()
 }
 
-func (wh *WorkObjectHeader) KawpowShareTarget() *big.Int {
-	return wh.kawpowShareTarget
+func (wh *WorkObjectHeader) ShaShareTarget() *big.Int {
+	return wh.shaShareTarget
 }
 
 func (wh *WorkObjectHeader) ScryptShareTarget() *big.Int {
@@ -848,8 +848,8 @@ func (wh *WorkObjectHeader) SetShaDiffAndCount(val *PowShareDiffAndCount) {
 	wh.shaDiffAndCount = val.Clone()
 }
 
-func (wh *WorkObjectHeader) SetKawpowShareTarget(val *big.Int) {
-	wh.kawpowShareTarget = val
+func (wh *WorkObjectHeader) SetShaShareTarget(val *big.Int) {
+	wh.shaShareTarget = val
 }
 
 func (wh *WorkObjectHeader) SetScryptShareTarget(val *big.Int) {
@@ -1075,7 +1075,7 @@ func NewWorkObjectWithHeader(header *WorkObject, tx *Transaction, nodeCtx int, w
 		header.WorkObjectHeader().KawpowDiffAndCount(),
 		header.WorkObjectHeader().ScryptDiffAndCount(),
 		header.WorkObjectHeader().ShaDiffAndCount(),
-		header.WorkObjectHeader().KawpowShareTarget(),
+		header.WorkObjectHeader().ShaShareTarget(),
 		header.WorkObjectHeader().ScryptShareTarget())
 	woBody, _ := NewWorkObjectBody(header.Body().Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
@@ -1250,7 +1250,7 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Locatio
 	return nil
 }
 
-func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, kawpowDiffAndCount, scryptDiffAndCount, shaDiffAndCount *PowShareDiffAndCount, kawpowShareTarget, scryptShareTarget *big.Int) *WorkObjectHeader {
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, primeTerminusNumber *big.Int, txHash common.Hash, nonce BlockNonce, lock uint8, time uint64, location common.Location, primaryCoinbase common.Address, data []byte, auxpow *AuxPow, kawpowDiffAndCount, scryptDiffAndCount, shaDiffAndCount *PowShareDiffAndCount, shaShareTarget, scryptShareTarget *big.Int) *WorkObjectHeader {
 	return &WorkObjectHeader{
 		headerHash:          headerHash,
 		parentHash:          parentHash,
@@ -1268,7 +1268,7 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 		kawpowDiffAndCount:  kawpowDiffAndCount.Clone(),
 		scryptDiffAndCount:  scryptDiffAndCount.Clone(),
 		shaDiffAndCount:     shaDiffAndCount.Clone(),
-		kawpowShareTarget:   kawpowShareTarget,
+		shaShareTarget:      shaShareTarget,
 		scryptShareTarget:   scryptShareTarget,
 	}
 }
@@ -1299,8 +1299,8 @@ func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 		cpy.SetShaDiffAndCount(wh.ShaDiffAndCount())
 	}
 
-	if wh.KawpowShareTarget() != nil {
-		cpy.SetKawpowShareTarget(wh.KawpowShareTarget())
+	if wh.ShaShareTarget() != nil {
+		cpy.SetShaShareTarget(wh.ShaShareTarget())
 	}
 	if wh.ScryptShareTarget() != nil {
 		cpy.SetScryptShareTarget(wh.ScryptShareTarget())
@@ -1345,8 +1345,8 @@ func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} 
 	if wh.ScryptDiffAndCount() != nil {
 		result["scryptDiffAndCount"] = wh.ScryptDiffAndCount().RPCMarshal()
 	}
-	if wh.KawpowShareTarget() != nil {
-		result["kawpowShareTarget"] = (*hexutil.Big)(wh.KawpowShareTarget())
+	if wh.ShaShareTarget() != nil {
+		result["shaShareTarget"] = (*hexutil.Big)(wh.ShaShareTarget())
 	}
 	if wh.ScryptShareTarget() != nil {
 		result["scryptShareTarget"] = (*hexutil.Big)(wh.ScryptShareTarget())
@@ -1456,7 +1456,7 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 	if wh.KawpowActivationHappened() {
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
-		protoWh.KawpowShareTarget = wh.KawpowShareTarget().Bytes()
+		protoWh.ShaShareTarget = wh.ShaShareTarget().Bytes()
 		protoWh.ScryptShareTarget = wh.ScryptShareTarget().Bytes()
 	}
 
@@ -1504,7 +1504,7 @@ func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 		protoWh.KawpowDiffAndCount = wh.KawpowDiffAndCount().ProtoEncode()
 		protoWh.ScryptDiffAndCount = wh.scryptDiffAndCount.ProtoEncode()
 		protoWh.ShaDiffAndCount = wh.shaDiffAndCount.ProtoEncode()
-		protoWh.KawpowShareTarget = wh.KawpowShareTarget().Bytes()
+		protoWh.ShaShareTarget = wh.ShaShareTarget().Bytes()
 		protoWh.ScryptShareTarget = wh.ScryptShareTarget().Bytes()
 	}
 
@@ -1560,14 +1560,14 @@ func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader, location co
 			}
 		}
 
-		if data.GetKawpowShareTarget() == nil {
-			return errors.New("kawpow share target is nil")
+		if data.GetShaShareTarget() == nil {
+			return errors.New("sha share target is nil")
 		}
 		if data.GetScryptShareTarget() == nil {
 			return errors.New("scrypt share target is nil")
 		}
 
-		wh.SetKawpowShareTarget(new(big.Int).SetBytes(data.GetKawpowShareTarget()))
+		wh.SetShaShareTarget(new(big.Int).SetBytes(data.GetShaShareTarget()))
 		wh.SetScryptShareTarget(new(big.Int).SetBytes(data.GetScryptShareTarget()))
 	}
 
