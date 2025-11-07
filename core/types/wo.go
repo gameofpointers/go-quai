@@ -1342,11 +1342,25 @@ func (wh *WorkObjectHeader) SealHash() (hash common.Hash) {
 	defer hasherMu.Unlock()
 	hasher.Reset()
 	protoSealData := wh.SealEncode()
+	primaryCoinbase := wh.PrimaryCoinbase().Bytes()
+	// After the kawpow activation update the seal hash to be
+	// without the primary coinbase and then hash the coinbase
+	// with the sealhash
+	if wh.KawpowActivationHappened() {
+		protoSealData.PrimaryCoinbase = nil
+	}
 	data, err := proto.Marshal(protoSealData)
 	if err != nil {
 		log.Global.Error("Failed to marshal seal data ", "err", err)
 	}
+
 	sum := blake3.Sum256(data[:])
+
+	if wh.KawpowActivationHappened() {
+		// Encode the primary coinbase separately
+		sum = blake3.Sum256(append(sum[:], primaryCoinbase...))
+	}
+
 	hash.SetBytes(sum[:])
 	return hash
 }
