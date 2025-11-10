@@ -1126,7 +1126,10 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 type BlockTemplateRequest struct {
 	Mode         string   `json:"mode,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
-	Rules        []string `json:"rules,omitempty"` // "kawpow", "sha", "scrypt"
+	Rules        []string `json:"rules,omitempty"`       // "kawpow", "sha", "scrypt"
+	ExtraNonce1  string   `json:"extranonce1,omitempty"` // 4 byte hex string
+	ExtraNonce2  string   `json:"extranonce2,omitempty"` // 8 byte hex string
+	ExtraData    string   `json:"extradata,omitempty"`   // string less than 30 bytes
 }
 
 // GetBlockTemplate retrieves a new block template to mine
@@ -1157,11 +1160,11 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 	if err != nil {
 		return nil, err
 	}
-	return s.marshalAuxPowTemplate(pendingHeader)
+	return s.marshalAuxPowTemplate(pendingHeader, request)
 }
 
 // marshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
-func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (map[string]interface{}, error) {
+func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, request *BlockTemplateRequest) (map[string]interface{}, error) {
 	auxPow := wo.AuxPow()
 	if auxPow == nil {
 		return nil, errors.New("no AuxPow in pending header")
@@ -1203,6 +1206,47 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		return nil, errors.New("empty coinbase tx bytes in AuxPow")
 	}
 
+	var updatedTxBytes []byte
+
+	// extranonce1, extranonce2, and extradata are optional fields
+	var extraNonce1 [4]byte
+	var extraNonce2 [8]byte
+	var extraData [30]byte
+	if request != nil && len(request.ExtraNonce1) > 0 {
+		extraNonce1Bytes, err := hex.DecodeString(request.ExtraNonce1)
+		if err != nil {
+			return nil, fmt.Errorf("invalid extranonce1: %w", err)
+		}
+		if len(extraNonce1Bytes) > 4 {
+			return nil, fmt.Errorf("extranonce1 length exceeds 4 bytes")
+		}
+		copy(extraNonce1[:], extraNonce1Bytes)
+	}
+	if request != nil && len(request.ExtraNonce2) > 0 {
+		extraNonce2Bytes, err := hex.DecodeString(request.ExtraNonce2)
+		if err != nil {
+			return nil, fmt.Errorf("invalid extranonce2: %w", err)
+		}
+		if len(extraNonce2Bytes) > 8 {
+			return nil, fmt.Errorf("extranonce2 length exceeds 8 bytes")
+		}
+		copy(extraNonce2[:], extraNonce2Bytes)
+	}
+	if request != nil && len(request.ExtraData) > 0 {
+		extraDataBytes := []byte(request.ExtraData)
+		if len(extraDataBytes) > 30 {
+			return nil, fmt.Errorf("input extraData length exceeds 30 bytes")
+		}
+		copy(extraData[:], extraDataBytes)
+		// update the first 30 bytes of the coinb2
+		copy(coinb2[:30], extraData[:])
+	}
+
+	// Build the updated transaction bytes by concatenating coinb1, extraNonce1, extraNonce2, and coinb2
+	updatedTxBytes = append(coinb1, extraNonce1[:]...)
+	updatedTxBytes = append(updatedTxBytes, extraNonce2[:]...)
+	updatedTxBytes = append(updatedTxBytes, coinb2...)
+
 	// Get header fields using the typed accessor methods
 	prevBlock := auxHeader.PrevBlock()
 	// prevBlock needs to be big-endian for getblocktemplate
@@ -1225,7 +1269,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		merkleBranch[i] = hex.EncodeToString(reversed)
 	}
 
-	merkleRoot := types.CalculateMerkleRoot(auxPow.PowID(), auxPow.Transaction(), auxPow.MerkleBranch())
+	merkleRoot := types.CalculateMerkleRoot(auxPow.PowID(), updatedTxBytes, auxPow.MerkleBranch())
 
 	// Convert bits to hex without 0x prefix
 	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())

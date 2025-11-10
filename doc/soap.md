@@ -20,7 +20,10 @@ work once per second to keep producing fresh shares and get paid.
   "method": "quai_getBlockTemplate",
   "params": [
     {
-      "rules": ["kawpow"]
+      "rules": ["kawpow"],
+      "extranonce1": "00123456",
+      "extranonce2": "0011223344556677",
+      "extradata": "/abcpool/"
     }
   ]
 }
@@ -29,6 +32,19 @@ work once per second to keep producing fresh shares and get paid.
 `powType` (supplied inside `rules`) selects the target algorithm. Supported values:
 `"kawpow"`, `"sha"`, `"scrypt"`. If multiple values are supplied, the template is built
 for the first supported entry.
+
+`extranonce1`, `extranonce2`, and `extradata` are optional request fields that let a pool
+ask go-quai to pre-populate the returned coinbase transaction. When supplied:
+
+| Field | Format | Description |
+| --- | --- | --- |
+| `extranonce1` | Hex string (≤ 4 bytes / 8 hex chars) | Spliced between `coinb1` and `coinb2`. Zero-padded if shorter than 4 bytes. |
+| `extranonce2` | Hex string (≤ 8 bytes / 16 hex chars) | Added after `extranonce1` and padded with zeros to 8 bytes when shorter. |
+| `extradata` | UTF-8 string (≤ 30 bytes) | Overwrites the first `coinbaseAuxExtraBytesLength` bytes of `coinb2` (the mutable aux data region). |
+
+go-quai recalculates the coinbase and merkle root inside the template before
+returning the response, so miners can hash immediately with the requested values. If
+the fields are omitted they default to zero bytes, matching the prior behavior.
 
 ### Response Example
 ```json
@@ -69,7 +85,7 @@ for the first supported entry.
 | `extranonce2Length` | number | Expected byte length for `extranonce2`. |
 | `height` | number | Block height the miner is targeting. Read-only donor chain information. |
 | `merklebranch` | array | Merkle branches (big-endian hex strings) required to recompute the block merkle root once the coinbase is finalized. |
-| `merkleroot` | string | Merkle root computed with the provided `coinb1/coinb2`. Update after customizing the coinbase. |
+| `merkleroot` | string | Merkle root computed with the provided `coinb1/coinb2` in big endian. Update after customizing the coinbase. |
 | `mintime` | number | Earliest valid timestamp for the block. |
 | `noncerange` | string | Hex-encoded inclusive nonce range miners may iterate through. |
 | `previousblockhash` | string | Hash of the parent block. Must not be changed. |
@@ -88,13 +104,15 @@ Construct the coinbase transaction by concatenating:
 coinbase = coinb1 + extranonce1 + extranonce2 + coinb2
 ```
 
-- `extranonce1` and `extranonce2` may be chosen by the pool. If they are omitted,
-  insert zero bytes matching `extranonce1Length` and `extranonce2Length`. Pools
-  typically set `extranonce1`; individual miners supply `extranonce2`. Both values
-  must match the advertised byte lengths.
+- `extranonce1` and `extranonce2` may be chosen by the pool or requested directly via
+  `quai_getBlockTemplate`. If they are omitted, go-quai returns zero bytes and miners
+  should insert zero bytes matching `extranonce1Length` and `extranonce2Length`. Pools
+  typically set `extranonce1`; individual miners supply `extranonce2`. Both values must
+  match the advertised byte lengths.
 - Ensure that any auxiliary metadata fits within `coinbaseAuxExtraBytesLength`. This
-  flexible segment is already allocated inside `coinb2`; replace those bytes as
-  needed (for example, to embed a pool identifier).
+  flexible segment is already allocated inside `coinb2`; replace those bytes as needed
+  (for example, to embed a pool identifier). Supplying `extradata` in the request lets
+  go-quai pre-populate the segment and merkle root for you.
 - After altering the coinbase, recompute the merkle root using the updated coinbase
   hash and the provided `merklebranch`.
 
