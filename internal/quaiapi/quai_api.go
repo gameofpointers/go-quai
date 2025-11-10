@@ -1222,7 +1222,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		for j := range hash {
 			reversed[j] = hash[len(hash)-1-j]
 		}
-		merkleBranch[i] = hexutil.Encode(reversed)
+		merkleBranch[i] = hex.EncodeToString(reversed)
 	}
 
 	merkleRoot := types.CalculateMerkleRoot(auxPow.PowID(), auxPow.Transaction(), auxPow.MerkleBranch())
@@ -1270,7 +1270,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject) (m
 		"coinbaseAuxExtraBytesLength": 30, // 32 bytes
 		"coinb2":                      hex.EncodeToString(coinb2),
 		"merklebranch":                merkleBranch,
-		"merkleroot":                  hex.EncodeToString(merkleRoot[:]),
+		"merkleroot":                  hex.EncodeToString(common.Hash(merkleRoot).Reverse().Bytes()),
 	}, nil
 }
 
