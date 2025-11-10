@@ -559,6 +559,9 @@ func (b *QuaiAPIBackend) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (comm
 	}
 
 	validity := b.quai.core.UncleWorkShareClassification(wo.WorkObjectHeader())
+	if validity == types.Invalid {
+		return common.Hash{}, 0, validity, errors.New("invalid proof of work")
+	}
 
 	return wo.Hash(), wo.NumberU64(common.ZONE_CTX), validity, b.ReceiveMinedHeader(wo)
 }

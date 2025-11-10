@@ -921,6 +921,17 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 		}
 	}
 
+	// Add signature check and merkle root check
+	if !workObjectCopy.AuxPow().ConvertToTemplate().VerifySignature() {
+		return nil, fmt.Errorf("invalid auxpow signature")
+	}
+
+	// Verify the merkle root as well
+	expectedMerkleRoot := types.CalculateMerkleRoot(workObjectCopy.AuxPow().PowID(), workObjectCopy.AuxPow().Transaction(), workObjectCopy.AuxPow().MerkleBranch())
+	if workObjectCopy.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
+		return nil, errors.New("invalid merkle root in auxpow")
+	}
+
 	return workObjectCopy, nil
 }
 
