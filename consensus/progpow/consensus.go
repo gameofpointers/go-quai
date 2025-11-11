@@ -205,8 +205,10 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		}
 		uncles.Add(hash)
 
-		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-			return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
+		if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || uncle.AuxPow() == nil || uncle.AuxPow().PowID() == types.Kawpow {
+			if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+				return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
+			}
 		}
 
 		// Make sure the uncle has a valid ancestry
@@ -449,9 +451,7 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 			return fmt.Errorf("Qi coinbase is not allowed before block %v", params.ControllerKickInBlock)
 		}
 	}
-
 	if nodeCtx == common.ZONE_CTX {
-
 		// check if the header coinbase is in scope
 		_, err := header.PrimaryCoinbase().InternalAddress()
 		if err != nil {

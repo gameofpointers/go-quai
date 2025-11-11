@@ -1127,8 +1127,11 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		// unclesAtTargetBlockDepth has all the uncles, workshares that is there at the block height
 		var sharesAtTargetBlockDepth []*types.WorkObjectHeader
 		var entropyOfSharesAtTargetBlockDepth []*big.Int
-		sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
-		entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
+		_, err = targetBlock.WorkObjectHeader().PrimaryCoinbase().InternalAddress()
+		if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && err == nil {
+			sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
+			entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
+		}
 
 		for i := 0; i <= params.WorkSharesInclusionDepth; i++ {
 
@@ -1142,6 +1145,11 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			for _, uncle := range uncles {
 				var uncleEntropy *big.Int
 				if uncle.NumberU64() == targetBlockNumber {
+					if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+						if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
+							continue
+						}
+					}
 					engine := p.hc.GetEngineForHeader(uncle)
 					_, err := engine.VerifySeal(uncle)
 					if err != nil {

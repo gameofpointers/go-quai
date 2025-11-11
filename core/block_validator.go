@@ -331,7 +331,6 @@ func (v *BlockValidator) SanityCheckWorkObjectHeaderViewBody(wo *types.WorkObjec
 			return fmt.Errorf("work object primary coinbase is in qi ledger scope before controller kick in block")
 		}
 	}
-
 	return nil
 }
 
@@ -378,8 +377,10 @@ func (v *BlockValidator) SanityCheckWorkObjectShareViewBody(wo *types.WorkObject
 	if hash := types.DeriveSha(wo.Transactions(), trie.NewStackTrie(nil)); hash != wo.TxHash() {
 		return fmt.Errorf("transaction root hash mismatch: have %x, want %x", hash, wo.TxHash())
 	}
-	if wo.PrimaryCoinbase().IsInQiLedgerScope() && wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-		return fmt.Errorf("work object primary coinbase is in qi ledger scope before controller kick in block")
+	if wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || wo.AuxPow() == nil || wo.AuxPow().PowID() == types.Kawpow {
+		if wo.PrimaryCoinbase().IsInQiLedgerScope() && wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+			return fmt.Errorf("work object primary coinbase is in qi ledger scope before controller kick in block")
+		}
 	}
 
 	return nil

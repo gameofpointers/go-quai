@@ -73,6 +73,7 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 	} else {
 		beneficiary = *author
 	}
+
 	if header.BaseFee() != nil {
 		baseFee = new(big.Int).Set(header.BaseFee())
 	}
