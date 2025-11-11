@@ -221,8 +221,10 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		if ancestors[uncle.ParentHash()] == nil || (!workShare && (uncle.ParentHash() == block.ParentHash(nodeCtx))) {
 			return consensus.ErrDanglingUncle
 		}
-		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-			return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
+		if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || uncle.AuxPow() == nil || uncle.AuxPow().PowID() == types.Kawpow {
+			if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+				return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
+			}
 		}
 
 		_, err := chain.WorkShareDistance(block, uncle)
