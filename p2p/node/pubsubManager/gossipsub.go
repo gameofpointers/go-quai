@@ -6,11 +6,13 @@ import (
 	"math/big"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
+	"lukechampine.com/blake3"
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common"
@@ -21,12 +23,15 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p/pb"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quai"
+	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (
-	numWorkers         = 20  // Number of workers per stream
-	msgChanSize        = 500 // 500 requests per subscription
-	c_MaxWorkShareDist = 5
+	numWorkers                 = 20  // Number of workers per stream
+	msgChanSize                = 500 // 500 requests per subscription
+	c_MaxWorkShareDist         = 5
+	c_BroadcastCacheSize       = 1000
+	c_BroadcastCacheExpiryTime = 20 * time.Second
 )
 
 var (
@@ -43,6 +48,8 @@ type PubsubManager struct {
 	topics        *sync.Map
 	consensus     quai.ConsensusAPI
 	genesis       common.Hash
+
+	broadcastCache *expireLru.LRU[string, struct{}]
 
 	// Callback function to handle received data
 	onReceived func(peer.ID, string, string, interface{}, common.Location)
@@ -61,6 +68,10 @@ func NewGossipSubManager(ctx context.Context, h host.Host) (*PubsubManager, erro
 	if err != nil {
 		return nil, err
 	}
+
+	// create a broadcast cache to not broadcast duplicate messages per topic
+	broadcastCache := expireLru.NewLRU[string, struct{}](c_BroadcastCacheSize, nil, c_BroadcastCacheExpiryTime)
+
 	return &PubsubManager{
 		ps,
 		ctx,
@@ -68,6 +79,7 @@ func NewGossipSubManager(ctx context.Context, h host.Host) (*PubsubManager, erro
 		new(sync.Map),
 		nil,
 		utils.MakeGenesis().ToBlock(0).Hash(),
+		broadcastCache,
 		nil,
 	}, nil
 }
@@ -588,6 +600,13 @@ func (g *PubsubManager) Broadcast(location common.Location, data interface{}) er
 	if err != nil {
 		return err
 	}
+
+	// Check if this broadcast has already been sent recently
+	broadcastCacheKey := topicName.String() + common.Hash(blake3.Sum256(protoData)).String()
+	if _, ok := g.broadcastCache.Get(broadcastCacheKey); ok {
+		return nil
+	}
+	g.broadcastCache.Add(broadcastCacheKey, struct{}{})
 
 	if value, ok := g.topics.Load(topicName.String()); ok {
 		return value.(*pubsub.Topic).Publish(g.ctx, protoData)
