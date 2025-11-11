@@ -815,6 +815,7 @@ func ParseCoinbaseAddresses() (map[string]common.Address, error) {
 		if quaiCoinbase == "0x0000000000000000000000000000000000000001" {
 			log.Global.Warn("Default Quai coinbase address is being used. If you are not mining, you can ignore this message, otherwise please set --quai-coinbases.")
 		}
+
 		quaiAddr, err := isValidAddress(quaiCoinbase)
 		if err != nil {
 			log.Global.WithField("err", err).Fatalf("Error parsing quai address")

@@ -684,8 +684,12 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			// unclesAtTargetBlockDepth has all the uncles, workshares that is there at the block height
 			var sharesAtTargetBlockDepth []*types.WorkObjectHeader
 			var entropyOfSharesAtTargetBlockDepth []*big.Int
-			sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
-			entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
+
+			_, err = targetBlock.WorkObjectHeader().PrimaryCoinbase().InternalAddress()
+			if work.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && err == nil {
+				sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
+				entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
+			}
 
 			for i := 0; i <= params.WorkSharesInclusionDepth; i++ {
 
@@ -699,6 +703,11 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				for _, uncle := range uncles {
 					var uncleEntropy *big.Int
 					if uncle.NumberU64() == targetBlockNumber {
+						if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+							if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
+								continue
+							}
+						}
 						engine := w.hc.GetEngineForHeader(uncle)
 						_, err := engine.VerifySeal(uncle)
 						if err != nil { // TODO: need to probably use the classification method
@@ -933,8 +942,10 @@ func (w *worker) commitUncle(env *environment, uncle *types.WorkObjectHeader) er
 
 		return err
 	}
-	if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-		return errors.New("workshare coinbase is in Qi, but Qi is disabled")
+	if env.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || uncle.AuxPow() == nil || uncle.AuxPow().PowID() == types.Kawpow {
+		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+			return errors.New("workshare coinbase is in Qi, but Qi is disabled")
+		}
 	}
 	// If the uncle is a workshare, we should allow siblings
 	validity := w.hc.UncleWorkShareClassification(uncle)
@@ -2174,7 +2185,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		)
 
 		// Check if shares is nil
-		if newWo.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock { //parent.WorkObjectHeader().ScryptDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Difficulty() == nil || parent.WorkObjectHeader().ScryptDiffAndCount().Count() == nil || parent.WorkObjectHeader().ShaDiffAndCount().Count() == nil {
+		if newWo.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 
 			//Initialize the diff and count values
 			newKawpowDiff = params.InitialKawpowDiff

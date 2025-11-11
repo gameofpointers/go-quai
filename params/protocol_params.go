@@ -209,7 +209,7 @@ var (
 	ExchangeRate                                = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	MaxTimeDiffBetweenBlocks             int64  = 100                            // Max time difference between the blocks to 100 secs
 	OneOverAlpha                                = big.NewInt(1000)               // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = 262000                         // This is in order of prime blocks
+	ControllerKickInBlock                uint64 = 2                              // This is in order of prime blocks
 	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek              // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
@@ -257,7 +257,7 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 1  // Block at which KawPow activates
+	KawPowForkBlock            uint64 = 3  // Block at which KawPow activates
 	KawPowTransitionPeriod     uint64 = 10 // Number of blocks over which the transition happens
 	TotalPowEngines            uint64 = 2  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
