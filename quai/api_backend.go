@@ -852,8 +852,8 @@ func (b *QuaiAPIBackend) CheckPowIdValidityForWorkshare(header *types.WorkObject
 	return b.quai.core.CheckPowIdValidityForWorkshare(header)
 }
 
-func (b *QuaiAPIBackend) CalculatePowDiffAndCount(parent *types.WorkObject, powId types.PowID) (*big.Int, *big.Int) {
-	return b.quai.core.CalculatePowDiffAndCount(parent, powId)
+func (b *QuaiAPIBackend) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (*big.Int, *big.Int) {
+	return b.quai.core.CalculatePowDiffAndCount(parent, header, powId)
 }
 
 func (b *QuaiAPIBackend) CalculateShareTarget(wo *types.WorkObject) *big.Int {

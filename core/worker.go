@@ -2225,8 +2225,8 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 		//Calculate the new diff and count values
-		newShaDiff, newShaCount := w.hc.CalculatePowDiffAndCount(parent, types.SHA_BTC)
-		newScryptDiff, newScryptCount := w.hc.CalculatePowDiffAndCount(parent, types.Scrypt)
+		newShaDiff, newShaCount := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.SHA_BTC)
+		newScryptDiff, newScryptCount := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.Scrypt)
 
 		// Set the new diff and count values
 		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
