@@ -228,7 +228,7 @@ func (hc *HeaderChain) GetEngineForPowID(powID types.PowID) consensus.Engine {
 func (hc *HeaderChain) GetEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
 	// Check if header has AuxPow to determine which engine to use
 	if header.AuxPow() != nil && header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-		return hc.GetEngineForPowID(header.AuxPow().PowID())
+		return hc.GetEngineForPowID(types.Kawpow)
 	}
 	// Default to Progpow if no AuxPow
 	return hc.GetEngineForPowID(types.Progpow)
@@ -318,12 +318,19 @@ func (hc *HeaderChain) UncledLogEntropy(block *types.WorkObject) *big.Int {
 	// Calculate the uncles' log entropy for the given block
 	totalUncledLogS := big.NewInt(0)
 	for _, uncle := range block.Uncles() {
-		uncleEntropy, err := hc.IntrinsicLogEntropy(uncle)
-		if err != nil {
-			hc.logger.WithField("uncle", uncle.Hash()).Error("Failed to compute intrinsic log entropy for uncle")
+		// After the fork the sha and scrypt shares do not count for the uncled
+		// log entropy, only kawpow
+		if uncle.AuxPow() != nil && uncle.AuxPow().PowID() > types.Kawpow {
 			continue
 		}
-		totalUncledLogS = new(big.Int).Add(totalUncledLogS, uncleEntropy)
+		engine := hc.GetEngineForHeader(uncle)
+		// Verify the seal and get the powHash for the given header
+		powHash, err := engine.VerifySeal(uncle)
+		if err != nil {
+			continue
+		}
+		intrinsicEntropy := common.IntrinsicLogEntropy(powHash)
+		totalUncledLogS = new(big.Int).Add(totalUncledLogS, intrinsicEntropy)
 	}
 	return totalUncledLogS
 }
@@ -341,13 +348,7 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 		return common.IntrinsicLogEntropy(powHash), nil
 	}
 
-	switch ws.AuxPow().PowID() {
-	case types.SHA_BCH, types.SHA_BTC, types.Scrypt:
-		powHash := ws.AuxPow().Header().PowHash()
-		return common.IntrinsicLogEntropy(powHash), nil
-	default:
-		return nil, errors.New("unknown auxpow type")
-	}
+	return big.NewInt(0), errors.New("invalid pow id for uncle used in intrinsic log entropy")
 }
 
 func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
