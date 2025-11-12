@@ -260,7 +260,7 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 				return errors.New("invalid merkle root in auxpow")
 			}
 
-			if !uncle.AuxPow().ConvertToTemplate().VerifySignature() {
+			if !uncle.AuxPow().ConvertToTemplate().VerifySignature() && !uncle.IsShaOrScryptShareWithInvalidAddress() {
 				return errors.New("invalid auxpow signature")
 			}
 		}
