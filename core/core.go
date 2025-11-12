@@ -922,7 +922,7 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 	}
 
 	// Add signature check and merkle root check
-	if !workObjectCopy.AuxPow().ConvertToTemplate().VerifySignature() {
+	if !workObjectCopy.AuxPow().ConvertToTemplate().VerifySignature() && !workObjectCopy.WorkObjectHeader().IsShaOrScryptShareWithInvalidAddress() {
 		return nil, fmt.Errorf("invalid auxpow signature")
 	}
 

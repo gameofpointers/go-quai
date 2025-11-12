@@ -676,6 +676,12 @@ func (wh *WorkObjectHeader) IsKawPowBlock() bool {
 		wh.AuxPow().PowID() == Kawpow
 }
 
+func (wh *WorkObjectHeader) IsShaOrScryptShareWithInvalidAddress() bool {
+	shaScryptShare := wh.AuxPow() != nil && (wh.AuxPow().PowID() == SHA_BTC || wh.AuxPow().PowID() == SHA_BCH || wh.AuxPow().PowID() == Scrypt)
+	_, err := wh.primaryCoinbase.InternalAddress()
+	return err != nil && shaScryptShare
+}
+
 // IsTransitionProgPowBlock checks if the block is within the transition period
 func (wh *WorkObjectHeader) IsTransitionProgPowBlock() bool {
 	return wh.primeTerminusNumber.Uint64() >= params.KawPowForkBlock &&
