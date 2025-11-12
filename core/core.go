@@ -1326,8 +1326,8 @@ func (c *Core) CalculateShareTarget(wo *types.WorkObject) *big.Int {
 	return c.sl.hc.CalculateShareTarget(wo)
 }
 
-func (c *Core) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (*big.Int, *big.Int) {
-	return c.sl.hc.CalculatePowDiffAndCount(shares, numShares, powId)
+func (c *Core) CalculatePowDiffAndCount(parent *types.WorkObject, powId types.PowID) (*big.Int, *big.Int) {
+	return c.sl.hc.CalculatePowDiffAndCount(parent, powId)
 }
 
 func (c *Core) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int) {

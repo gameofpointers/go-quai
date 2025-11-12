@@ -2170,41 +2170,11 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
-		// Get the sha and scrypt share counts from the tx pool
-		countKawpow, countSha, countScrypt := w.hc.CountWorkSharesByAlgo(parent)
-
-		//Convert counts to 2^32 base
-		bigCountKawpow := new(big.Int).Mul(big.NewInt(int64(countKawpow)), common.Big2e32)
-		bigCountSha := new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
-		bigCountScrypt := new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
-
-		var (
-			newKawpowDiff, newKawpowCount *big.Int
-			newShaDiff, newShaCount       *big.Int
-			newScryptDiff, newScryptCount *big.Int
-		)
-
-		// Check if shares is nil
-		if newWo.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
-
-			//Initialize the diff and count values
-			newKawpowDiff = params.InitialKawpowDiff
-			newKawpowCount = params.TargetKawpowShares
-			newShaDiff = params.InitialShaDiff
-			newShaCount = params.TargetShaShares
-			newScryptDiff = params.InitialScryptDiff
-			newScryptCount = params.TargetScryptShares
-
-		} else {
-			//Calculate the new diff and count values
-			newKawpowDiff, newKawpowCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().KawpowDiffAndCount(), bigCountKawpow, types.Kawpow)
-			newShaDiff, newShaCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ShaDiffAndCount(), bigCountSha, types.SHA_BTC)
-			newScryptDiff, newScryptCount = w.hc.CalculatePowDiffAndCount(parent.WorkObjectHeader().ScryptDiffAndCount(), bigCountScrypt, types.Scrypt)
-		}
-		fmt.Println("parent.WorkObjectHeader().ShaDiffAndCount(): ", parent.WorkObjectHeader().ShaDiffAndCount().Difficulty(), parent.WorkObjectHeader().ShaDiffAndCount().Count())
+		//Calculate the new diff and count values
+		newShaDiff, newShaCount := w.hc.CalculatePowDiffAndCount(parent, types.SHA_BTC)
+		newScryptDiff, newScryptCount := w.hc.CalculatePowDiffAndCount(parent, types.Scrypt)
 
 		// Set the new diff and count values
-		newWo.WorkObjectHeader().SetKawpowDiffAndCount(types.NewPowShareDiffAndCount(newKawpowDiff, newKawpowCount))
 		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
 		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount))
 	}

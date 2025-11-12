@@ -350,6 +350,30 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 	}
 }
 
+func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
+	// kawpowsharetarget = max(0, 8 * 2^32 - (shaSharesAverage + scryptSharesAverage))
+	// kawpowShareDiff = difficulty * 2^32 / kawpowShareTarget
+
+	shaSharesAverage := header.ShaDiffAndCount().Count()
+	scryptSharesAverage := header.ScryptDiffAndCount().Count()
+	nonKawpowShareTarget := new(big.Int).Add(shaSharesAverage, scryptSharesAverage)
+
+	maxTarget := new(big.Int).Mul(big.NewInt(int64(2^params.WorkSharesThresholdDiff)), common.Big2e32)
+
+	// If the non-kawpow share target is greater than or equal to the max
+	// target, then the kawpow share diff is the block difficulty
+	if maxTarget.Cmp(nonKawpowShareTarget) <= 0 {
+		return header.Difficulty()
+	}
+
+	kawpowShareTarget := new(big.Int).Sub(maxTarget, nonKawpowShareTarget)
+
+	kawpowShareDiff := new(big.Int).Mul(header.Difficulty(), common.Big2e32)
+	kawpowShareDiff = new(big.Int).Div(kawpowShareDiff, kawpowShareTarget)
+
+	return kawpowShareDiff
+}
+
 // WorkshareAllocation computes the number of shares available per algorithm
 func (hc *HeaderChain) CalculateShareTarget(parent *types.WorkObject) (nonKawpowShares *big.Int) {
 	if parent.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
@@ -379,16 +403,44 @@ func (hc *HeaderChain) CalculateShareTarget(parent *types.WorkObject) (nonKawpow
 }
 
 // CalculatePowDiffAndCount calculates the new PoW difficulty and average number of work shares
-func (hc *HeaderChain) CalculatePowDiffAndCount(shares *types.PowShareDiffAndCount, numShares *big.Int, powId types.PowID) (newDiff, newAverageShares *big.Int) {
+func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, powId types.PowID) (newDiff, newAverageShares *big.Int) {
+
+	if parent.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
+		switch powId {
+		case types.SHA_BTC, types.SHA_BCH:
+			return params.InitialShaDiff, big.NewInt(0)
+		case types.Scrypt:
+			return params.InitialScryptDiff, big.NewInt(0)
+		default:
+			return big.NewInt(0), big.NewInt(0)
+		}
+	}
+
+	// Get the sha and scrypt share counts from the tx pool
+	_, countSha, countScrypt := hc.CountWorkSharesByAlgo(parent)
+
+	var numShares *big.Int
+	var shares *types.PowShareDiffAndCount
+
+	switch powId {
+	case types.SHA_BTC, types.SHA_BCH:
+		shares = parent.ShaDiffAndCount()
+		numShares = new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
+	case types.Scrypt:
+		shares = parent.ScryptDiffAndCount()
+		numShares = new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
+	default:
+		return big.NewInt(0), big.NewInt(0)
+	}
 
 	// numShares is the EMA of the number of work shares over last N blocks * 2^32
 	// calculate the error between the target and actual number of work shares
 	var error *big.Int
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
-		error = new(big.Int).Sub(params.TargetShaShares, shares.Count())
+		error = new(big.Int).Sub(parent.ShaShareTarget(), shares.Count())
 	case types.Scrypt:
-		error = new(big.Int).Sub(params.TargetScryptShares, shares.Count())
+		error = new(big.Int).Sub(parent.ScryptShareTarget(), shares.Count())
 	default:
 		return big.NewInt(0), big.NewInt(0)
 	}

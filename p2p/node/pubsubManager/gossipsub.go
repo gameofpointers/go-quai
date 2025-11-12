@@ -479,7 +479,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 				// After the goldenage fork v3 if a share that is not a workshare is broadcasted without the
 				// transactions then throw an error
-				isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), params.WorkSharesThresholdDiff)
+				isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckIfValidWorkShare(block.WorkObjectHeader()) == types.Valid
 				if !isWorkShare && len(block.WorkObject.Transactions()) == 0 {
 					return pubsub.ValidationReject
 				}
