@@ -1559,7 +1559,11 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 	if nodeLocation.Equal(common.Location{0, 0}) {
 		cfg.GenesisAllocs, err = genallocs.VerifyGenesisAllocs("cmd/genallocs/genesis_alloc.json", cfg.Genesis.AllocHash)
 		if err != nil {
-			log.Global.WithField("err", err).Fatal("Unable to allocate genesis accounts")
+			if viper.GetString(EnvironmentFlag.Name) == params.LighthouseName {
+				cfg.GenesisAllocs = []genallocs.GenesisAccount{}
+			} else {
+				log.Global.WithField("err", err).Fatal("Unable to allocate genesis accounts")
+			}
 		}
 	}
 
