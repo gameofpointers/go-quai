@@ -7,6 +7,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
+	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
 )
@@ -196,13 +197,29 @@ func (progpow *Progpow) CalcRank(chain consensus.ChainHeaderReader, header *type
 }
 
 func (progpow *Progpow) CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity {
-	thresholdDiff := params.WorkSharesThresholdDiff
-	if progpow.CheckWorkThreshold(workShare, thresholdDiff) {
-		return types.Valid
-	} else if progpow.CheckWorkThreshold(workShare, progpow.config.WorkShareThreshold) {
-		return types.Sub
+	if workShare.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+		thresholdDiff := params.WorkSharesThresholdDiff
+		if progpow.CheckWorkThreshold(workShare, thresholdDiff) {
+			return types.Valid
+		} else if progpow.CheckWorkThreshold(workShare, progpow.config.WorkShareThreshold) {
+			return types.Sub
+		} else {
+			return types.Invalid
+		}
 	} else {
-		return types.Invalid
+		// After the fork the workshare is determined by the sha and scrypt share targets
+		workshareTarget := new(big.Int).Div(common.Big2e256, core.CalculateKawpowShareDiff(workShare))
+		powHash, err := progpow.ComputePowHash(workShare)
+		if err != nil {
+			return types.Invalid
+		}
+		if new(big.Int).SetBytes(powHash.Bytes()).Cmp(workshareTarget) <= 0 {
+			return types.Valid
+		} else if progpow.CheckWorkThreshold(workShare, progpow.config.WorkShareThreshold) {
+			return types.Sub
+		} else {
+			return types.Invalid
+		}
 	}
 }
 
