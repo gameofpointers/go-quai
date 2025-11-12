@@ -348,7 +348,7 @@ func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int
 		return common.IntrinsicLogEntropy(powHash), nil
 	}
 
-	return big.NewInt(0), errors.New("invalid pow id for uncle used in intrinsic log entropy")
+	return big.NewInt(0), nil
 }
 
 func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
@@ -404,9 +404,9 @@ func (hc *HeaderChain) CalculateShareTarget(parent *types.WorkObject) (nonKawpow
 }
 
 // CalculatePowDiffAndCount calculates the new PoW difficulty and average number of work shares
-func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, powId types.PowID) (newDiff, newAverageShares *big.Int) {
+func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (newDiff, newAverageShares *big.Int) {
 
-	if parent.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
+	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		switch powId {
 		case types.SHA_BTC, types.SHA_BCH:
 			return params.InitialShaDiff, big.NewInt(0)

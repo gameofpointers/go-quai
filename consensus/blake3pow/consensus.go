@@ -250,20 +250,44 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		// Verify the block's difficulty based on its timestamp and parent's difficulty
 		// difficulty adjustment can only be checked in zone
 		if nodeCtx == common.ZONE_CTX {
-			parent := chain.GetHeaderByHash(uncle.ParentHash())
+			parent := chain.GetBlockByHash(uncle.ParentHash())
 			expected := blake3pow.CalcDifficulty(chain, parent.WorkObjectHeader(), parent.ExpansionNumber())
 			if expected.Cmp(uncle.Difficulty()) != 0 {
 				return fmt.Errorf("uncle has invalid difficulty: have %v, want %v", uncle.Difficulty(), expected)
 			}
 
 			if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-				_, realizedShaShares := chain.CalculatePowDiffAndCount(parent, types.SHA_BTC)
-				if uncle.ShaDiffAndCount().Count().Cmp(realizedShaShares) != 0 {
-					return fmt.Errorf("invalid sha share target: have %v, want %v", uncle.ShaShareTarget(), realizedShaShares)
+
+				// Since the prime terminus number is used for the
+				// calculatepowdiff and count, we need to verify that the prime
+				// terminus number is correct for the uncle
+				var expectedPrimeTerminusNumber *big.Int
+				_, parentOrder, _ := blake3pow.CalcOrder(chain, parent)
+				if parentOrder == common.PRIME_CTX {
+					expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
+				} else {
+					if chain.IsGenesisHash(parent.Hash()) {
+						expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
+					} else {
+						expectedPrimeTerminusNumber = parent.PrimeTerminusNumber()
+					}
 				}
-				_, realizedScryptShares := chain.CalculatePowDiffAndCount(parent, types.Scrypt)
-				if uncle.ScryptDiffAndCount().Count().Cmp(realizedScryptShares) != 0 {
-					return fmt.Errorf("invalid scrypt share target: have %v, want %v", uncle.ScryptShareTarget(), realizedScryptShares)
+				if uncle.PrimeTerminusNumber().Cmp(expectedPrimeTerminusNumber) != 0 {
+					return fmt.Errorf("invalid primeTerminusNumber: have %v, want %v", uncle.PrimeTerminusNumber(), expectedPrimeTerminusNumber)
+				}
+
+				// Sha and Scrypt shares realized number is used in the
+				// calculation of workshare classification, so we need to verify
+				// that the shares are correct for the uncle
+				if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+					_, realizedShaShares := chain.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
+					if uncle.ShaDiffAndCount().Count().Cmp(realizedShaShares) != 0 {
+						return fmt.Errorf("invalid sha share target: have %v, want %v", uncle.ShaDiffAndCount().Count(), realizedShaShares)
+					}
+					_, realizedScryptShares := chain.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
+					if uncle.ScryptDiffAndCount().Count().Cmp(realizedScryptShares) != 0 {
+						return fmt.Errorf("invalid scrypt share target: have %v, want %v", uncle.ScryptDiffAndCount().Count(), realizedScryptShares)
+					}
 				}
 			}
 			// Verify that the work share number is parent's +1
@@ -513,8 +537,8 @@ func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, head
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 			//Calculate the new diff and count values
-			newShaDiff, newShaCount := chain.CalculatePowDiffAndCount(parent, types.SHA_BTC)
-			newScryptDiff, newScryptCount := chain.CalculatePowDiffAndCount(parent, types.Scrypt)
+			newShaDiff, newShaCount := chain.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.SHA_BTC)
+			newScryptDiff, newScryptCount := chain.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.Scrypt)
 
 			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty().Cmp(newShaDiff) != 0 {
 				return fmt.Errorf("invalid sha difficulty: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Difficulty(), newShaDiff)
