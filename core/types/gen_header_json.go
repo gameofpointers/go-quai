@@ -361,7 +361,6 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		PrimaryCoinbase     string                `json:"primaryCoinbase" gencoden:"required"`
 		Data                hexutil.Bytes         `json:"data" gencoden:"required"`
 		AuxPow              *AuxPow               `json:"auxpow,omitempty"`
-		KawpowDiffAndCount  *PowShareDiffAndCount `json:"kawpowDiffAndCount,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
@@ -387,10 +386,6 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 	}
 
 	// Only include these fields if they are non-nil and non-empty (for backward compatibility)
-	kawpow := wh.KawpowDiffAndCount()
-	if kawpow != nil {
-		enc.KawpowDiffAndCount = kawpow
-	}
 	scrypt := wh.ScryptDiffAndCount()
 	if scrypt != nil {
 		enc.ScryptDiffAndCount = scrypt
@@ -430,7 +425,6 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		PrimaryCoinbase     string                `json:"primaryCoinbase" gencoden:"required"`
 		Data                hexutil.Bytes         `json:"data" gencoden:"required"`
 		AuxPow              *AuxPow               `json:"auxpow,omitempty"`
-		KawpowDiffAndCount  *PowShareDiffAndCount `json:"kawpowDiffAndCount,omitempty"`
 		ScryptDiffAndCount  *PowShareDiffAndCount `json:"scryptDiffAndCount,omitempty"`
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
@@ -466,10 +460,6 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	// Handle AuxPow if present
 	if dec.AuxPow != nil {
 		wh.SetAuxPow(dec.AuxPow)
-	}
-
-	if dec.KawpowDiffAndCount != nil {
-		wh.SetKawpowDiffAndCount(dec.KawpowDiffAndCount)
 	}
 
 	// Handle ScryptDiffAndCount if present

@@ -1469,9 +1469,6 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		if header.AuxPow() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetAuxPow(header.AuxPow())
 		}
-		if header.WorkObjectHeader().KawpowDiffAndCount() != nil {
-			combinedPendingHeader.WorkObjectHeader().SetKawpowDiffAndCount(header.WorkObjectHeader().KawpowDiffAndCount())
-		}
 		if header.WorkObjectHeader().ShaDiffAndCount() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetShaDiffAndCount(header.WorkObjectHeader().ShaDiffAndCount())
 		}
