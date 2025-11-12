@@ -411,7 +411,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				return pubsub.ValidationReject
 			}
 
-			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() {
+			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() && !block.WorkObjectHeader().IsShaOrScryptShareWithInvalidAddress() {
 				backend.Logger().Warn("Work share auxpow signature verification failed")
 				return pubsub.ValidationReject
 			}
