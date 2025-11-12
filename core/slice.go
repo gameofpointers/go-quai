@@ -2441,7 +2441,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		}
 		// If the share qualifies is not a workshare and there are no transactions,
 		// there is no need to broadcast the share
-		isWorkShare = engine.CheckWorkThreshold(workShare, params.WorkSharesThresholdDiff)
+		isWorkShare = engine.CheckIfValidWorkShare(workShare) == types.Valid
 		if !isWorkShare && len(txs) == 0 {
 			// This is a p2p workshare and has no transactions.
 			return nil, false, false, nil
