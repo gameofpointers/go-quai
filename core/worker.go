@@ -685,11 +685,11 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			var sharesAtTargetBlockDepth []*types.WorkObjectHeader
 			var entropyOfSharesAtTargetBlockDepth []*big.Int
 
-			_, err = targetBlock.WorkObjectHeader().PrimaryCoinbase().InternalAddress()
-			if work.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && err == nil {
-				sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
-				entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
-			}
+			sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
+			entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
+
+			var validShaShares, invalidShaAddressShares uint64
+			var validScryptShares, invalidScryptAddressShares uint64
 
 			for i := 0; i <= params.WorkSharesInclusionDepth; i++ {
 
@@ -703,15 +703,9 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				for _, uncle := range uncles {
 					var uncleEntropy *big.Int
 					if uncle.NumberU64() == targetBlockNumber {
-						if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-							if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
-								continue
-							}
-						}
 						engine := w.hc.GetEngineForHeader(uncle)
 						_, err := engine.VerifySeal(uncle)
-						if err != nil { // TODO: need to probably use the classification method
-							// uncle is a workshare
+						if err != nil {
 							uncleEntropy, err = w.hc.IntrinsicLogEntropy(uncle)
 							if err != nil {
 								return nil, err
@@ -722,6 +716,29 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 							target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
 							uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
+						}
+
+						if work.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+							if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
+								if uncle.AuxPow() != nil {
+									switch uncle.AuxPow().PowID() {
+									case types.SHA_BCH, types.SHA_BTC:
+										invalidShaAddressShares++
+									case types.Scrypt:
+										invalidScryptAddressShares++
+									}
+								}
+								continue
+							} else {
+								if uncle.AuxPow() != nil {
+									switch uncle.AuxPow().PowID() {
+									case types.SHA_BCH, types.SHA_BTC:
+										validShaShares++
+									case types.Scrypt:
+										validScryptShares++
+									}
+								}
+							}
 						}
 						sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)
 						entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, uncleEntropy)
@@ -743,11 +760,48 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			// add half the fees generated in the block
 			blockRewardAtTargetBlock = new(big.Int).Add(blockRewardAtTargetBlock, new(big.Int).Div(targetBlock.TotalFees(), common.Big2))
 
+			rewardPerShare := new(big.Int).Div(blockRewardAtTargetBlock, big.NewInt(int64(2^params.WorkSharesThresholdDiff)))
+
 			// Add an etx for each workshare for it to be rewarded
 			for i, share := range sharesAtTargetBlockDepth {
 
-				shareReward := new(big.Int).Mul(blockRewardAtTargetBlock, entropyOfSharesAtTargetBlockDepth[i])
-				shareReward = new(big.Int).Div(shareReward, totalEntropy)
+				var shareReward *big.Int
+				if work.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+					shareReward = new(big.Int).Mul(blockRewardAtTargetBlock, entropyOfSharesAtTargetBlockDepth[i])
+					shareReward = new(big.Int).Div(shareReward, totalEntropy)
+				} else {
+
+					shareReward = new(big.Int).Set(rewardPerShare)
+
+					if share.AuxPow() != nil {
+						switch share.AuxPow().PowID() {
+						case types.SHA_BCH, types.SHA_BTC:
+							shareAdditionFactor := new(big.Int).Mul(shareReward, big.NewInt(int64(invalidShaAddressShares)))
+							shareAdditionFactor = new(big.Int).Div(shareAdditionFactor, big.NewInt(int64(validShaShares)))
+							shareReward = new(big.Int).Add(shareReward, shareAdditionFactor)
+						case types.Scrypt:
+							shareAdditionFactor := new(big.Int).Mul(shareReward, big.NewInt(int64(invalidScryptAddressShares)))
+							shareAdditionFactor = new(big.Int).Div(shareAdditionFactor, big.NewInt(int64(validScryptShares)))
+							shareReward = new(big.Int).Add(shareReward, shareAdditionFactor)
+						}
+					}
+
+					// If mining progpow after the fork, 20% is deducted from the
+					// expectation
+					if share.AuxPow() == nil {
+						shareReward = new(big.Int).Mul(shareReward, big.NewInt(80))
+						shareReward = new(big.Int).Div(shareReward, big.NewInt(100))
+					} else {
+						// If the share hash unlively template, 10% is deducted from
+						// the expectation
+						scritSig := types.ExtractScriptSigFromCoinbaseTx(share.AuxPow().Transaction())
+						signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scritSig)
+						if err != nil || signatureTime+params.ShareLivenessTime < uint32(targetBlock.Time()) {
+							shareReward = new(big.Int).Mul(shareReward, big.NewInt(90))
+							shareReward = new(big.Int).Div(shareReward, big.NewInt(100))
+						}
+					}
+				}
 
 				if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
 					return nil, errors.New("share reward cannot be greater than the total block reward")
