@@ -27,7 +27,6 @@ const (
 	hashWords          = 16      // Number of 32 bit ints in a hash
 	datasetParents     = 512     // Number of parents of each dataset element
 	cacheRounds        = 3       // Number of rounds in cache production
-	loopAccesses       = 64      // Number of accesses in hashimoto loop
 
 	// Kawpow specific constants
 	kawpowCacheWords = kawpowCacheBytes / 4
@@ -226,18 +225,6 @@ func generateDatasetItem2048(cache []uint32, index uint32, keccak512 hasher) []u
 	return words
 }
 
-// kawpowConfig holds kawpow-specific configuration
-type kawpowConfig struct {
-	PeriodLength        uint64
-	DagLoads            int
-	CacheBytes          uint32
-	LaneCount           int
-	RegisterCount       int
-	RoundCount          int
-	RoundCacheAccesses  int
-	RoundMathOperations int
-}
-
 // kawpowInitialize performs kawpow initialization with ravencoin constants
 func kawpowInitialize(hash []byte, nonce uint64) ([25]uint32, [2]uint32) {
 	var seed [25]uint32
@@ -290,17 +277,6 @@ func keccakF800(state *[25]uint32) {
 	for r := 0; r < 22; r++ {
 		keccakF800Round(state, r)
 	}
-}
-
-// kawpowHash computes the kawpow hash using the ProgPoW algorithm with KAWPOW parameters
-func kawpowHash(cfg *kawpowConfig, height, seed, datasetSize uint64, lookup func(uint32) []uint32, l1 []uint32) []byte {
-	// Convert seed to hash input for kawpow
-	hash := make([]byte, 32)
-	binary.LittleEndian.PutUint64(hash[0:8], seed)
-	binary.LittleEndian.PutUint64(hash[8:16], height)
-	_, digest := kawpow(hash, seed, datasetSize, height, l1, lookup)
-
-	return digest
 }
 
 // hasher is a repetitive hasher allowing the same hash data structures to be
