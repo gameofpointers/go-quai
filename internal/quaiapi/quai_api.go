@@ -32,6 +32,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
+	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
@@ -1278,8 +1279,8 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
 	case types.Kawpow:
 		// share diff
-		shareDiff := new(big.Int).Div(wo.Difficulty(), new(big.Int).Mul(common.Big2, big.NewInt(int64(params.WorkSharesThresholdDiff))))
-		targetHex = common.GetTargetInHex(shareDiff)
+		kawpowDiff := core.CalculateKawpowShareDiff(wo.WorkObjectHeader())
+		targetHex = common.GetTargetInHex(kawpowDiff)
 	}
 
 	if len(targetHex) > 2 && targetHex[:2] == "0x" {
