@@ -1104,8 +1104,8 @@ func (c *Core) WriteGenesisBlock(block *types.WorkObject, location common.Locati
 	c.sl.WriteGenesisBlock(block, location)
 }
 
-func (c *Core) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) {
-	return c.sl.GetPendingHeader(powId)
+func (c *Core) GetPendingHeader(powId types.PowID, coinbase common.Address) (*types.WorkObject, error) {
+	return c.sl.GetPendingHeader(powId, coinbase)
 }
 
 func (c *Core) GetManifest(blockHash common.Hash) (types.BlockManifest, error) {

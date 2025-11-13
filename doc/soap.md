@@ -23,7 +23,8 @@ work once per second to keep producing fresh shares and get paid.
       "rules": ["kawpow"],
       "extranonce1": "00123456",
       "extranonce2": "0011223344556677",
-      "extradata": "/abcpool/"
+      "extradata": "/abcpool/",
+      "coinbase": "0x099f4771cba8d3cef3b3c3cb0a028a0f064dc082"
     }
   ]
 }
@@ -41,10 +42,15 @@ ask go-quai to pre-populate the returned coinbase transaction. When supplied:
 | `extranonce1` | Hex string (≤ 4 bytes / 8 hex chars) | Spliced between `coinb1` and `coinb2`. Zero-padded if shorter than 4 bytes. |
 | `extranonce2` | Hex string (≤ 8 bytes / 16 hex chars) | Added after `extranonce1` and padded with zeros to 8 bytes when shorter. |
 | `extradata` | UTF-8 string (≤ 30 bytes) | Overwrites the first `coinbaseAuxExtraBytesLength` bytes of `coinb2` (the mutable aux data region). |
+| `coinbase` | 0x-prefixed 20-byte Quai address | Sets the pending header's primary coinbase. Must be a valid in-scope address for the requesting node. |
 
 go-quai recalculates the coinbase and merkle root inside the template before
 returning the response, so miners can hash immediately with the requested values. If
 the fields are omitted they default to zero bytes, matching the prior behavior.
+
+When `coinbase` is supplied, the pending header returned by `quai_getBlockTemplate`
+already targets that address; pools no longer need to rewrite the header to pay a
+specific payout account (subject to scope validation for the node's location).
 
 ### Response Example
 ```json

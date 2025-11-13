@@ -1124,12 +1124,13 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 
 // BlockTemplateRequest represents a getblocktemplate request
 type BlockTemplateRequest struct {
-	Mode         string   `json:"mode,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	Rules        []string `json:"rules,omitempty"`       // "kawpow", "sha", "scrypt"
-	ExtraNonce1  string   `json:"extranonce1,omitempty"` // 4 byte hex string
-	ExtraNonce2  string   `json:"extranonce2,omitempty"` // 8 byte hex string
-	ExtraData    string   `json:"extradata,omitempty"`   // string less than 30 bytes
+	Mode         string                  `json:"mode,omitempty"`
+	Capabilities []string                `json:"capabilities,omitempty"`
+	Rules        []string                `json:"rules,omitempty"`       // "kawpow", "sha", "scrypt"
+	ExtraNonce1  string                  `json:"extranonce1,omitempty"` // 4 byte hex string
+	ExtraNonce2  string                  `json:"extranonce2,omitempty"` // 8 byte hex string
+	ExtraData    string                  `json:"extradata,omitempty"`   // string less than 30 bytes
+	Coinbase     common.MixedcaseAddress `json:"coinbase,omitempty"`
 }
 
 // GetBlockTemplate retrieves a new block template to mine
@@ -1155,8 +1156,18 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 		}
 	}
 
+	var coinbase common.Address
+	if request != nil && request.Coinbase != (common.MixedcaseAddress{}) {
+		coinbase = common.Bytes20ToAddress(request.Coinbase.Address().Bytes20(), s.b.NodeLocation())
+
+		_, err := coinbase.InternalAddress()
+		if err != nil {
+			return nil, fmt.Errorf("out of scope or invalid coinbase address: %w", err)
+		}
+	}
+
 	// Get the pending header for the specified PoW algorithm
-	pendingHeader, err := s.b.GetPendingHeader(powId)
+	pendingHeader, err := s.b.GetPendingHeader(powId, coinbase)
 	if err != nil {
 		return nil, err
 	}
@@ -1569,7 +1580,7 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context, powId ty
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
 
-	pendingHeader, err := s.b.GetPendingHeader(powId) // 0 is default progpow
+	pendingHeader, err := s.b.GetPendingHeader(powId, common.Address{}) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

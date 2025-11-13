@@ -1035,10 +1035,16 @@ func (sl *Slice) pcrc(batch ethdb.Batch, header *types.WorkObject, domTerminus c
 }
 
 // GetPendingHeader is used by the miner to request the current pending header
-func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) {
+func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*types.WorkObject, error) {
 	phCopy := types.CopyWorkObject(sl.ReadBestPh())
 	// set the auxpow to nil if its progpow
 	if powId == types.Progpow {
+		// Set the coinbase for the progpow header
+		if coinbase != (common.Address{}) {
+			phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
+			sl.miner.worker.AddPendingWorkObjectBody(phCopy)
+		}
+
 		phCopy.WorkObjectHeader().SetAuxPow(nil)
 	} else {
 		auxTemplate := sl.miner.worker.GetBestAuxTemplate(powId)
@@ -1047,6 +1053,12 @@ func (sl *Slice) GetPendingHeader(powId types.PowID) (*types.WorkObject, error) 
 		case types.Kawpow, types.SHA_BTC, types.SHA_BCH, types.Scrypt:
 			// If we have an auxpow template, we need to create a proper Ravencoin header
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
+
+				// If the coinbase is set, update the pending header with the new coinbase
+				if coinbase != (common.Address{}) {
+					phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
+				}
+
 				auxMerkleRoot := phCopy.SealHash()
 				if powId == types.Scrypt {
 					if len(auxTemplate.AuxPow2()) == 0 {
