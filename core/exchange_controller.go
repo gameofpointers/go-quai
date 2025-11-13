@@ -20,27 +20,31 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 
 	// Apply KQuai changes based on the table
 	currentBlock := block.NumberU64(common.PRIME_CTX)
-	for _, entry := range params.KQuaiChangeTable {
-		blockNumber := entry[0]
-		reductionPercent := entry[1]
+	if currentBlock < params.KQuaiChangeBlock {
+		for _, entry := range params.KQuaiChangeTable {
+			blockNumber := entry[0]
+			reductionPercent := entry[1]
 
-		// Apply the reduction at the exact block
-		if currentBlock == blockNumber {
-			// If the block number is the kquai reset the exchange rate back to
-			// the starting exchange rate
-			if currentBlock == params.KQuaiChangeBlock {
-				return params.ExchangeRate, nil
+			// Apply the reduction at the exact block
+			if currentBlock == blockNumber {
+				// If the block number is the kquai reset the exchange rate back to
+				// the starting exchange rate
+				if currentBlock == params.KQuaiChangeBlock {
+					return params.ExchangeRate, nil
+				}
+				exchangeRate := new(big.Int).Mul(parentExchangeRate, big.NewInt(int64(reductionPercent)))
+				exchangeRate = new(big.Int).Div(exchangeRate, big.NewInt(100))
+				return exchangeRate, nil
 			}
-			exchangeRate := new(big.Int).Mul(parentExchangeRate, big.NewInt(int64(reductionPercent)))
-			exchangeRate = new(big.Int).Div(exchangeRate, big.NewInt(100))
-			return exchangeRate, nil
-		}
 
-		// Hold the value during the hold interval after each reduction
-		if currentBlock > blockNumber && currentBlock < blockNumber+params.KQuaiChangeHoldInterval {
-			exchangeRate := new(big.Int).Set(parentExchangeRate)
-			return exchangeRate, nil
+			// Hold the value during the hold interval after each reduction
+			if currentBlock > blockNumber && currentBlock < blockNumber+params.KQuaiChangeHoldInterval {
+				exchangeRate := new(big.Int).Set(parentExchangeRate)
+				return exchangeRate, nil
+			}
 		}
+	} else {
+		// Logic for resetting the exchange rate needs to go here
 	}
 
 	// xbStar point of diff indicating the miners/speculators choice is done by

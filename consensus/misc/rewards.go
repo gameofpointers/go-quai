@@ -142,7 +142,11 @@ func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, block
 
 	// If kQuaiIncrease is true, slow down the increase in kQuai by reducing the adjustment
 	if blockNumber > params.KQuaiChangeBlock && kQuaiIncrease {
-		num = new(big.Int).Div(num, common.Big3)
+		// Remove 1/3 of the increase to slow down the increase in kQuai after
+		// the kawpow fork
+		if blockNumber < params.KawPowForkBlock {
+			num = new(big.Int).Div(num, common.Big3)
+		}
 	}
 
 	// Multiply by kQuai
