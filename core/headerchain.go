@@ -359,7 +359,7 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 	scryptSharesAverage := header.ScryptDiffAndCount().Count()
 	nonKawpowShareTarget := new(big.Int).Add(shaSharesAverage, scryptSharesAverage)
 
-	maxTarget := new(big.Int).Mul(big.NewInt(int64(2^params.WorkSharesThresholdDiff)), common.Big2e32)
+	maxTarget := new(big.Int).Mul(big.NewInt(int64(params.ExpectedWorksharesPerBlock)), common.Big2e32)
 
 	// If the non-kawpow share target is greater than or equal to the max
 	// target, then the kawpow share diff is the block difficulty
