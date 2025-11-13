@@ -1098,28 +1098,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 			return nil, errors.New("pending header requested for unknown pow id")
 		}
 	}
-	// if the  pendingheader has empty uncle hash but the worker has uncles, panic
-	if len(phCopy.Uncles()) == 0 && phCopy.Header().UncleHash() == types.EmptyUncleHash && len(sl.miner.worker.kawpowShares.Keys()) > 0 {
-		// list all the workshares in the worker
-		for _, shareHash := range sl.miner.worker.kawpowShares.Keys() {
-			sl.logger.WithFields(log.Fields{
-				"share": shareHash,
-			}).Warn("Pending header has empty uncle hash but worker has uncles")
 
-			uncle, ok := sl.miner.worker.kawpowShares.Peek(shareHash)
-			if ok {
-				sl.logger.WithFields(log.Fields{
-					"uncle": uncle.NumberU64(),
-				}).Warn("Pending header has empty uncle hash but worker has uncles")
-			}
-
-			if uncle.NumberU64()+uint64(params.WorkSharesInclusionDepth) > phCopy.NumberU64(common.ZONE_CTX) {
-				sl.logger.WithFields(log.Fields{
-					"uncle": uncle.NumberU64(),
-				}).Warn("Pending header has empty uncle hash but worker has uncles")
-			}
-		}
-	}
 	return phCopy, nil
 }
 
