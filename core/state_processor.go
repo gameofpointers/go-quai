@@ -1205,7 +1205,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		// add half the fees generated in the block
 		blockRewardAtTargetBlock = new(big.Int).Add(blockRewardAtTargetBlock, new(big.Int).Div(targetBlock.TotalFees(), common.Big2))
 
-		rewardPerShare := new(big.Int).Div(blockRewardAtTargetBlock, big.NewInt(int64(2^params.WorkSharesThresholdDiff)))
+		rewardPerShare := new(big.Int).Div(blockRewardAtTargetBlock, big.NewInt(int64(params.ExpectedWorksharesPerBlock)))
 
 		// Add an etx for each workshare for it to be rewarded
 		for i, share := range sharesAtTargetBlockDepth {
