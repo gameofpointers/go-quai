@@ -218,12 +218,19 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.W
 		// Siblings are not allowed to be included in the workshares list if its an
 		// uncle but can be if its a workshare
 		var workShare bool
-		validity := chain.UncleWorkShareClassification(uncle)
-		switch validity {
-		case types.Valid:
-			workShare = true
-		case types.Sub, types.Invalid:
-			return errors.New("uncle in the block has invalid proof of work")
+		if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+			_, err := progpow.VerifySeal(uncle)
+			if err != nil {
+				workShare = true
+			}
+		} else {
+			validity := chain.UncleWorkShareClassification(uncle)
+			switch validity {
+			case types.Valid:
+				workShare = true
+			case types.Sub, types.Invalid:
+				return errors.New("uncle in the block has invalid proof of work")
+			}
 		}
 
 		if workShare {
