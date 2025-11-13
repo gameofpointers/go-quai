@@ -63,32 +63,27 @@ var ravencoinKawpow [15]uint32 = [15]uint32{
 }
 
 const (
-	kawpowPeriodLength       = 3
-	kawpowCacheBytes         = 16 * 1024
-	kawpowLaneCount          = 16
-	kawpowRegisterCount      = 32
-	kawpowRoundCount         = 64
-	kawpowRoundCacheAccesses = 11
-	kawpowRoundMathOps       = 18
-	kawpowDagLoads           = 4
+	kawpowPeriodLength = 3
+	kawpowCacheBytes   = 16 * 1024
+	kawpowDagLoads     = 4
 )
 
 // isLittleEndian returns whether the local system is running in little or big
 // endian byte order.
 func isLittleEndian() bool {
-    n := uint32(0x01020304)
-    return *(*byte)(unsafe.Pointer(&n)) == 0x04
+	n := uint32(0x01020304)
+	return *(*byte)(unsafe.Pointer(&n)) == 0x04
 }
 
 // reverseBytes32 returns a new slice with the contents of b reversed.
 // Intended for 32-byte hashes, but will reverse the entire slice length.
 func reverseBytes32(b []byte) []byte {
-    n := len(b)
-    out := make([]byte, n)
-    for i := 0; i < n; i++ {
-        out[i] = b[n-1-i]
-    }
-    return out
+	n := len(b)
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = b[n-1-i]
+	}
+	return out
 }
 
 // memoryMap tries to memory map a file of uint32s for read only access.

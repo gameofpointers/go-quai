@@ -48,10 +48,6 @@ func rotr32(x uint32, n uint32) uint32 {
 	return ((x) >> (n % 32)) | ((x) << (32 - (n % 32)))
 }
 
-func lower32(in uint64) uint32 {
-	return uint32(in)
-}
-
 func higher32(in uint64) uint32 {
 	return uint32(in >> 32)
 }
@@ -106,70 +102,6 @@ func keccakF800Round(st *[25]uint32, r int) {
 
 	//  Iota
 	st[0] ^= keccakfRNDC[r]
-}
-
-// KAWPOW-specific Keccak functions with RAVENCOINKAWAOW padding
-func keccakF800Short(headerHash []byte, nonce uint64, result []uint32) uint64 {
-	var st [25]uint32
-
-	for i := 0; i < 8; i++ {
-		st[i] = (uint32(headerHash[4*i])) +
-			(uint32(headerHash[4*i+1]) << 8) +
-			(uint32(headerHash[4*i+2]) << 16) +
-			(uint32(headerHash[4*i+3]) << 24)
-	}
-
-	st[8] = lower32(nonce)
-	st[9] = higher32(nonce)
-
-	// KAWPOW: Add RAVENCOINKAWAOW padding
-	for i := 0; i < 15; i++ {
-		if i < 8 {
-			st[10+i] = result[i]
-		} else {
-			st[10+i] = ravencoinKawpow[i-8]
-		}
-	}
-
-	for r := 0; r < 21; r++ {
-		keccakF800Round(&st, r)
-	}
-	keccakF800Round(&st, 21)
-	ret := make([]byte, 8)
-	binary.BigEndian.PutUint32(ret[4:], st[0])
-	binary.BigEndian.PutUint32(ret, st[1])
-	return binary.LittleEndian.Uint64(ret)
-}
-
-func keccakF800Long(headerHash []byte, nonce uint64, result []uint32) []byte {
-	var st [25]uint32
-
-	for i := 0; i < 8; i++ {
-		st[i] = (uint32(headerHash[4*i])) +
-			(uint32(headerHash[4*i+1]) << 8) +
-			(uint32(headerHash[4*i+2]) << 16) +
-			(uint32(headerHash[4*i+3]) << 24)
-	}
-
-	st[8] = lower32(nonce)
-	st[9] = higher32(nonce)
-
-	// KAWPOW: Add RAVENCOINKAWAOW padding
-	for i := 0; i < 8; i++ {
-		st[10+i] = result[i]
-	}
-	for i := 0; i < 7; i++ {
-		st[18+i] = ravencoinKawpow[i]
-	}
-
-	for r := 0; r <= 21; r++ {
-		keccakF800Round(&st, r)
-	}
-	ret := make([]byte, 32)
-	for i := 0; i < 8; i++ {
-		binary.LittleEndian.PutUint32(ret[i*4:], st[i])
-	}
-	return ret
 }
 
 func fnv1a(h *uint32, d uint32) uint32 {
