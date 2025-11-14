@@ -174,11 +174,6 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, Id string, topic s
 			"nbits":      data.NBits(),
 		}).Info("Received an aux template broadcast")
 
-		// TODO: Process the AuxTemplate here
-		// This would typically involve:
-		// - Validating the template
-		// - Storing it for miners to use
-		// - Possibly forwarding to mining operations
 		if backend.NodeCtx() == common.ZONE_CTX && backend.ProcessingState() {
 			backend.SendAuxPowTemplate(data)
 		}
