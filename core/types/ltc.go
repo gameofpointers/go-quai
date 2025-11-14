@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/params"
 	ltchash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
 	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 )
@@ -130,7 +131,7 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32, witness bool) []byte {
 	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
 	// Create the coinbase input with seal hash in scriptSig
-	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, auxMerkleRoot, 2, signatureTime)
+	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, auxMerkleRoot, params.MerkleSize, signatureTime)
 	coinbaseTx.AddTxIn(&ltcdwire.TxIn{
 		PreviousOutPoint: ltcdwire.OutPoint{
 			Hash:  ltchash.Hash{}, // Coinbase has no previous output

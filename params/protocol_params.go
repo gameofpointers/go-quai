@@ -290,6 +290,10 @@ var (
 		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
 		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
 	}
+
+	// MerkleNonce, MerkleSize is used for the auxpow2
+	MerkleNonce uint32 = 0
+	MerkleSize  uint32 = 2
 )
 
 const (

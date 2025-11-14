@@ -714,6 +714,16 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 			if auxMerkleRoot != coinbaseSealHash {
 				return fmt.Errorf("coinbase seal hash does not match uncle aux merkle root, expected %v, got %v", auxMerkleRoot, coinbaseSealHash)
 			}
+			merkleSize, merkleNonce, err := types.ExtractMerkleSizeAndNonceFromCoinbase(scryptSig)
+			if err != nil {
+				return err
+			}
+			if merkleSize != params.MerkleSize {
+				return fmt.Errorf("invalid merkle size: have %v, want %v", merkleSize, params.MerkleSize)
+			}
+			if merkleNonce != params.MerkleNonce {
+				return fmt.Errorf("invalid merkle nonce: have %v, want %v", merkleNonce, params.MerkleNonce)
+			}
 		}
 		// Verify the merkle root as well
 		expectedMerkleRoot := types.CalculateMerkleRoot(header.AuxPow().PowID(), header.AuxPow().Transaction(), header.AuxPow().MerkleBranch())
