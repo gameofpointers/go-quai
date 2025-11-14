@@ -194,7 +194,8 @@ func (at *AuxTemplate) Hash() [32]byte {
 	// Since for chains other than ravencoin, version can be grinded for mining,
 	// need to mask them before signing
 	versionMask := uint32(0xE0000000)
-	if at.powID != Kawpow {
+	switch at.powID {
+	case SHA_BTC, SHA_BCH:
 		tempTemplate.Version = proto.Uint32(*tempTemplate.Version & versionMask)
 	}
 
