@@ -134,12 +134,12 @@ func TestKAWPOWImplementation(t *testing.T) {
 		}
 
 		kawpowHeaderHash := header.GetKAWPOWHeaderHash()
-		digest1, result1 := kawpowLight(size, cache.cache, reverseBytes32(kawpowHeaderHash.Bytes()), nonce64, blockHeight, cache.cDag)
+		digest1, result1 := kawpowLight(size, cache.cache, kawpowHeaderHash.Reverse().Bytes(), nonce64, blockHeight, cache.cDag)
 
 		// Method 2: ComputePowLight (validation path)
 		mixHash, powHash := kawpow.ComputePowLight(workHeader)
 
-		if hex.EncodeToString(reverseBytes32(digest1)) == mixHash.Hex()[2:] && hex.EncodeToString(result1) == powHash.Hex()[2:] {
+		if hex.EncodeToString(common.Hash(digest1).Reverse().Bytes()) == mixHash.Hex()[2:] && hex.EncodeToString(result1) == powHash.Hex()[2:] {
 			t.Logf("✅ Mining and validation produce identical results")
 		} else {
 			t.Errorf("Mining and validation results differ")
