@@ -143,12 +143,6 @@ func BigPow(a, b int64) *big.Int {
 // If one input is nil, the other is returned. If both are nil, nil is returned.
 // Callers must not mutate the returned value unless they own it.
 func BigMax(x, y *big.Int) *big.Int {
-	if x == nil {
-		return y
-	}
-	if y == nil {
-		return x
-	}
 	if x.Cmp(y) < 0 {
 		return y
 	}
@@ -160,16 +154,10 @@ func BigMax(x, y *big.Int) *big.Int {
 // If one input is nil, the other is returned. If both are nil, nil is returned.
 // Callers must not mutate the returned value unless they own it.
 func BigMin(x, y *big.Int) *big.Int {
-	if x == nil {
-		return y
-	}
-	if y == nil {
-		return x
-	}
 	if x.Cmp(y) > 0 {
 		return new(big.Int).Set(y)
 	}
-	return x
+	return new(big.Int).Set(x)
 }
 
 // FirstBitSet returns the index of the first 1 bit in v, counting from LSB.

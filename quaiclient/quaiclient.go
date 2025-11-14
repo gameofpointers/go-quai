@@ -332,9 +332,9 @@ func (ec *Client) SubmitSubWorkshare(ctx context.Context, wo *types.WorkObject) 
 
 // Submits an AuxTemplate from a subsidy chain
 // SignAuxTemplate requests MuSig2 partial signature from go-quai
-func (ec *Client) SignAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes, subsidyParticipantIndex int, subsidyNonce hexutil.Bytes) (map[string]interface{}, error) {
+func (ec *Client) SignAuxTemplate(ctx context.Context, chainID string, templateData hexutil.Bytes, otherParticipantPubKey hexutil.Bytes, subsidyNonce hexutil.Bytes) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	err := ec.c.CallContext(ctx, &result, "workshare_signAuxTemplate", chainID, templateData, subsidyParticipantIndex, subsidyNonce)
+	err := ec.c.CallContext(ctx, &result, "workshare_signAuxTemplate", chainID, templateData, otherParticipantPubKey, subsidyNonce)
 	return result, err
 }
 
@@ -393,6 +393,6 @@ func (ec *Client) GetWorkShareP2PThreshold(ctx context.Context) uint64 {
 // The limit parameter caps the number of entries returned per list (0 means no limit).
 func (ec *Client) GetWorkshareLRUDump(ctx context.Context, limit int) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	err := ec.c.CallContext(ctx, &result, "quai_getWorkshareLRUDump", limit)
+	err := ec.c.CallContext(ctx, &result, "debug_getWorkshareLRUDump", limit)
 	return result, err
 }
