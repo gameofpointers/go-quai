@@ -691,6 +691,30 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 	}
 
 	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && header.AuxPow() != nil {
+		scryptSig := types.ExtractScriptSigFromCoinbaseTx(header.AuxPow().Transaction())
+
+		coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
+		if err != nil {
+			return fmt.Errorf("coinbase seal hash not found in the auxpow: %v", err)
+		}
+
+		switch header.AuxPow().PowID() {
+		case types.Kawpow, types.SHA_BTC, types.SHA_BCH:
+			if header.SealHash() != coinbaseSealHash {
+				return fmt.Errorf("coinbase seal hash does not match uncle seal hash, expected %v, got %v", header.SealHash(), coinbaseSealHash)
+			}
+		case types.Scrypt:
+			// Since litecoin is merged mined with dogecoin, merkle root
+			// needs to be calculated
+			dogeHash := common.Hash(header.AuxPow().AuxPow2())
+			if (dogeHash == common.Hash{}) {
+				return fmt.Errorf("auxpow2 is empty for scrypt powid")
+			}
+			auxMerkleRoot := types.CreateAuxMerkleRoot(dogeHash, header.SealHash())
+			if auxMerkleRoot != coinbaseSealHash {
+				return fmt.Errorf("coinbase seal hash does not match uncle aux merkle root, expected %v, got %v", auxMerkleRoot, coinbaseSealHash)
+			}
+		}
 		// Verify the merkle root as well
 		expectedMerkleRoot := types.CalculateMerkleRoot(header.AuxPow().PowID(), header.AuxPow().Transaction(), header.AuxPow().MerkleBranch())
 		if header.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
