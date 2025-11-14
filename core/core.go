@@ -955,6 +955,16 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 		if auxMerkleRoot != coinbaseSealHash {
 			return nil, fmt.Errorf("coinbase seal hash does not match uncle aux merkle root, expected %v, got %v", auxMerkleRoot, coinbaseSealHash)
 		}
+		merkleSize, merkleNonce, err := types.ExtractMerkleSizeAndNonceFromCoinbase(scryptSig)
+		if err != nil {
+			return nil, err
+		}
+		if merkleSize != params.MerkleSize {
+			return nil, fmt.Errorf("invalid merkle size: have %v, want %v", merkleSize, params.MerkleSize)
+		}
+		if merkleNonce != params.MerkleNonce {
+			return nil, fmt.Errorf("invalid merkle nonce: have %v, want %v", merkleNonce, params.MerkleNonce)
+		}
 	}
 
 	return workObjectCopy, nil

@@ -66,6 +66,47 @@ func ExtractSealHashFromCoinbase(scriptSig []byte) (common.Hash, error) {
 	return common.BytesToHash(sealHashData), nil
 }
 
+func ExtractMerkleSizeAndNonceFromCoinbase(scriptSig []byte) (uint32, uint32, error) {
+
+	if len(scriptSig) == 0 {
+		return 0, 0, errors.New("coinbase scriptSig empty")
+	}
+
+	cursor := 0
+
+	// 1. Parse and skip height (variable length - BIP34 minimal encoding)
+	heightData, consumed, err := parseScriptPush(scriptSig[cursor:])
+	if err != nil {
+		return 0, 0, fmt.Errorf("decode coinbase height: %w", err)
+	}
+	// Height can be 0-5 bytes (BIP34 allows minimal encoding)
+	if len(heightData) > 5 {
+		return 0, 0, fmt.Errorf("invalid height length: expected 0-5 bytes, got %d", len(heightData))
+	}
+	cursor += consumed
+
+	// 2. Parse AuxPoW commitment as a single push
+	// It must contain exactly: 4-byte magic, 32-byte root, 4-byte size (LE), 4-byte nonce (LE)
+	payload, consumed, err := parseScriptPush(scriptSig[cursor:])
+	if err != nil {
+		return 0, 0, fmt.Errorf("decode auxpow commitment: %w", err)
+	}
+	cursor += consumed
+	if len(payload) != 44 {
+		return 0, 0, fmt.Errorf("invalid auxpow commitment length: expected 44, got %d", len(payload))
+	}
+
+	expectedMagic := []byte{0xfa, 0xbe, 0x6d, 0x6d}
+	if !bytes.Equal(payload[0:4], expectedMagic) {
+		return 0, 0, fmt.Errorf("invalid magic marker: expected %x, got %x", expectedMagic, payload[0:4])
+	}
+
+	merkleSize := binary.LittleEndian.Uint32(payload[4+common.HashLength : 4+common.HashLength+4])
+	merkleNonce := binary.LittleEndian.Uint32(payload[4+common.HashLength+4 : 4+common.HashLength+8])
+
+	return merkleSize, merkleNonce, nil
+}
+
 // ExtractSignatureTimeFromCoinbase extracts the signature time from the coinbase scriptSig format.
 // Format:
 //
