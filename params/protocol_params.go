@@ -278,7 +278,7 @@ var (
 
 	// Maximum amount of hashrate allowed on subsidy chain
 	MaxSubsidyNumerator   = big.NewInt(4)
-	MaxSubsidyDenominator = big.NewInt(5)
+	MaxSubsidyDenominator = big.NewInt(60) //This also includes the blocktime ratio between raven, ie (60s/5s = 12), and quai 5 * 12
 
 	// The number of blocks to use in the exponential moving average
 	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks
