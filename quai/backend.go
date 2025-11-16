@@ -189,22 +189,20 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		"Genesis":      config.Genesis.Config.Location,
 		"chainConfig":  chainConfig.Location,
 	}).Info("Node")
+
+	// powConfig holds config for pow
+	powConfig := config.PowConfig
+	powConfig.NodeLocation = config.NodeLocation
+	powConfig.NotifyFull = config.Miner.NotifyFull
+	powConfig.GenAllocs = config.GenesisAllocs
+
 	if config.ConsensusEngine == "blake3" {
-		blake3Config := config.Blake3Pow
-		blake3Config.NotifyFull = config.Miner.NotifyFull
-		blake3Config.NodeLocation = config.NodeLocation
-		blake3Config.GenAllocs = config.GenesisAllocs
 		quai.engine = make([]consensus.Engine, 1)
-		quai.engine[0] = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &blake3Config, config.Miner.Notify, config.Miner.Noverify, config.Miner.WorkShareThreshold, chainDb, logger)
+		quai.engine[0] = quaiconfig.CreateBlake3ConsensusEngine(stack, config.NodeLocation, &powConfig, config.Miner.Notify, config.Miner.Noverify, config.Miner.WorkShareThreshold, chainDb, logger)
 	} else {
-		// Transfer mining-related config to the progpow config.
-		progpowConfig := config.Progpow
-		progpowConfig.NodeLocation = config.NodeLocation
-		progpowConfig.NotifyFull = config.Miner.NotifyFull
-		progpowConfig.GenAllocs = config.GenesisAllocs
 		quai.engine = make([]consensus.Engine, params.TotalPowEngines)
-		quai.engine[types.Progpow] = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
-		quai.engine[types.Kawpow] = quaiconfig.CreateKawPowConsensusEngine(stack, config.NodeLocation, &progpowConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
+		quai.engine[types.Progpow] = quaiconfig.CreateProgpowConsensusEngine(stack, config.NodeLocation, &powConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
+		quai.engine[types.Kawpow] = quaiconfig.CreateKawPowConsensusEngine(stack, config.NodeLocation, &powConfig, config.Miner.Notify, config.Miner.Noverify, chainDb, logger)
 	}
 	logger.WithField("config", config).Info("Initialized chain configuration")
 
@@ -253,7 +251,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 
-	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, currentExpansionNumber, genesisBlock, quai.engine, cacheConfig, vmConfig, config.Genesis, logger)
+	quai.core, err = core.NewCore(chainDb, &config.Miner, config.PowConfig, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, currentExpansionNumber, genesisBlock, quai.engine, cacheConfig, vmConfig, config.Genesis, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -340,16 +338,7 @@ func (s *Quai) APIs() []rpc.API {
 // We regard two types of accounts as local miner account: etherbase
 // and accounts specified via `txpool.locals` flag.
 func (s *Quai) isLocalBlock(header *types.WorkObject) bool {
-	engine := s.getEngineForHeader(header.WorkObjectHeader())
-	author, err := engine.Author(header)
-	if err != nil {
-		s.logger.WithFields(log.Fields{
-			"number": header.NumberU64(s.core.NodeCtx()),
-			"hash":   header.Hash(),
-			"err":    err,
-		}).Warn("Failed to retrieve block author")
-		return false
-	}
+	author := header.PrimaryCoinbase() // Ignore error, we're past header validation
 	// Check whether the given address is etherbase.
 	s.lock.RLock()
 	quaiBase := s.quaiCoinbase

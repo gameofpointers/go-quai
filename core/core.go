@@ -90,8 +90,8 @@ type Core struct {
 	logger *log.Logger
 }
 
-func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.WorkObject) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
-	slice, err := NewSlice(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, currentExpansionNumber, genesisBlock, engine, cacheConfig, vmConfig, genesis, logger)
+func NewCore(db ethdb.Database, config *Config, powConfig params.PowConfig, isLocalBlock func(block *types.WorkObject) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
+	slice, err := NewSlice(db, config, powConfig, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, currentExpansionNumber, genesisBlock, engine, cacheConfig, vmConfig, genesis, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -295,8 +295,7 @@ func (c *Core) EntropyWindow() *big.Int {
 	}
 	powhash, exists := c.sl.hc.powHashCache.Peek(currentHeader.Hash())
 	if !exists {
-		engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
-		powhash, err = engine.VerifySeal(currentHeader.WorkObjectHeader())
+		powhash, err = c.VerifySeal(currentHeader.WorkObjectHeader())
 		if err != nil {
 			return nil
 		}
@@ -993,11 +992,6 @@ func (c *Core) Engine(header *types.WorkObjectHeader) consensus.Engine {
 	return c.GetEngineForHeader(header)
 }
 
-func (c *Core) CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity {
-	engine := c.GetEngineForHeader(workShare)
-	return engine.CheckIfValidWorkShare(workShare)
-}
-
 // Slice retrieves the slice struct.
 func (c *Core) Slice() *Slice {
 	return c.sl
@@ -1337,14 +1331,28 @@ func (c *Core) ComputeMinerDifficulty(parent *types.WorkObject) *big.Int {
 // CurrentLogEntropy returns the logarithm of the total entropy reduction since genesis for our current head block
 func (c *Core) CurrentLogEntropy() *big.Int {
 	currentHeader := c.sl.hc.CurrentHeader()
-	engine := c.GetEngineForHeader(currentHeader.WorkObjectHeader())
-	return engine.TotalLogEntropy(c, currentHeader)
+	return c.sl.hc.TotalLogEntropy(currentHeader)
 }
 
 // TotalLogEntropy returns the total entropy reduction if the chain since genesis to the given header
 func (c *Core) TotalLogEntropy(header *types.WorkObject) *big.Int {
-	engine := c.GetEngineForHeader(header.WorkObjectHeader())
-	return engine.TotalLogEntropy(c, header)
+	return c.sl.hc.TotalLogEntropy(header)
+}
+
+func (c *Core) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
+	return c.sl.hc.ComputePowHash(header)
+}
+
+func (c *Core) CheckWorkThreshold(header *types.WorkObjectHeader, threshold int) bool {
+	return c.sl.hc.CheckWorkThreshold(header, threshold)
+}
+
+func (c *Core) VerifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
+	return c.sl.hc.VerifySeal(header)
+}
+
+func (c *Core) CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity {
+	return c.sl.hc.CheckIfValidWorkShare(workShare)
 }
 
 // CheckPowIdValidity checks whether the pow id specified in auxpow is valid
@@ -1371,8 +1379,7 @@ func (c *Core) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int) {
 
 // CalcOrder returns the order of the block within the hierarchy of chains
 func (c *Core) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	engine := c.GetEngineForHeader(header.WorkObjectHeader())
-	return engine.CalcOrder(c, header)
+	return c.sl.hc.CalcOrder(header)
 }
 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if

@@ -1,8 +1,6 @@
-package kawpow
+package core
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -15,12 +13,10 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
-	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/state"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
-	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/crypto/multiset"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
@@ -37,35 +33,40 @@ var (
 
 // Author implements consensus.Engine, returning the header's coinbase as the
 // proof-of-work verified author of the block.
-func (kawpow *Kawpow) Author(header *types.WorkObject) (common.Address, error) {
+func (hc *HeaderChain) Author(header *types.WorkObject) (common.Address, error) {
 	return header.PrimaryCoinbase(), nil
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Quai kawpow engine.
-func (kawpow *Kawpow) VerifyHeader(chain consensus.ChainHeaderReader, header *types.WorkObject) error {
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) VerifyHeader(header *types.WorkObject) error {
+	nodeCtx := hc.NodeLocation().Context()
+
+	config := hc.powConfig
+
 	// If we're running a full engine faking, accept any input as valid
-	if kawpow.config.PowMode == ModeFullFake {
+	if config.PowMode == params.ModeFullFake {
 		return nil
 	}
-	if chain.GetHeaderByHash(header.Hash()) != nil {
+	if hc.GetHeaderByHash(header.Hash()) != nil {
 		return nil
 	}
-	parent := chain.GetBlockByHash(header.ParentHash(nodeCtx))
+	parent := hc.GetBlockByHash(header.ParentHash(nodeCtx))
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
 	// Sanity checks passed, do a proper verification
-	return kawpow.verifyHeader(chain, header, parent, false, time.Now().Unix())
+	return hc.verifyHeader(header, parent, false, time.Now().Unix())
 }
 
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
-func (kawpow *Kawpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.WorkObject) (chan<- struct{}, <-chan error) {
+func (hc *HeaderChain) VerifyHeaders(headers []*types.WorkObject) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
-	if kawpow.config.PowMode == ModeFullFake || len(headers) == 0 {
+	config := hc.powConfig
+
+	if config.PowMode == params.ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
 		for i := 0; i < len(headers); i++ {
 			results <- nil
@@ -91,14 +92,14 @@ func (kawpow *Kawpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					kawpow.logger.WithFields(log.Fields{
+					hc.logger.WithFields(log.Fields{
 						"error":      r,
 						"stacktrace": string(debug.Stack()),
 					}).Error("Go-Quai Panicked")
 				}
 			}()
 			for index := range inputs {
-				errors[index] = kawpow.verifyHeaderWorker(chain, headers, index, unixNow)
+				errors[index] = hc.verifyHeaderWorker(headers, index, unixNow)
 				done <- index
 			}
 		}()
@@ -108,7 +109,7 @@ func (kawpow *Kawpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				kawpow.logger.WithFields(log.Fields{
+				hc.logger.WithFields(log.Fields{
 					"error":      r,
 					"stacktrace": string(debug.Stack()),
 				}).Fatal("Go-Quai Panicked")
@@ -142,26 +143,29 @@ func (kawpow *Kawpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 	return abort, errorsOut
 }
 
-func (kawpow *Kawpow) verifyHeaderWorker(chain consensus.ChainHeaderReader, headers []*types.WorkObject, index int, unixNow int64) error {
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) verifyHeaderWorker(headers []*types.WorkObject, index int, unixNow int64) error {
+	nodeCtx := hc.NodeLocation().Context()
 	var parent *types.WorkObject
 	if index == 0 {
-		parent = chain.GetHeaderByHash(headers[0].ParentHash(nodeCtx))
+		parent = hc.GetHeaderByHash(headers[0].ParentHash(nodeCtx))
 	} else if headers[index-1].Hash() == headers[index].ParentHash(nodeCtx) {
 		parent = headers[index-1]
 	}
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	return kawpow.verifyHeader(chain, headers[index], parent, false, unixNow)
+	return hc.verifyHeader(headers[index], parent, false, unixNow)
 }
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Quai kawpow engine.
-func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.WorkObject) error {
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
+	nodeCtx := hc.NodeLocation().Context()
+
+	config := hc.powConfig
+
 	// If we're running a full engine faking, accept any input as valid
-	if kawpow.config.PowMode == ModeFullFake {
+	if config.PowMode == params.ModeFullFake {
 		return nil
 	}
 	// Verify that there are at most params.MaxWorkShareCount uncles included in this block
@@ -176,7 +180,7 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 
 	number, parent := block.NumberU64(nodeCtx)-1, block.ParentHash(nodeCtx)
 	for i := 0; i < params.WorkSharesInclusionDepth; i++ {
-		ancestorHeader := chain.GetHeaderByHash(parent)
+		ancestorHeader := hc.GetHeaderByHash(parent)
 		if ancestorHeader == nil {
 			break
 		}
@@ -184,7 +188,7 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		// If the ancestor doesn't have any uncles, we don't have to iterate them
 		if ancestorHeader.UncleHash() != types.EmptyUncleHash {
 			// Need to add those uncles to the banned list too
-			ancestor := chain.GetWorkObjectWithWorkShares(parent)
+			ancestor := hc.GetWorkObjectWithWorkShares(parent)
 			if ancestor == nil {
 				break
 			}
@@ -220,12 +224,12 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		// uncle but can be if its a workshare
 		var workShare bool
 		if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
-			_, err := kawpow.VerifySeal(uncle)
+			_, err := hc.VerifySeal(uncle)
 			if err != nil {
 				workShare = true
 			}
 		} else {
-			validity := chain.UncleWorkShareClassification(uncle)
+			validity := hc.UncleWorkShareClassification(uncle)
 			switch validity {
 			case types.Valid:
 				workShare = true
@@ -235,12 +239,12 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		}
 
 		if workShare {
-			err := chain.CheckPowIdValidityForWorkshare(uncle)
+			err := hc.CheckPowIdValidityForWorkshare(uncle)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := chain.CheckPowIdValidity(uncle)
+			err := hc.CheckPowIdValidity(uncle)
 			if err != nil {
 				return err
 			}
@@ -251,7 +255,7 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 			return consensus.ErrDanglingUncle
 		}
 
-		_, err := chain.WorkShareDistance(block, uncle)
+		_, err := hc.WorkShareDistance(block, uncle)
 		if err != nil {
 			return err
 		}
@@ -311,8 +315,8 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 		// Verify the block's difficulty based on its timestamp and parent's difficulty
 		// difficulty adjustment can only be checked in zone
 		if nodeCtx == common.ZONE_CTX {
-			parent := chain.GetBlockByHash(uncle.ParentHash())
-			expected := kawpow.CalcDifficulty(chain, parent.WorkObjectHeader(), parent.ExpansionNumber())
+			parent := hc.GetBlockByHash(uncle.ParentHash())
+			expected := hc.CalcDifficulty(parent.WorkObjectHeader(), parent.ExpansionNumber())
 			if expected.Cmp(uncle.Difficulty()) != 0 {
 				return fmt.Errorf("uncle has invalid difficulty: have %v, want %v", uncle.Difficulty(), expected)
 			}
@@ -323,11 +327,11 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 				// calculatepowdiff and count, we need to verify that the prime
 				// terminus number is correct for the uncle
 				var expectedPrimeTerminusNumber *big.Int
-				_, parentOrder, _ := kawpow.CalcOrder(chain, parent)
+				_, parentOrder, _ := hc.CalcOrder(parent)
 				if parentOrder == common.PRIME_CTX {
 					expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
 				} else {
-					if chain.IsGenesisHash(parent.Hash()) {
+					if hc.IsGenesisHash(parent.Hash()) {
 						expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
 					} else {
 						expectedPrimeTerminusNumber = parent.PrimeTerminusNumber()
@@ -341,11 +345,11 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 				// calculation of workshare classification, so we need to verify
 				// that the shares are correct for the uncle
 				if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-					_, realizedShaShares := chain.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
+					_, realizedShaShares := hc.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
 					if uncle.ShaDiffAndCount().Count().Cmp(realizedShaShares) != 0 {
 						return fmt.Errorf("invalid sha share target: have %v, want %v", uncle.ShaDiffAndCount().Count(), realizedShaShares)
 					}
-					_, realizedScryptShares := chain.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
+					_, realizedScryptShares := hc.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
 					if uncle.ScryptDiffAndCount().Count().Cmp(realizedScryptShares) != 0 {
 						return fmt.Errorf("invalid scrypt share target: have %v, want %v", uncle.ScryptDiffAndCount().Count(), realizedScryptShares)
 					}
@@ -354,7 +358,7 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 
 			// Verify that the work share number is parent's +1
 			parentNumber := parent.Number(nodeCtx)
-			if chain.IsGenesisHash(parent.Hash()) {
+			if hc.IsGenesisHash(parent.Hash()) {
 				parentNumber = big.NewInt(0)
 			}
 			if diff := new(big.Int).Sub(uncle.Number(), parentNumber); diff.Cmp(big.NewInt(1)) != 0 {
@@ -366,8 +370,8 @@ func (kawpow *Kawpow) VerifyUncles(chain consensus.ChainReader, block *types.Wor
 }
 
 // verifyHeader checks whether a header conforms to the consensus rules
-func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.WorkObject, uncle bool, unixNow int64) error {
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool, unixNow int64) error {
+	nodeCtx := hc.NodeLocation().Context()
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra())) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra()), params.MaximumExtraDataSize)
@@ -389,13 +393,13 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	// Verify the block's difficulty based on its timestamp and parent's difficulty
 	// difficulty adjustment can only be checked in zone
 	if nodeCtx == common.ZONE_CTX {
-		expected := kawpow.CalcDifficulty(chain, parent.WorkObjectHeader(), parent.ExpansionNumber())
+		expected := hc.CalcDifficulty(parent.WorkObjectHeader(), parent.ExpansionNumber())
 		if expected.Cmp(header.Difficulty()) != 0 {
 			return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty(), expected)
 		}
 	}
 	// Verify the engine specific seal securing the block
-	_, order, err := kawpow.CalcOrder(chain, parent)
+	_, order, err := hc.CalcOrder(parent)
 	if err != nil {
 		return err
 	}
@@ -403,24 +407,24 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		return fmt.Errorf("order of the block is greater than the context")
 	}
 
-	if !chain.Config().Location.InSameSliceAs(header.Location()) {
+	if !hc.Config().Location.InSameSliceAs(header.Location()) {
 		return fmt.Errorf("block location is not in the same slice as the node location")
 	}
 	// Verify that the parent entropy is calculated correctly on the header
-	parentEntropy := kawpow.TotalLogEntropy(chain, parent)
+	parentEntropy := hc.TotalLogEntropy(parent)
 	if parentEntropy.Cmp(header.ParentEntropy(nodeCtx)) != 0 {
 		return fmt.Errorf("invalid parent entropy: have %v, want %v", header.ParentEntropy(nodeCtx), parentEntropy)
 	}
 	// If not prime, verify the parentDeltaEntropy field as well
 	if nodeCtx > common.PRIME_CTX {
-		_, parentOrder, _ := kawpow.CalcOrder(chain, parent)
+		_, parentOrder, _ := hc.CalcOrder(parent)
 		// If parent was dom, deltaEntropy is zero and otherwise should be the calc delta entropy on the parent
 		if parentOrder < nodeCtx {
 			if common.Big0.Cmp(header.ParentDeltaEntropy(nodeCtx)) != 0 {
 				return fmt.Errorf("invalid parent delta entropy: have %v, want %v", header.ParentDeltaEntropy(nodeCtx), common.Big0)
 			}
 		} else {
-			parentDeltaEntropy := kawpow.DeltaLogEntropy(chain, parent)
+			parentDeltaEntropy := hc.DeltaLogEntropy(parent)
 			if parentDeltaEntropy.Cmp(header.ParentDeltaEntropy(nodeCtx)) != 0 {
 				return fmt.Errorf("invalid parent delta entropy: have %v, want %v", header.ParentDeltaEntropy(nodeCtx), parentDeltaEntropy)
 			}
@@ -428,14 +432,14 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	}
 	// If not prime, verify the parentUncledDeltaEntropy field as well
 	if nodeCtx > common.PRIME_CTX {
-		_, parentOrder, _ := kawpow.CalcOrder(chain, parent)
+		_, parentOrder, _ := hc.CalcOrder(parent)
 		// If parent was dom, parent uncled sub deltaEntropy is zero and otherwise should be the calc parent uncled sub delta entropy on the parent
 		if parentOrder < nodeCtx {
 			if common.Big0.Cmp(header.ParentUncledDeltaEntropy(nodeCtx)) != 0 {
 				return fmt.Errorf("invalid parent uncled sub delta entropy: have %v, want %v", header.ParentUncledDeltaEntropy(nodeCtx), common.Big0)
 			}
 		} else {
-			expectedParentUncledDeltaEntropy := kawpow.UncledDeltaLogEntropy(chain, parent)
+			expectedParentUncledDeltaEntropy := hc.UncledDeltaLogEntropy(parent)
 			if expectedParentUncledDeltaEntropy.Cmp(header.ParentUncledDeltaEntropy(nodeCtx)) != 0 {
 				return fmt.Errorf("invalid parent uncled sub delta entropy: have %v, want %v", header.ParentUncledDeltaEntropy(nodeCtx), expectedParentUncledDeltaEntropy)
 			}
@@ -451,7 +455,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 				return fmt.Errorf("invalid threshold count: have %v, want %v", header.ThresholdCount(), 0)
 			}
 		} else {
-			expectedEfficiencyScore, err := chain.ComputeEfficiencyScore(parent)
+			expectedEfficiencyScore, err := hc.ComputeEfficiencyScore(parent)
 			if err != nil {
 				return err
 			}
@@ -489,8 +493,8 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	// verify the etx eligible slices in zone and prime ctx
 	if nodeCtx == common.PRIME_CTX {
 		var expectedEtxEligibleSlices common.Hash
-		if !chain.IsGenesisHash(parent.Hash()) {
-			expectedEtxEligibleSlices = chain.UpdateEtxEligibleSlices(parent, parent.Location())
+		if !hc.IsGenesisHash(parent.Hash()) {
+			expectedEtxEligibleSlices = hc.UpdateEtxEligibleSlices(parent, parent.Location())
 		} else {
 			expectedEtxEligibleSlices = parent.EtxEligibleSlices()
 		}
@@ -512,7 +516,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	}
 
 	if nodeCtx == common.PRIME_CTX {
-		expectedMinerDifficulty := chain.ComputeMinerDifficulty(parent)
+		expectedMinerDifficulty := hc.ComputeMinerDifficulty(parent)
 		if header.MinerDifficulty().Cmp(expectedMinerDifficulty) != 0 {
 			return fmt.Errorf("invalid miner difficulty: have %v, want %v", header.MinerDifficulty(), expectedMinerDifficulty)
 		}
@@ -520,7 +524,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 
 	if nodeCtx == common.ZONE_CTX {
 		var expectedExpansionNumber uint8
-		expectedExpansionNumber, err := chain.ComputeExpansionNumber(parent)
+		expectedExpansionNumber, err := hc.ComputeExpansionNumber(parent)
 		if err != nil {
 			return err
 		}
@@ -536,7 +540,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		// check if the header coinbase is in scope
 		_, err := header.PrimaryCoinbase().InternalAddress()
 		if err != nil {
-			return fmt.Errorf("out-of-scope primary coinbase in the header: %v location: %v nodeLocation: %v, err %s", header.PrimaryCoinbase(), header.Location(), kawpow.config.NodeLocation, err)
+			return fmt.Errorf("out-of-scope primary coinbase in the header: %v location: %v nodeLocation: %v, err %s", header.PrimaryCoinbase(), header.Location(), hc.powConfig.NodeLocation, err)
 		}
 		if header.NumberU64(common.ZONE_CTX) < 2*params.BlocksPerMonth && header.Lock() != 0 {
 			return fmt.Errorf("header lock byte: %v is not valid: it has to be %v for the first two months", header.Lock(), 0)
@@ -552,7 +556,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		}
 		// Verify the block's gas usage and verify the base fee.
 		// Verify that the gas limit remains within allowed bounds
-		expectedGasLimit := core.CalcGasLimit(parent, kawpow.config.GasCeil)
+		expectedGasLimit := CalcGasLimit(parent, hc.powConfig.GasCeil)
 		if expectedGasLimit != header.GasLimit() {
 			return fmt.Errorf("invalid gasLimit: have %d, want %d",
 				header.GasLimit(), expectedGasLimit)
@@ -566,18 +570,18 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		if header.StateLimit() != expectedStateLimit {
 			return fmt.Errorf("invalid StateLimit: have %d, want %d, parentStateLimit %d", expectedStateLimit, header.StateLimit(), parent.StateLimit())
 		}
-		expectedBaseFee := chain.CalcBaseFee(parent)
+		expectedBaseFee := hc.CalcBaseFee(parent)
 		if header.BaseFee().Cmp(expectedBaseFee) != 0 {
 			return fmt.Errorf("invalid baseFee: have %v, want %v, parentBaseFee %v", expectedBaseFee, header.BaseFee(), parent.BaseFee())
 		}
 		var expectedPrimeTerminusHash common.Hash
 		var expectedPrimeTerminusNumber *big.Int
-		_, parentOrder, _ := kawpow.CalcOrder(chain, parent)
+		_, parentOrder, _ := hc.CalcOrder(parent)
 		if parentOrder == common.PRIME_CTX {
 			expectedPrimeTerminusHash = parent.Hash()
 			expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
 		} else {
-			if chain.IsGenesisHash(parent.Hash()) {
+			if hc.IsGenesisHash(parent.Hash()) {
 				expectedPrimeTerminusHash = parent.Hash()
 				expectedPrimeTerminusNumber = parent.Number(common.PRIME_CTX)
 			} else {
@@ -595,8 +599,8 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 			//Calculate the new diff and count values
-			newShaDiff, newShaCount := chain.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.SHA_BTC)
-			newScryptDiff, newScryptCount := chain.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.Scrypt)
+			newShaDiff, newShaCount := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.SHA_BTC)
+			newScryptDiff, newScryptCount := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.Scrypt)
 
 			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty().Cmp(newShaDiff) != 0 {
 				return fmt.Errorf("invalid sha difficulty: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Difficulty(), newShaDiff)
@@ -619,11 +623,11 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 			}
 		}
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-			shaShareTarget := chain.CalculateShareTarget(header)
+			shaShareTarget := hc.CalculateShareTarget(header)
 			if header.WorkObjectHeader().ShaShareTarget().Cmp(shaShareTarget) != 0 {
 				return fmt.Errorf("invalid sha share target: have %v, want %v", header.WorkObjectHeader().ShaShareTarget(), shaShareTarget)
 			}
-			scryptShareTarget := chain.CalculateShareTarget(header)
+			scryptShareTarget := hc.CalculateShareTarget(header)
 			if header.WorkObjectHeader().ScryptShareTarget().Cmp(scryptShareTarget) != 0 {
 				return fmt.Errorf("invalid scrypt share target: have %v, want %v", header.WorkObjectHeader().ScryptShareTarget(), scryptShareTarget)
 			}
@@ -638,7 +642,7 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	}
 	// Verify that the block number is parent's +1
 	parentNumber := parent.Number(nodeCtx)
-	if chain.IsGenesisHash(parent.Hash()) {
+	if hc.IsGenesisHash(parent.Hash()) {
 		parentNumber = big.NewInt(0)
 	}
 	// Verify that the block number is parent's +1
@@ -651,11 +655,11 @@ func (kawpow *Kawpow) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
-func (kawpow *Kawpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *types.WorkObjectHeader, expansionNum uint8) *big.Int {
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) CalcDifficulty(parent *types.WorkObjectHeader, expansionNum uint8) *big.Int {
+	nodeCtx := hc.NodeLocation().Context()
 
 	if nodeCtx != common.ZONE_CTX {
-		kawpow.logger.WithField("context", nodeCtx).Error("Cannot CalcDifficulty for non-zone context")
+		hc.logger.WithField("context", nodeCtx).Error("Cannot CalcDifficulty for non-zone context")
 		return nil
 	}
 
@@ -664,20 +668,20 @@ func (kawpow *Kawpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *
 	///// k = Floor(BinaryLog(parent.Difficulty()))/(DurationLimit*DifficultyAdjustmentFactor*AdjustmentPeriod)
 	///// Difficulty = Max(parent.Difficulty() + e * k, MinimumDifficulty)
 
-	if chain.IsGenesisHash(parent.Hash()) {
+	if hc.IsGenesisHash(parent.Hash()) {
 		// Divide the parent difficulty by the number of slices running at the time of expansion
 		if expansionNum == 0 && parent.Location().Equal(common.Location{}) {
 			// Base case: expansion number is 0 and the parent is the actual genesis block
 			return parent.Difficulty()
 		}
-		genesisBlock := chain.GetHeaderByHash(parent.Hash())
-		if genesisBlock.ExpansionNumber() > 0 && parent.Hash() == chain.Config().DefaultGenesisHash {
+		genesisBlock := hc.GetHeaderByHash(parent.Hash())
+		if genesisBlock.ExpansionNumber() > 0 && parent.Hash() == hc.config.DefaultGenesisHash {
 			return parent.Difficulty()
 		}
-		genesis := chain.GetHeaderByHash(parent.Hash())
-		genesisTotalLogEntropy := kawpow.TotalLogEntropy(chain, genesis)
+		genesis := hc.GetHeaderByHash(parent.Hash())
+		genesisTotalLogEntropy := hc.TotalLogEntropy(genesis)
 		if genesisTotalLogEntropy.Cmp(genesis.ParentEntropy(common.PRIME_CTX)) < 0 { // prevent negative difficulty
-			kawpow.logger.Errorf("Genesis block has invalid parent entropy: %v", genesis.ParentEntropy(common.PRIME_CTX))
+			hc.logger.Errorf("Genesis block has invalid parent entropy: %v", genesis.ParentEntropy(common.PRIME_CTX))
 			return nil
 		}
 		differenceParentEntropy := new(big.Int).Sub(genesisTotalLogEntropy, genesis.ParentEntropy(common.PRIME_CTX))
@@ -685,8 +689,8 @@ func (kawpow *Kawpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *
 		differenceParentEntropy.Div(differenceParentEntropy, numBlocks)
 		return common.EntropyBigBitsToDifficultyBits(differenceParentEntropy)
 	}
-	parentOfParent := chain.GetHeaderByHash(parent.ParentHash())
-	if parentOfParent == nil || chain.IsGenesisHash(parentOfParent.Hash()) {
+	parentOfParent := hc.GetHeaderByHash(parent.ParentHash())
+	if parentOfParent == nil || hc.IsGenesisHash(parentOfParent.Hash()) {
 		return parent.Difficulty()
 	}
 
@@ -703,111 +707,49 @@ func (kawpow *Kawpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *
 
 	// holds intermediate values to make the algo easier to read & audit
 	x := new(big.Int).Set(timeDiff)
-	x.Sub(kawpow.config.DurationLimit, x)
+	x.Sub(hc.powConfig.DurationLimit, x)
 	x.Mul(x, parent.Difficulty())
 	k, _ := mathutil.BinaryLog(new(big.Int).Set(parent.Difficulty()), 64)
 	x.Mul(x, big.NewInt(int64(k)))
-	x.Div(x, kawpow.config.DurationLimit)
+	x.Div(x, hc.powConfig.DurationLimit)
 	x.Div(x, big.NewInt(params.DifficultyAdjustmentFactor))
 	x.Div(x, params.DifficultyAdjustmentPeriod)
 	x.Add(x, parent.Difficulty())
 
 	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(kawpow.config.MinDifficulty) < 0 {
-		x.Set(kawpow.config.MinDifficulty)
+	if x.Cmp(hc.powConfig.MinDifficulty) < 0 {
+		x.Set(hc.powConfig.MinDifficulty)
 	}
 	return x
 }
 
-func (kawpow *Kawpow) IsDomCoincident(chain consensus.ChainHeaderReader, header *types.WorkObject) bool {
-	_, order, err := kawpow.CalcOrder(chain, header)
+func (hc *HeaderChain) IsDomCoincident(header *types.WorkObject) bool {
+	_, order, err := hc.CalcOrder(header)
 	if err != nil {
-		kawpow.logger.WithField("err", err).Error("Error calculating order in IsDomCoincident")
+		hc.logger.WithField("err", err).Error("Error calculating order in IsDomCoincident")
 		return false
 	}
-	return order < chain.Config().Location.Context()
-}
-
-// ComputePowLight computes the kawpow hash and returns mixHash and powHash
-func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, powHash common.Hash) {
-	// For quai blocks to rely on pow done on the raven coin donor header
-	if header.AuxPow() == nil {
-		kawpow.logger.Error("AuxPow is nil in ComputePowLight")
-		return common.Hash{}, common.Hash{}
-	}
-
-	ravencoinHeader := header.AuxPow().Header()
-
-	// For KAWPOW, the nonce is stored directly in the Ravencoin header
-	nonce64 := ravencoinHeader.Nonce64()
-
-	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
-	// NOTE: SealHash() returns the hash in BIG-ENDIAN format (SHA256 natural output)
-	// This will be reversed to little-endian before passing to kawpowLight
-	kawpowHeaderHash := ravencoinHeader.SealHash()
-	blockNumber := uint64(ravencoinHeader.Height())
-
-	// Create a unique cache key using the RVN-compatible header hash + nonce so
-	// results are cached consistently with the actual kernel input.
-	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, nonce64)
-	cacheKey := crypto.Keccak256Hash(kawpowHeaderHash.Bytes(), nonceBytes)
-
-	// Check cache with the unique key
-	hashes, ok := kawpow.hashCache.Peek(cacheKey)
-	if ok {
-		return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
-	}
-
-	// Get cache for this block (same as sealer)
-	ethashCache := kawpow.cache(blockNumber)
-	if ethashCache.cDag == nil {
-		cDag := make([]uint32, kawpowCacheWords)
-		generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
-		ethashCache.cDag = cDag
-	}
-
-	// Use the same kawpowLight function as the sealer, but feed the
-	// RVN-compatible (byte-reversed) header hash bytes, since the
-	// implementation expects the hash as little endian, it needs to be
-	size := datasetSize(blockNumber)
-	digest, result := kawpowLight(size, ethashCache.cache, kawpowHeaderHash.Reverse().Bytes(), nonce64, blockNumber, ethashCache.cDag)
-	// MixHash stored in the header should be little endian, so reverse it back to little endian
-	mixHash = common.Hash(digest).Reverse() // reverse to little-endian
-	powHash = common.BytesToHash(result)
-
-	// Cache the result with the unique key
-	kawpow.hashCache.Add(cacheKey, mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
-
-	return mixHash, powHash
+	return order < hc.config.Location.Context()
 }
 
 // VerifySeal returns the PowHash and the verifySeal output
-func (kawpow *Kawpow) VerifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
-	return kawpow.verifySeal(header)
+func (hc *HeaderChain) VerifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
+	return hc.verifySeal(header)
 }
 
 // verifySeal checks whether a block satisfies the PoW difficulty requirements,
 // either using the usual kawpow cache for it, or alternatively using a full DAG
 // to make remote mining fast.
-func (kawpow *Kawpow) verifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
+func (hc *HeaderChain) verifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
 	// If we're running a fake PoW, accept any seal as valid
-	if kawpow.config.PowMode == ModeFake || kawpow.config.PowMode == ModeFullFake {
-		time.Sleep(kawpow.fakeDelay)
-		if kawpow.fakeFail == header.NumberU64() {
-			return common.Hash{}, consensus.ErrInvalidPoW
-		}
+	if hc.powConfig.PowMode == params.ModeFake || hc.powConfig.PowMode == params.ModeFullFake {
 		return common.Hash{}, nil
-	}
-	// If we're running a shared PoW, delegate verification to it
-	if kawpow.shared != nil {
-		return kawpow.shared.verifySeal(header)
 	}
 	// Ensure that we have a valid difficulty for the block
 	if header.Difficulty().Sign() <= 0 {
 		return common.Hash{}, consensus.ErrInvalidDifficulty
 	}
-	powHash, err := kawpow.ComputePowHash(header)
+	powHash, err := hc.ComputePowHash(header)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -818,48 +760,27 @@ func (kawpow *Kawpow) verifySeal(header *types.WorkObjectHeader) (common.Hash, e
 	return powHash, nil
 }
 
-func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
-	mixHash, powHash := kawpow.ComputePowLight(header)
-	// For KAWPOW, get the mix hash from the Ravencoin header in AuxPow
-	auxPow := header.AuxPow()
-	if auxPow == nil {
-		return common.Hash{}, fmt.Errorf("AuxPow is nil for KAWPOW")
-	}
-
-	ravencoinHeader := auxPow.Header()
-
-	// Verify the calculated mix against the one provided in the Ravencoin header.
-	// The kawpowLight function returns mixHash in little-endian format (KAWPOW algorithm spec).
-	// The stratum proxy reverses the mixHash bytes before sending (stratum-converter.py:394).
-	// DecodeRavencoinHeader() reverses the bytes back when reading (ravencoin.go:241-244),
-	// so both the calculated and header mixHash are now in the same format (little-endian).
-	headerMix := ravencoinHeader.MixHash().Bytes()
-	if !bytes.Equal(headerMix, mixHash.Bytes()) {
-		kawpow.logger.WithFields(log.Fields{
-			"receivedMixHash":   fmt.Sprintf("%x", headerMix),
-			"calculatedMixHash": fmt.Sprintf("%x", mixHash.Bytes()),
-		}).Error("MixHash mismatch in ComputePowHash")
-		return common.Hash{}, consensus.ErrInvalidMixHash
-	}
-	return powHash, nil
+func (hc *HeaderChain) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
+	engine := hc.GetEngineForHeader(header)
+	return engine.ComputePowHash(header)
 }
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the kawpow protocol. The changes are done inline.
-func (kawpow *Kawpow) Prepare(chain consensus.ChainHeaderReader, header *types.WorkObject, parent *types.WorkObject) error {
-	header.WorkObjectHeader().SetDifficulty(kawpow.CalcDifficulty(chain, parent.WorkObjectHeader(), parent.ExpansionNumber()))
+func (hc *HeaderChain) Prepare(header *types.WorkObject, parent *types.WorkObject) error {
+	header.WorkObjectHeader().SetDifficulty(hc.CalcDifficulty(parent.WorkObjectHeader(), parent.ExpansionNumber()))
 	return nil
 }
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
 // Finalize returns the new MuHash of the UTXO set, the new size of the UTXO set and an error if any
-func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Batch, header *types.WorkObject, state *state.StateDB, setRoots bool, utxoSetSize uint64, utxosCreate, utxosDelete []common.Hash, supplyRemovedQi *big.Int) (*multiset.MultiSet, uint64, []*types.SpentUtxoEntry, error) {
-	nodeLocation := kawpow.NodeLocation()
-	nodeCtx := kawpow.NodeLocation().Context()
+func (hc *HeaderChain) Finalize(batch ethdb.Batch, header *types.WorkObject, state *state.StateDB, setRoots bool, utxoSetSize uint64, utxosCreate, utxosDelete []common.Hash, supplyRemovedQi *big.Int) (*multiset.MultiSet, uint64, []*types.SpentUtxoEntry, error) {
+	nodeLocation := hc.NodeLocation()
+	nodeCtx := hc.NodeLocation().Context()
 
 	if nodeLocation.Equal(common.Location{0, 0}) {
-		err := state.AddLockedBalances(header.Number(common.ZONE_CTX), kawpow.config.GenAllocs, kawpow.logger)
+		err := state.AddLockedBalances(header.Number(common.ZONE_CTX), hc.powConfig.GenAllocs, hc.logger)
 		if err != nil {
 			log.Global.WithFields(log.Fields{
 				"err":      err,
@@ -870,7 +791,7 @@ func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Ba
 	}
 
 	var multiSet *multiset.MultiSet
-	if chain.IsGenesisHash(header.ParentHash(nodeCtx)) {
+	if hc.IsGenesisHash(header.ParentHash(nodeCtx)) {
 		multiSet = multiset.New()
 		internalLockupContract, err := vm.LockupContractAddresses[[2]byte{nodeLocation[0], nodeLocation[1]}].InternalAddress()
 		if err != nil {
@@ -879,12 +800,12 @@ func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Ba
 		state.SetNonce(internalLockupContract, 1)
 
 		addressOutpointMap := make(map[[20]byte][]*types.OutpointAndDenomination)
-		if chain.Config().IndexAddressUtxos {
-			chain.WriteAddressOutpoints(addressOutpointMap)
+		if hc.config.IndexAddressUtxos {
+			hc.WriteAddressOutpoints(addressOutpointMap)
 		}
 
 	} else {
-		multiSet = rawdb.ReadMultiSet(chain.Database(), header.ParentHash(nodeCtx))
+		multiSet = rawdb.ReadMultiSet(hc.Database(), header.ParentHash(nodeCtx))
 	}
 	if multiSet == nil {
 		return nil, 0, nil, fmt.Errorf("Multiset is nil for block %s", header.ParentHash(nodeCtx).String())
@@ -906,21 +827,21 @@ func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Ba
 			go func(denomination uint8, depth uint64) {
 				defer func() {
 					if r := recover(); r != nil {
-						kawpow.logger.WithFields(log.Fields{
+						hc.logger.WithFields(log.Fields{
 							"error":      r,
 							"stacktrace": string(debug.Stack()),
 						}).Error("Go-Quai Panicked")
 					}
 				}()
-				nextBlockToTrim := rawdb.ReadCanonicalHash(chain.Database(), header.NumberU64(nodeCtx)-depth)
-				TrimBlock(chain, batch, denomination, header.NumberU64(nodeCtx)-depth, nextBlockToTrim, &utxosDelete, &trimmedUtxos, supplyRemovedQi, &utxoSetSize, !setRoots, &lock, kawpow.logger) // setRoots is false when we are processing the block
+				nextBlockToTrim := rawdb.ReadCanonicalHash(hc.Database(), header.NumberU64(nodeCtx)-depth)
+				hc.TrimBlock(batch, denomination, header.NumberU64(nodeCtx)-depth, nextBlockToTrim, &utxosDelete, &trimmedUtxos, supplyRemovedQi, &utxoSetSize, !setRoots, &lock, hc.logger) // setRoots is false when we are processing the block
 				wg.Done()
 			}(denomination, depth)
 		}
 	}
 	wg.Wait()
 	if len(trimmedUtxos) > 0 {
-		kawpow.logger.Infof("Trimmed %d UTXOs from db in %s", len(trimmedUtxos), common.PrettyDuration(time.Since(start)))
+		hc.logger.Infof("Trimmed %d UTXOs from db in %s", len(trimmedUtxos), common.PrettyDuration(time.Since(start)))
 	}
 	if !setRoots {
 		rawdb.WriteTrimmedUTXOs(batch, header.Hash(), trimmedUtxos)
@@ -931,7 +852,7 @@ func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Ba
 	for _, hash := range utxosDelete {
 		multiSet.Remove(hash.Bytes())
 	}
-	kawpow.logger.Infof("Parent hash: %s, header hash: %s, muhash: %s, block height: %d, setroots: %t, UtxosCreated: %d, UtxosDeleted: %d, UTXOs Trimmed from DB: %d, UTXO Set Size: %d", header.ParentHash(nodeCtx).String(), header.Hash().String(), multiSet.Hash().String(), header.NumberU64(nodeCtx), setRoots, len(utxosCreate), len(utxosDelete), len(trimmedUtxos), utxoSetSize)
+	hc.logger.Infof("Parent hash: %s, header hash: %s, muhash: %s, block height: %d, setroots: %t, UtxosCreated: %d, UtxosDeleted: %d, UTXOs Trimmed from DB: %d, UTXO Set Size: %d", header.ParentHash(nodeCtx).String(), header.Hash().String(), multiSet.Hash().String(), header.NumberU64(nodeCtx), setRoots, len(utxosCreate), len(utxosDelete), len(trimmedUtxos), utxoSetSize)
 
 	if setRoots {
 		header.Header().SetUTXORoot(multiSet.Hash())
@@ -944,8 +865,8 @@ func (kawpow *Kawpow) Finalize(chain consensus.ChainHeaderReader, batch ethdb.Ba
 
 // TrimBlock trims all UTXOs of a given denomination that were created in a given block.
 // In the event of an attacker intentionally creating too many 9-byte keys that collide, we return the colliding keys to be trimmed in the next block.
-func TrimBlock(chain consensus.ChainHeaderReader, batch ethdb.Batch, denomination uint8, blockHeight uint64, blockHash common.Hash, utxosDelete *[]common.Hash, trimmedUtxos *[]*types.SpentUtxoEntry, supplyRemovedQi *big.Int, utxoSetSize *uint64, deleteFromDb bool, lock *sync.Mutex, logger *log.Logger) {
-	utxosCreated, _ := rawdb.ReadCreatedUTXOKeys(chain.Database(), blockHash)
+func (hc *HeaderChain) TrimBlock(batch ethdb.Batch, denomination uint8, blockHeight uint64, blockHash common.Hash, utxosDelete *[]common.Hash, trimmedUtxos *[]*types.SpentUtxoEntry, supplyRemovedQi *big.Int, utxoSetSize *uint64, deleteFromDb bool, lock *sync.Mutex, logger *log.Logger) {
+	utxosCreated, _ := rawdb.ReadCreatedUTXOKeys(hc.Database(), blockHash)
 	if len(utxosCreated) == 0 {
 		logger.Infof("UTXOs created in block %d: %d", blockHeight, len(utxosCreated))
 		return
@@ -965,7 +886,7 @@ func TrimBlock(chain consensus.ChainHeaderReader, batch ethdb.Batch, denominatio
 			key = key[:len(key)-1] // remove the denomination byte
 		}
 
-		data, _ := chain.Database().Get(key)
+		data, _ := hc.Database().Get(key)
 		if len(data) == 0 {
 			logger.Infof("Empty key found, denomination: %d", denomination)
 			continue
@@ -1013,11 +934,11 @@ func TrimBlock(chain consensus.ChainHeaderReader, batch ethdb.Batch, denominatio
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (kawpow *Kawpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt, parentUtxoSetSize uint64, utxosCreate, utxosDelete []common.Hash) (*types.WorkObject, error) {
-	nodeCtx := kawpow.config.NodeLocation.Context()
-	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
+func (hc *HeaderChain) FinalizeAndAssemble(header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt, parentUtxoSetSize uint64, utxosCreate, utxosDelete []common.Hash) (*types.WorkObject, error) {
+	nodeCtx := hc.NodeCtx()
+	if nodeCtx == common.ZONE_CTX && hc.ProcessingState() {
 		// Finalize block
-		if _, _, _, err := kawpow.Finalize(chain, nil, header, state, true, parentUtxoSetSize, utxosCreate, utxosDelete, nil); err != nil {
+		if _, _, _, err := hc.Finalize(nil, header, state, true, parentUtxoSetSize, utxosCreate, utxosDelete, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -1028,47 +949,4 @@ func (kawpow *Kawpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 	}
 	// Header seems complete, assemble into a block and return
 	return types.NewWorkObject(header.WorkObjectHeader(), woBody, nil), nil
-}
-
-func (kawpow *Kawpow) NodeLocation() common.Location {
-	return kawpow.config.NodeLocation
-}
-
-// VerifyKawpowShare validates a Kawpow share for pool mining.
-// This function is used by mining pools to validate shares without requiring a full WorkObject.
-//
-// Parameters:
-// - headerHash: The Kawpow header hash (seal hash) from RavencoinBlockHeader.GetKAWPOWHeaderHash()
-// - nonce: The 64-bit nonce value
-// - mixHash: The mix hash submitted by the miner
-// - blockNumber: The block height for epoch calculation
-//
-// Returns:
-// - calculatedMixHash: The mix hash calculated by the Kawpow algorithm
-// - powHash: The proof-of-work hash to compare against the target
-// - error: Any error that occurred during calculation
-func (kawpow *Kawpow) VerifyKawpowShare(headerHash common.Hash, nonce uint64, blockNumber uint64) (common.Hash, common.Hash, error) {
-	// Get the cache for this block number
-	ethashCache := kawpow.cache(blockNumber)
-
-	// Generate cDag if not already present
-	if ethashCache.cDag == nil {
-		cDag := make([]uint32, kawpowCacheWords)
-		generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
-		ethashCache.cDag = cDag
-	}
-
-	// Get dataset size for this block
-	size := datasetSize(blockNumber)
-
-	// Compute Kawpow hash using kawpowLight
-	// The headerHash should be reversed to little-endian for the algorithm
-	digest, result := kawpowLight(size, ethashCache.cache, headerHash.Bytes(), nonce, blockNumber, ethashCache.cDag)
-
-	// Convert results to common.Hash
-	// MixHash should be reversed back to little-endian
-	calculatedMixHash := common.Hash(digest).Reverse()
-	powHash := common.BytesToHash(result)
-
-	return calculatedMixHash, powHash, nil
 }

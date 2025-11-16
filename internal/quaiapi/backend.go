@@ -120,13 +120,22 @@ type Backend interface {
 	AddToCalcOrderCache(hash common.Hash, order int, intrinsicS *big.Int)
 	GetPrimeBlock(blockHash common.Hash) *types.WorkObject
 	GetKQuaiAndUpdateBit(blockHash common.Hash) (*big.Int, uint8, error)
-	consensus.ChainHeaderReader
 	GetWorkShareThreshold() int
 	GetMinerEndpoints() []string
 	GetWorkShareP2PThreshold() int
 	SetWorkShareP2PThreshold(threshold int)
 	GetWorkshareLRUDump(limit int) map[string]interface{}
 	UncleWorkShareClassification(workshare *types.WorkObjectHeader) types.WorkShareValidity
+	CheckWorkThreshold(header *types.WorkObjectHeader, threshold int) bool
+	VerifySeal(header *types.WorkObjectHeader) (common.Hash, error)
+	ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error)
+	GetBlockByHash(hash common.Hash) *types.WorkObject
+	Database() ethdb.Database
+	CalcBaseFee(wo *types.WorkObject) *big.Int
+	Config() *params.ChainConfig
+	GetTerminiByHash(hash common.Hash) *types.Termini
+	GetHeaderByHash(hash common.Hash) *types.WorkObject
+	IsGenesisHash(hash common.Hash) bool
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool

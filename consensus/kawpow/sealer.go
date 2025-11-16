@@ -26,7 +26,7 @@ var (
 // the header's difficulty requirements.
 func (kawpow *Kawpow) Seal(header *types.WorkObject, results chan<- *types.WorkObject, stop <-chan struct{}) error {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
-	if kawpow.config.PowMode == ModeFake || kawpow.config.PowMode == ModeFullFake {
+	if kawpow.config.PowMode == params.ModeFake || kawpow.config.PowMode == params.ModeFullFake {
 		header.WorkObjectHeader().SetNonce(types.BlockNonce{})
 		select {
 		case results <- header:

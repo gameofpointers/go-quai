@@ -1146,8 +1146,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			for _, uncle := range uncles {
 				var uncleEntropy *big.Int
 				if uncle.NumberU64() == targetBlockNumber {
-					engine := p.hc.GetEngineForHeader(uncle)
-					_, err := engine.VerifySeal(uncle)
+					_, err := p.hc.VerifySeal(uncle)
 					if err != nil {
 						uncleEntropy, err = p.hc.IntrinsicLogEntropy(uncle)
 						if err != nil {
@@ -1272,8 +1271,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 
 	time4 := common.PrettyDuration(time.Since(start))
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	engine := p.hc.GetEngineForHeader(block.WorkObjectHeader())
-	multiSet, utxoSetSize, trimmedUtxos, err := engine.Finalize(p.hc, batch, block, statedb, false, parentUtxoSetSize, utxosCreatedDeleted.UtxosCreatedHashes, utxosCreatedDeleted.UtxosDeletedHashes, supplyRemovedQi)
+	multiSet, utxoSetSize, trimmedUtxos, err := p.hc.Finalize(batch, block, statedb, false, parentUtxoSetSize, utxosCreatedDeleted.UtxosCreatedHashes, utxosCreatedDeleted.UtxosDeletedHashes, supplyRemovedQi)
 	if err != nil {
 		return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
 	}

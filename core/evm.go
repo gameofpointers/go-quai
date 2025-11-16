@@ -58,6 +58,8 @@ type ChainContext interface {
 	AddToCalcOrderCache(common.Hash, int, *big.Int)
 
 	CalcBaseFee(*types.WorkObject) *big.Int
+
+	CalcOrder(header *types.WorkObject) (*big.Int, int, error)
 }
 
 // NewEVMBlockContext creates a new context for use in the EVM.
@@ -69,7 +71,7 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 
 	// If we don't have an explicit author (i.e. not mining), extract from the header
 	if author == nil {
-		beneficiary, _ = chain.Engine(header.WorkObjectHeader()).Author(header) // Ignore error, we're past header validation
+		beneficiary = header.PrimaryCoinbase() // Ignore error, we're past header validation
 	} else {
 		beneficiary = *author
 	}
@@ -91,7 +93,7 @@ func NewEVMBlockContext(header *types.WorkObject, parent *types.WorkObject, chai
 
 	// Prime terminus determines which location is eligible to accept the etx
 	primeTerminusHash := header.PrimeTerminusHash()
-	_, parentOrder, err := chain.Engine(parent.WorkObjectHeader()).CalcOrder(chain, parent)
+	_, parentOrder, err := chain.CalcOrder(parent)
 	if err != nil {
 		return vm.BlockContext{}, fmt.Errorf("parent order cannot be calculated, err %s", err)
 	}

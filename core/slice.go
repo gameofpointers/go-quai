@@ -107,7 +107,7 @@ type Slice struct {
 	recomputeRequired bool
 }
 
-func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.WorkObject) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
+func NewSlice(db ethdb.Database, config *Config, powConfig params.PowConfig, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.WorkObject) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
 	nodeCtx := chainConfig.Location.Context()
 	sl := &Slice{
 		config:            chainConfig,
@@ -124,7 +124,7 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 		sl.AddGenesisHash(genesisBlock.Hash())
 	}
 	var err error
-	sl.hc, err = NewHeaderChain(db, engine, sl.GetPEtxRollupAfterRetryThreshold, sl.GetPEtxAfterRetryThreshold, sl.GetPrimeBlock, sl.GetKQuaiAndUpdateBit, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning, currentExpansionNumber, logger)
+	sl.hc, err = NewHeaderChain(db, powConfig, engine, sl.GetPEtxRollupAfterRetryThreshold, sl.GetPEtxAfterRetryThreshold, sl.GetPrimeBlock, sl.GetKQuaiAndUpdateBit, chainConfig, cacheConfig, txLookupLimit, vmConfig, slicesRunning, currentExpansionNumber, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -707,8 +707,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 	time7 := common.PrettyDuration(time.Since(start))
 
 	if order == sl.NodeCtx() {
-		engine := sl.GetEngineForHeader(block.WorkObjectHeader())
-		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
+		sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.hc.TotalLogEntropy(block)})
 	}
 
 	if sl.NodeCtx() == common.ZONE_CTX && sl.ProcessingState() {
@@ -1145,11 +1144,10 @@ func (sl *Slice) GetKQuaiAndUpdateBit(hash common.Hash) (*big.Int, uint8, error)
 			if block != nil {
 				// In the case of this block being a region and state is not
 				// processed, send an update to the hierarchical coordinator
-				engine := sl.GetEngineForHeader(block.WorkObjectHeader())
-				_, order, calcOrderErr := engine.CalcOrder(sl.hc, block)
+				_, order, calcOrderErr := sl.hc.CalcOrder(block)
 				if calcOrderErr == nil {
 					if order == sl.NodeCtx() {
-						sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
+						sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.hc.TotalLogEntropy(block)})
 					}
 				}
 			}
@@ -1163,11 +1161,10 @@ func (sl *Slice) GetKQuaiAndUpdateBit(hash common.Hash) (*big.Int, uint8, error)
 		kQuai, updateBit, err := sl.hc.bc.processor.GetKQuaiAndUpdateBit(block)
 		if err != nil && err.Error() == ErrSubNotSyncedToDom.Error() {
 			// send an update to the hierarchical coordinator
-			engine := sl.GetEngineForHeader(block.WorkObjectHeader())
-			_, order, calcOrderErr := engine.CalcOrder(sl.hc, block)
+			_, order, calcOrderErr := sl.hc.CalcOrder(block)
 			if calcOrderErr == nil {
 				if order == sl.NodeCtx() {
-					sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: engine.TotalLogEntropy(sl.hc, block)})
+					sl.hc.bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Order: order, Entropy: sl.hc.TotalLogEntropy(block)})
 				}
 			}
 		}
@@ -2308,8 +2305,7 @@ func (sl *Slice) GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, e
 }
 
 func (sl *Slice) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	engine := sl.GetEngineForHeader(header.WorkObjectHeader())
-	return engine.CalcOrder(sl.hc, header)
+	return sl.hc.CalcOrder(header)
 }
 
 ////// Expansion related logic
@@ -2394,7 +2390,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 			return nil, false, false, errors.New("could not get engine for workshare")
 		}
 
-		isSubShare = engine.CheckWorkThreshold(workShare, params.WorkShareP2PThresholdDiff)
+		isSubShare = sl.hc.CheckWorkThreshold(workShare, params.WorkShareP2PThresholdDiff)
 		if !isSubShare {
 			// This cannot be a block or a workshare or even a subWorkShare since it didn't pass the minimum workShare threshold.
 			return nil, false, false, errors.New("workshare has less entropy than the workshare p2p threshold")
@@ -2403,7 +2399,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 
 		// Now check if this subWorkShare is a full block.
 		var isBlock bool
-		_, err := engine.VerifySeal(workShare)
+		_, err := sl.hc.VerifySeal(workShare)
 		if err == nil {
 			isBlock = true
 		}
@@ -2417,7 +2413,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		}
 		// If the share qualifies is not a workshare and there are no transactions,
 		// there is no need to broadcast the share
-		isWorkShare = engine.CheckIfValidWorkShare(workShare) == types.Valid
+		isWorkShare = sl.hc.CheckIfValidWorkShare(workShare) == types.Valid
 		if !isWorkShare && len(txs) == 0 {
 			// This is a p2p workshare and has no transactions.
 			return nil, false, false, nil
