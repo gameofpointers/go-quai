@@ -21,6 +21,7 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 // Genesis hashes to enforce below configs on.
@@ -136,6 +137,43 @@ type ChainConfig struct {
 	DefaultGenesisHash common.Hash
 	IndexAddressUtxos  bool
 	TelemetryEnabled   bool
+}
+
+// Mode defines the type and amount of PoW verification a kawpow engine makes.
+type Mode uint
+
+const (
+	ModeNormal Mode = iota
+	ModeShared
+	ModeTest
+	ModeFake
+	ModeFullFake
+)
+
+// PowConfig are the configuration parameters of pow.
+type PowConfig struct {
+	PowMode Mode
+
+	CacheDir       string
+	CachesInMem    int
+	CachesOnDisk   int
+	CachesLockMmap bool
+	DurationLimit  *big.Int
+	GasCeil        uint64
+	MinDifficulty  *big.Int
+	GenAllocs      []GenesisAccount
+
+	NodeLocation common.Location
+
+	WorkShareThreshold int
+
+	// When set, notifications sent by the remote sealer will
+	// be block header JSON objects instead of work package arrays.
+	NotifyFull bool
+
+	Log *log.Logger `toml:"-"`
+	// Number of threads to mine on if mining
+	NumThreads int
 }
 
 // SetLocation sets the location on the chain config

@@ -59,7 +59,8 @@ type getPrimeBlock func(blockHash common.Hash) *types.WorkObject
 type getKQuaiAndUpdateBit func(blockHash common.Hash) (*big.Int, uint8, error)
 
 type HeaderChain struct {
-	config *params.ChainConfig
+	config    *params.ChainConfig
+	powConfig params.PowConfig
 
 	bc     *BodyDb
 	engine []consensus.Engine
@@ -114,12 +115,13 @@ func NewTestHeaderChain() *HeaderChain {
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
 // to the parent's interrupt semaphore.
-func NewHeaderChain(db ethdb.Database, engine []consensus.Engine, pEtxsRollupFetcher getPendingEtxsRollup, pEtxsFetcher getPendingEtxs, primeBlockFetcher getPrimeBlock, kQuaiAndUpdateBitGetter getKQuaiAndUpdateBit, chainConfig *params.ChainConfig, cacheConfig *CacheConfig, txLookupLimit *uint64, vmConfig vm.Config, slicesRunning []common.Location, currentExpansionNumber uint8, logger *log.Logger) (*HeaderChain, error) {
+func NewHeaderChain(db ethdb.Database, powConfig params.PowConfig, engine []consensus.Engine, pEtxsRollupFetcher getPendingEtxsRollup, pEtxsFetcher getPendingEtxs, primeBlockFetcher getPrimeBlock, kQuaiAndUpdateBitGetter getKQuaiAndUpdateBit, chainConfig *params.ChainConfig, cacheConfig *CacheConfig, txLookupLimit *uint64, vmConfig vm.Config, slicesRunning []common.Location, currentExpansionNumber uint8, logger *log.Logger) (*HeaderChain, error) {
 
 	nodeCtx := chainConfig.Location.Context()
 
 	hc := &HeaderChain{
 		config:                 chainConfig,
+		powConfig:              powConfig,
 		headerDb:               db,
 		engine:                 engine,
 		slicesRunning:          slicesRunning,
@@ -323,9 +325,8 @@ func (hc *HeaderChain) UncledLogEntropy(block *types.WorkObject) *big.Int {
 		if uncle.AuxPow() != nil && uncle.AuxPow().PowID() > types.Kawpow {
 			continue
 		}
-		engine := hc.GetEngineForHeader(uncle)
 		// Verify the seal and get the powHash for the given header
-		powHash, err := engine.VerifySeal(uncle)
+		powHash, err := hc.VerifySeal(uncle)
 		if err != nil {
 			continue
 		}
@@ -613,8 +614,7 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 		return newEtxs, nil
 	}
 	// Terminate the search on coincidence with dom chain
-	engine := hc.GetEngineForHeader(b.WorkObjectHeader())
-	if engine.IsDomCoincident(hc, b) {
+	if hc.IsDomCoincident(b) {
 		return newEtxs, nil
 	}
 	// Recursively get the ancestor rollup, until a coincident ancestor is found
@@ -736,9 +736,7 @@ func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 		}
 	}
 
-	engine := hc.GetEngineForHeader(header.WorkObjectHeader())
-
-	err := engine.VerifyHeader(hc, header)
+	err := hc.VerifyHeader(header)
 	if err != nil {
 		return err
 	}
@@ -780,8 +778,7 @@ func (hc *HeaderChain) CalculateInterlink(block *types.WorkObject) (common.Hashe
 		interlinkHashes = common.Hashes{header.Hash(), header.Hash(), header.Hash(), header.Hash()}
 	} else {
 		// check if parent belongs to any interlink level
-		engine := hc.GetEngineForHeader(header.WorkObjectHeader())
-		rank, err := engine.CalcRank(hc, header)
+		rank, err := hc.CalcRank(header)
 		if err != nil {
 			return nil, err
 		}
@@ -816,7 +813,7 @@ func (hc *HeaderChain) CalculateManifest(header *types.WorkObject) types.BlockMa
 		if nodeCtx == common.PRIME_CTX {
 			// Nothing to do for prime chain
 			manifest = types.BlockManifest{}
-		} else if hc.GetEngineForHeader(header.WorkObjectHeader()).IsDomCoincident(hc, header) {
+		} else if hc.IsDomCoincident(header) {
 			manifest = types.BlockManifest{header.Hash()}
 		} else {
 			parentManifest := rawdb.ReadManifest(hc.headerDb, header.ParentHash(nodeCtx))
@@ -1145,10 +1142,9 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 	if !wo.KawpowActivationHappened() || wo.IsTransitionProgPowBlock() {
 		// everything has to be progpow, also verify seal checks if the proof of
 		// work meets the block difficulty target
-		progpowEngine := hc.engine[types.Progpow]
-		_, err := progpowEngine.VerifySeal(wo)
+		_, err := hc.VerifySeal(wo)
 		if err != nil {
-			return progpowEngine.CheckIfValidWorkShare(wo)
+			return hc.CheckIfValidWorkShare(wo)
 		} else {
 			// Valid progpow block
 			return types.Block
@@ -1157,10 +1153,9 @@ func (hc *HeaderChain) UncleWorkShareClassification(wo *types.WorkObjectHeader) 
 		powId := wo.AuxPow().PowID()
 		switch powId {
 		case types.Kawpow:
-			kawpowEngine := hc.engine[types.Kawpow]
-			_, err := kawpowEngine.VerifySeal(wo)
+			_, err := hc.VerifySeal(wo)
 			if err != nil {
-				return kawpowEngine.CheckIfValidWorkShare(wo)
+				return hc.CheckIfValidWorkShare(wo)
 			} else {
 				// Valid kawpow block
 				return types.Block
@@ -1735,8 +1730,7 @@ func (hc *HeaderChain) SlicesRunning() []common.Location {
 
 func (hc *HeaderChain) ComputeExpansionNumber(parent *types.WorkObject) (uint8, error) {
 	// If the parent is a prime block, prime terminus is the parent hash
-	engine := hc.GetEngineForHeader(parent.WorkObjectHeader())
-	_, order, err := engine.CalcOrder(hc, parent)
+	_, order, err := hc.CalcOrder(parent)
 	if err != nil {
 		return 0, err
 	}

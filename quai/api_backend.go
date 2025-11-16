@@ -876,6 +876,18 @@ func (b *QuaiAPIBackend) UncleWorkShareClassification(workshare *types.WorkObjec
 	return b.quai.core.UncleWorkShareClassification(workshare)
 }
 
+func (b *QuaiAPIBackend) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
+	return b.quai.core.ComputePowHash(header)
+}
+
+func (b *QuaiAPIBackend) VerifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
+	return b.quai.core.VerifySeal(header)
+}
+
+func (b *QuaiAPIBackend) CheckWorkThreshold(header *types.WorkObjectHeader, threshold int) bool {
+	return b.quai.core.CheckWorkThreshold(header, threshold)
+}
+
 // ///////////////////////////
 // /////// P2P ///////////////
 // ///////////////////////////

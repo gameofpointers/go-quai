@@ -472,19 +472,19 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 			} else {
 				threshold := backend.GetWorkShareP2PThreshold()
-				if !backend.Engine(block.WorkObjectHeader()).CheckWorkThreshold(block.WorkObjectHeader(), threshold) {
+				if !backend.CheckWorkThreshold(block.WorkObjectHeader(), threshold) {
 					backend.Logger().Error("workshare has less entropy than the workshare p2p threshold")
 					return pubsub.ValidationReject
 				}
 
 				// After the goldenage fork v3 if a share that is not a workshare is broadcasted without the
 				// transactions then throw an error
-				isWorkShare := backend.Engine(block.WorkObjectHeader()).CheckIfValidWorkShare(block.WorkObjectHeader()) == types.Valid
+				isWorkShare := backend.CheckIfValidWorkShare(block.WorkObjectHeader()) == types.Valid
 				if !isWorkShare && len(block.WorkObject.Transactions()) == 0 {
 					return pubsub.ValidationReject
 				}
 
-				powHash, err := backend.Engine(block.WorkObjectHeader()).ComputePowHash(block.WorkObject.WorkObjectHeader())
+				powHash, err := backend.ComputePowHash(block.WorkObject.WorkObjectHeader())
 				if err != nil {
 					backend.Logger().WithField("err", err).Error("Error computing the powHash of the work object header received from peer")
 					return pubsub.ValidationReject
@@ -496,7 +496,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					return pubsub.ValidationAccept
 				}
 
-				currentHeaderPowHash, err := backend.Engine(currentHeader.WorkObjectHeader()).VerifySeal(currentHeader.WorkObjectHeader())
+				currentHeaderPowHash, err := backend.ComputePowHash(currentHeader.WorkObjectHeader())
 				if err != nil {
 					return pubsub.ValidationReject
 				}

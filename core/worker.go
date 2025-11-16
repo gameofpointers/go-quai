@@ -703,8 +703,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				for _, uncle := range uncles {
 					var uncleEntropy *big.Int
 					if uncle.NumberU64() == targetBlockNumber {
-						engine := w.hc.GetEngineForHeader(uncle)
-						_, err := engine.VerifySeal(uncle)
+						_, err := w.hc.VerifySeal(uncle)
 						if err != nil {
 							uncleEntropy, err = w.hc.IntrinsicLogEntropy(uncle)
 							if err != nil {
@@ -840,7 +839,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 	work.wo.WorkObjectHeader().SetAuxPow(auxPow)
 
 	// Create a local environment copy, avoid the data race with snapshot state.
-	newWo, err := w.FinalizeAssemble(w.hc, work.wo, block, work.state, work.txs, uncles, work.etxs, work.subManifest, work.receipts, work.utxoSetSize, work.utxosCreate, work.utxosDelete)
+	newWo, err := w.FinalizeAssemble(work.wo, block, work.state, work.txs, uncles, work.etxs, work.subManifest, work.receipts, work.utxoSetSize, work.utxosCreate, work.utxosDelete)
 	if err != nil {
 		return nil, err
 	}
@@ -1800,16 +1799,15 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		return nil, err
 	}
 	if !w.hc.IsGenesisHash(parent.Hash()) {
-		engine := w.hc.GetEngineForHeader(parent.WorkObjectHeader())
 		// Set the parent delta entropy prior to sending to sub
 		if nodeCtx != common.PRIME_CTX {
 			if order < nodeCtx {
 				newWo.Header().SetParentDeltaEntropy(big.NewInt(0), nodeCtx)
 			} else {
-				newWo.Header().SetParentDeltaEntropy(engine.DeltaLogEntropy(w.hc, parent), nodeCtx)
+				newWo.Header().SetParentDeltaEntropy(w.hc.DeltaLogEntropy(parent), nodeCtx)
 			}
 		}
-		newWo.Header().SetParentEntropy(engine.TotalLogEntropy(w.hc, parent), nodeCtx)
+		newWo.Header().SetParentEntropy(w.hc.TotalLogEntropy(parent), nodeCtx)
 	} else {
 		newWo.Header().SetParentEntropy(big.NewInt(0), nodeCtx)
 		newWo.Header().SetParentDeltaEntropy(big.NewInt(0), nodeCtx)
@@ -1817,13 +1815,12 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 	// Only calculate entropy if the parent is not the genesis block
 	if !w.hc.IsGenesisHash(parent.Hash()) {
-		engine := w.hc.GetEngineForHeader(parent.WorkObjectHeader())
 		// Set the parent delta entropy prior to sending to sub
 		if nodeCtx != common.PRIME_CTX {
 			if order < nodeCtx {
 				newWo.Header().SetParentUncledDeltaEntropy(big.NewInt(0), nodeCtx)
 			} else {
-				newWo.Header().SetParentUncledDeltaEntropy(engine.UncledDeltaLogEntropy(w.hc, parent), nodeCtx)
+				newWo.Header().SetParentUncledDeltaEntropy(w.hc.UncledDeltaLogEntropy(parent), nodeCtx)
 			}
 		}
 	} else {
@@ -2269,8 +2266,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 
 		// Run the consensus preparation with the default or customized consensus engine.
-		engine := w.hc.GetEngineForHeader(newWo.WorkObjectHeader())
-		if err := engine.Prepare(w.hc, newWo, wo); err != nil {
+		if err := w.hc.Prepare(newWo, wo); err != nil {
 			w.logger.WithField("err", err).Error("Failed to prepare header for sealing")
 			return nil, err
 		}
@@ -2465,10 +2461,9 @@ func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 	return manifestHash
 }
 
-func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *types.WorkObject, parent *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt, parentUtxoSetSize uint64, utxosCreate, utxosDelete []common.Hash) (*types.WorkObject, error) {
+func (w *worker) FinalizeAssemble(newWo *types.WorkObject, parent *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt, parentUtxoSetSize uint64, utxosCreate, utxosDelete []common.Hash) (*types.WorkObject, error) {
 	nodeCtx := w.hc.NodeCtx()
-	engine := w.hc.GetEngineForHeader(newWo.WorkObjectHeader())
-	wo, err := engine.FinalizeAndAssemble(chain, newWo, state, txs, uncles, etxs, subManifest, receipts, parentUtxoSetSize, utxosCreate, utxosDelete)
+	wo, err := w.hc.FinalizeAndAssemble(newWo, state, txs, uncles, etxs, subManifest, receipts, parentUtxoSetSize, utxosCreate, utxosDelete)
 	if err != nil {
 		return nil, err
 	}
@@ -2488,7 +2483,7 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, newWo *type
 		if nodeCtx == common.ZONE_CTX {
 			// Compute and set etx rollup hash
 			var etxRollup types.Transactions
-			if engine.IsDomCoincident(w.hc, parent) {
+			if w.hc.IsDomCoincident(parent) {
 				etxRollup = parent.OutboundEtxs()
 			} else {
 				etxRollup, err = w.hc.CollectEtxRollup(parent)
@@ -2902,6 +2897,5 @@ func (w *worker) processQiTx(tx *types.Transaction, env *environment, primeTermi
 }
 
 func (w *worker) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
-	engine := w.hc.GetEngineForHeader(header.WorkObjectHeader())
-	return engine.CalcOrder(w.hc, header)
+	return w.hc.CalcOrder(header)
 }

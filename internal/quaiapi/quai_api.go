@@ -1003,7 +1003,7 @@ func RPCMarshalBlock(backend Backend, block *types.WorkObject, inclTx bool, full
 	fields["woHeader"] = block.WorkObjectHeader().RPCMarshalWorkObjectHeader()
 	fields["header"] = block.Body().Header().RPCMarshalHeader()
 	fields["size"] = hexutil.Uint64(block.Size())
-	_, order, err := backend.Engine(block.WorkObjectHeader()).CalcOrder(backend, block)
+	_, order, err := backend.CalcOrder(block)
 	if err != nil {
 		fields["order"] = common.ZONE_CTX
 	} else {
@@ -1046,10 +1046,12 @@ func RPCMarshalBlock(backend Backend, block *types.WorkObject, inclTx bool, full
 	marshalWorkShares := make([]map[string]interface{}, 0)
 	for _, uncle := range block.Uncles() {
 		rpcMarshalUncle := uncle.RPCMarshalWorkObjectHeader()
-		_, err := backend.Engine(uncle).VerifySeal(uncle)
-		if err != nil {
+		validity := backend.UncleWorkShareClassification(uncle)
+
+		switch validity {
+		case types.Valid:
 			marshalWorkShares = append(marshalWorkShares, rpcMarshalUncle)
-		} else {
+		case types.Block:
 			marshalUncles = append(marshalUncles, rpcMarshalUncle)
 		}
 	}

@@ -5,9 +5,10 @@
 package kawpow
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -19,9 +20,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dominant-strategies/go-quai/cmd/genallocs"
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/consensus"
+	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	mmap "github.com/edsrzf/mmap-go"
 
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -157,43 +161,6 @@ func memoryMapAndGenerate(path string, size uint64, lock bool, generator func(bu
 	return memoryMap(path, lock)
 }
 
-// Mode defines the type and amount of PoW verification a kawpow engine makes.
-type Mode uint
-
-const (
-	ModeNormal Mode = iota
-	ModeShared
-	ModeTest
-	ModeFake
-	ModeFullFake
-)
-
-// Config are the configuration parameters of kawpow.
-type Config struct {
-	PowMode Mode
-
-	CacheDir       string
-	CachesInMem    int
-	CachesOnDisk   int
-	CachesLockMmap bool
-	DurationLimit  *big.Int
-	GasCeil        uint64
-	MinDifficulty  *big.Int
-	GenAllocs      []genallocs.GenesisAccount
-
-	NodeLocation common.Location
-
-	WorkShareThreshold int
-
-	// When set, notifications sent by the remote sealer will
-	// be block header JSON objects instead of work package arrays.
-	NotifyFull bool
-
-	Log *log.Logger `toml:"-"`
-	// Number of threads to mine on if mining
-	NumThreads int
-}
-
 type mixHashWorkHash struct {
 	mixHash  []byte
 	workHash []byte
@@ -201,7 +168,7 @@ type mixHashWorkHash struct {
 
 // Kawpow is a proof-of-work consensus engine using the kawpow hash algorithm
 type Kawpow struct {
-	config Config
+	config params.PowConfig
 
 	caches    *lru // In memory caches to avoid regenerating too often
 	hashCache *goLRU.Cache[common.Hash, mixHashWorkHash]
@@ -225,7 +192,7 @@ type Kawpow struct {
 // New creates a full sized kawpow PoW scheme and starts a background thread for
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
-func New(config Config, notify []string, noverify bool, logger *log.Logger) *Kawpow {
+func New(config params.PowConfig, notify []string, noverify bool, logger *log.Logger) *Kawpow {
 	logger.WithField("requested", config.CachesInMem).Warn("Invalid kawpow caches in memory, defaulting to 3")
 	config.CachesInMem = 3
 	if config.CacheDir != "" && config.CachesOnDisk > 0 {
@@ -249,7 +216,7 @@ func New(config Config, notify []string, noverify bool, logger *log.Logger) *Kaw
 		rand:      rand.New(rand.NewSource(time.Now().UnixNano())),
 		threads:   config.NumThreads,
 	}
-	if config.PowMode == ModeShared {
+	if config.PowMode == params.ModeShared {
 		kawpow.shared = sharedKawpow
 	}
 	return kawpow
@@ -258,7 +225,7 @@ func New(config Config, notify []string, noverify bool, logger *log.Logger) *Kaw
 // NewTester creates a small sized kawpow PoW scheme useful only for testing
 // purposes.
 func NewTester(notify []string, noverify bool) *Kawpow {
-	return New(Config{PowMode: ModeTest}, notify, noverify, log.NewLogger("test-kawpow.log", "info", 500))
+	return New(params.PowConfig{PowMode: params.ModeTest}, notify, noverify, log.NewLogger("test-kawpow.log", "info", 500))
 }
 
 // NewFaker creates a kawpow consensus engine with a fake PoW scheme that accepts
@@ -266,8 +233,8 @@ func NewTester(notify []string, noverify bool) *Kawpow {
 // consensus rules.
 func NewFaker() *Kawpow {
 	return &Kawpow{
-		config: Config{
-			PowMode: ModeFake,
+		config: params.PowConfig{
+			PowMode: params.ModeFake,
 		},
 	}
 }
@@ -277,8 +244,8 @@ func NewFaker() *Kawpow {
 // still have to conform to the Quai consensus rules.
 func NewFakeFailer(fail uint64) *Kawpow {
 	return &Kawpow{
-		config: Config{
-			PowMode: ModeFake,
+		config: params.PowConfig{
+			PowMode: params.ModeFake,
 		},
 		fakeFail: fail,
 	}
@@ -289,8 +256,8 @@ func NewFakeFailer(fail uint64) *Kawpow {
 // they still have to conform to the Quai consensus rules.
 func NewFakeDelayer(delay time.Duration) *Kawpow {
 	return &Kawpow{
-		config: Config{
-			PowMode: ModeFake,
+		config: params.PowConfig{
+			PowMode: params.ModeFake,
 		},
 		fakeDelay: delay,
 	}
@@ -300,8 +267,8 @@ func NewFakeDelayer(delay time.Duration) *Kawpow {
 // accepts all blocks as valid, without checking any consensus rules whatsoever.
 func NewFullFaker() *Kawpow {
 	return &Kawpow{
-		config: Config{
-			PowMode: ModeFullFake,
+		config: params.PowConfig{
+			PowMode: params.ModeFullFake,
 		},
 	}
 }
@@ -465,12 +432,12 @@ func (kawpow *Kawpow) cache(block uint64) *cache {
 	current := currentI.(*cache)
 
 	// Wait for generation finish.
-	current.generate(kawpow.config.CacheDir, kawpow.config.CachesOnDisk, kawpow.config.CachesLockMmap, kawpow.config.PowMode == ModeTest, kawpow.logger)
+	current.generate(kawpow.config.CacheDir, kawpow.config.CachesOnDisk, kawpow.config.CachesLockMmap, kawpow.config.PowMode == params.ModeTest, kawpow.logger)
 
 	// If we need a new future cache, now's a good time to regenerate it.
 	if futureI != nil {
 		future := futureI.(*cache)
-		go future.generate(kawpow.config.CacheDir, kawpow.config.CachesOnDisk, kawpow.config.CachesLockMmap, kawpow.config.PowMode == ModeTest, kawpow.logger)
+		go future.generate(kawpow.config.CacheDir, kawpow.config.CachesOnDisk, kawpow.config.CachesLockMmap, kawpow.config.PowMode == params.ModeTest, kawpow.logger)
 	}
 	return current
 }
@@ -504,4 +471,123 @@ func (kawpow *Kawpow) SetThreads(threads int) {
 		default:
 		}
 	}
+}
+
+func (kawpow *Kawpow) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
+	mixHash, powHash := kawpow.ComputePowLight(header)
+	// For KAWPOW, get the mix hash from the Ravencoin header in AuxPow
+	auxPow := header.AuxPow()
+	if auxPow == nil {
+		return common.Hash{}, fmt.Errorf("AuxPow is nil for KAWPOW")
+	}
+
+	ravencoinHeader := auxPow.Header()
+
+	// Verify the calculated mix against the one provided in the Ravencoin header.
+	// The kawpowLight function returns mixHash in little-endian format (KAWPOW algorithm spec).
+	// The stratum proxy reverses the mixHash bytes before sending (stratum-converter.py:394).
+	// DecodeRavencoinHeader() reverses the bytes back when reading (ravencoin.go:241-244),
+	// so both the calculated and header mixHash are now in the same format (little-endian).
+	headerMix := ravencoinHeader.MixHash().Bytes()
+	if !bytes.Equal(headerMix, mixHash.Bytes()) {
+		kawpow.logger.WithFields(log.Fields{
+			"receivedMixHash":   fmt.Sprintf("%x", headerMix),
+			"calculatedMixHash": fmt.Sprintf("%x", mixHash.Bytes()),
+		}).Error("MixHash mismatch in ComputePowHash")
+		return common.Hash{}, consensus.ErrInvalidMixHash
+	}
+	return powHash, nil
+}
+
+// VerifyKawpowShare validates a Kawpow share for pool mining.
+// This function is used by mining pools to validate shares without requiring a full WorkObject.
+//
+// Parameters:
+// - headerHash: The Kawpow header hash (seal hash) from RavencoinBlockHeader.GetKAWPOWHeaderHash()
+// - nonce: The 64-bit nonce value
+// - mixHash: The mix hash submitted by the miner
+// - blockNumber: The block height for epoch calculation
+//
+// Returns:
+// - calculatedMixHash: The mix hash calculated by the Kawpow algorithm
+// - powHash: The proof-of-work hash to compare against the target
+// - error: Any error that occurred during calculation
+func (kawpow *Kawpow) VerifyKawpowShare(headerHash common.Hash, nonce uint64, blockNumber uint64) (common.Hash, common.Hash, error) {
+	// Get the cache for this block number
+	ethashCache := kawpow.cache(blockNumber)
+
+	// Generate cDag if not already present
+	if ethashCache.cDag == nil {
+		cDag := make([]uint32, kawpowCacheWords)
+		generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
+		ethashCache.cDag = cDag
+	}
+
+	// Get dataset size for this block
+	size := datasetSize(blockNumber)
+
+	// Compute Kawpow hash using kawpowLight
+	// The headerHash should be reversed to little-endian for the algorithm
+	digest, result := kawpowLight(size, ethashCache.cache, headerHash.Bytes(), nonce, blockNumber, ethashCache.cDag)
+
+	// Convert results to common.Hash
+	// MixHash should be reversed back to little-endian
+	calculatedMixHash := common.Hash(digest).Reverse()
+	powHash := common.BytesToHash(result)
+
+	return calculatedMixHash, powHash, nil
+}
+
+// ComputePowLight computes the kawpow hash and returns mixHash and powHash
+func (kawpow *Kawpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, powHash common.Hash) {
+	// For quai blocks to rely on pow done on the raven coin donor header
+	if header.AuxPow() == nil {
+		kawpow.logger.Error("AuxPow is nil in ComputePowLight")
+		return common.Hash{}, common.Hash{}
+	}
+
+	ravencoinHeader := header.AuxPow().Header()
+
+	// For KAWPOW, the nonce is stored directly in the Ravencoin header
+	nonce64 := ravencoinHeader.Nonce64()
+
+	// Get the KAWPOW header hash (the input to the KAWPOW algorithm)
+	// NOTE: SealHash() returns the hash in BIG-ENDIAN format (SHA256 natural output)
+	// This will be reversed to little-endian before passing to kawpowLight
+	kawpowHeaderHash := ravencoinHeader.SealHash()
+	blockNumber := uint64(ravencoinHeader.Height())
+
+	// Create a unique cache key using the RVN-compatible header hash + nonce so
+	// results are cached consistently with the actual kernel input.
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, nonce64)
+	cacheKey := crypto.Keccak256Hash(kawpowHeaderHash.Bytes(), nonceBytes)
+
+	// Check cache with the unique key
+	hashes, ok := kawpow.hashCache.Peek(cacheKey)
+	if ok {
+		return common.Hash(hashes.mixHash), common.Hash(hashes.workHash)
+	}
+
+	// Get cache for this block (same as sealer)
+	ethashCache := kawpow.cache(blockNumber)
+	if ethashCache.cDag == nil {
+		cDag := make([]uint32, kawpowCacheWords)
+		generateCDag(cDag, ethashCache.cache, blockNumber/C_epochLength, kawpow.logger)
+		ethashCache.cDag = cDag
+	}
+
+	// Use the same kawpowLight function as the sealer, but feed the
+	// RVN-compatible (byte-reversed) header hash bytes, since the
+	// implementation expects the hash as little endian, it needs to be
+	size := datasetSize(blockNumber)
+	digest, result := kawpowLight(size, ethashCache.cache, kawpowHeaderHash.Reverse().Bytes(), nonce64, blockNumber, ethashCache.cDag)
+	// MixHash stored in the header should be little endian, so reverse it back to little endian
+	mixHash = common.Hash(digest).Reverse() // reverse to little-endian
+	powHash = common.BytesToHash(result)
+
+	// Cache the result with the unique key
+	kawpow.hashCache.Add(cacheKey, mixHashWorkHash{mixHash: mixHash.Bytes(), workHash: powHash.Bytes()})
+
+	return mixHash, powHash
 }

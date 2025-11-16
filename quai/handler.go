@@ -118,7 +118,7 @@ func (h *handler) missingBlockLoop() {
 			currentHeader := h.core.CurrentHeader()
 
 			if !h.core.IsGenesisHash(currentHeader.Hash()) && currentHeader != nil && currentHeader.NumberU64(common.ZONE_CTX) > params.MaxCodeSizeForkHeight {
-				currentHeaderPowHash, err := h.core.Engine(currentHeader.WorkObjectHeader()).VerifySeal(currentHeader.WorkObjectHeader())
+				currentHeaderPowHash, err := h.core.VerifySeal(currentHeader.WorkObjectHeader())
 				if err != nil {
 					continue
 				}

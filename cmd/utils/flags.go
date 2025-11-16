@@ -25,7 +25,6 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/dominant-strategies/go-quai/cmd/genallocs"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/constants"
 	"github.com/dominant-strategies/go-quai/common/fdlimit"
@@ -1193,65 +1192,65 @@ func setConsensusEngineConfig(cfg *quaiconfig.Config) {
 		// Override any default configs for hard coded networks.
 		switch viper.GetString(EnvironmentFlag.Name) {
 		case params.ColosseumName:
-			cfg.Blake3Pow.DurationLimit = params.DurationLimit
-			cfg.Blake3Pow.GasCeil = params.ColosseumGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.ColosseumGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.GardenName:
-			cfg.Blake3Pow.DurationLimit = params.GardenDurationLimit
-			cfg.Blake3Pow.GasCeil = params.GardenGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.GardenDurationLimit
+			cfg.PowConfig.GasCeil = params.GardenGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.OrchardName:
-			cfg.Blake3Pow.DurationLimit = params.OrchardDurationLimit
-			cfg.Blake3Pow.GasCeil = params.OrchardGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.OrchardDurationLimit
+			cfg.PowConfig.GasCeil = params.OrchardGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.LighthouseName:
-			cfg.Blake3Pow.DurationLimit = params.LighthouseDurationLimit
-			cfg.Blake3Pow.GasCeil = params.LighthouseGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.LighthouseDurationLimit
+			cfg.PowConfig.GasCeil = params.LighthouseGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.LocalName:
-			cfg.Blake3Pow.DurationLimit = params.LocalDurationLimit
-			cfg.Blake3Pow.GasCeil = params.LocalGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.LocalDurationLimit
+			cfg.PowConfig.GasCeil = params.LocalGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.DevName:
-			cfg.Blake3Pow.DurationLimit = params.DurationLimit
-			cfg.Blake3Pow.GasCeil = params.LocalGasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.LocalGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		default:
-			cfg.Blake3Pow.DurationLimit = params.DurationLimit
-			cfg.Blake3Pow.GasCeil = params.GasCeil
-			cfg.Blake3Pow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.GasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		}
 	} else {
 		// Override any default configs for hard coded networks.
 		switch viper.GetString(EnvironmentFlag.Name) {
 		case params.ColosseumName:
-			cfg.Progpow.DurationLimit = params.DurationLimit
-			cfg.Progpow.GasCeil = params.ColosseumGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.ColosseumGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.GardenName:
-			cfg.Progpow.DurationLimit = params.GardenDurationLimit
-			cfg.Progpow.GasCeil = params.GardenGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.GardenDurationLimit
+			cfg.PowConfig.GasCeil = params.GardenGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultGardenGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.OrchardName:
-			cfg.Progpow.DurationLimit = params.OrchardDurationLimit
-			cfg.Progpow.GasCeil = params.OrchardGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.OrchardDurationLimit
+			cfg.PowConfig.GasCeil = params.OrchardGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.LighthouseName:
-			cfg.Progpow.DurationLimit = params.LighthouseDurationLimit
-			cfg.Progpow.GasCeil = params.LighthouseGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.LighthouseDurationLimit
+			cfg.PowConfig.GasCeil = params.LighthouseGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.LocalName:
-			cfg.Progpow.DurationLimit = params.LocalDurationLimit
-			cfg.Progpow.GasCeil = params.LocalGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.LocalDurationLimit
+			cfg.PowConfig.GasCeil = params.LocalGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		case params.DevName:
-			cfg.Progpow.DurationLimit = params.DurationLimit
-			cfg.Progpow.GasCeil = params.LocalGasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.LocalGasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultLocalGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		default:
-			cfg.Progpow.DurationLimit = params.DurationLimit
-			cfg.Progpow.GasCeil = params.GasCeil
-			cfg.Progpow.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
+			cfg.PowConfig.DurationLimit = params.DurationLimit
+			cfg.PowConfig.GasCeil = params.GasCeil
+			cfg.PowConfig.MinDifficulty = new(big.Int).Div(core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine, cfg.GenesisNonce, cfg.GenesisExtra).Difficulty, common.Big2)
 		}
 	}
 }
@@ -1557,10 +1556,10 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 		cfg.Genesis.AllocHash = params.AllocHash
 	}
 	if nodeLocation.Equal(common.Location{0, 0}) {
-		cfg.GenesisAllocs, err = genallocs.VerifyGenesisAllocs("cmd/genallocs/genesis_alloc.json", cfg.Genesis.AllocHash)
+		cfg.GenesisAllocs, err = params.VerifyGenesisAllocs("cmd/genallocs/genesis_alloc.json", cfg.Genesis.AllocHash)
 		if err != nil {
 			if viper.GetString(EnvironmentFlag.Name) == params.LighthouseName {
-				cfg.GenesisAllocs = []genallocs.GenesisAccount{}
+				cfg.GenesisAllocs = []params.GenesisAccount{}
 			} else {
 				log.Global.WithField("err", err).Fatal("Unable to allocate genesis accounts")
 			}

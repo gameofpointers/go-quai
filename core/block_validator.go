@@ -90,8 +90,7 @@ func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 		}
 	} else {
 		// Header validity is known at this point, check the uncles and transactions
-		engine := v.getEngineForHeader(block.WorkObjectHeader())
-		if err := engine.VerifyUncles(v.hc, block); err != nil {
+		if err := v.hc.VerifyUncles(block); err != nil {
 			return err
 		}
 		if hash := types.CalcUncleHash(block.Uncles()); hash != header.UncleHash() {
@@ -200,8 +199,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 	var err error
 	powhash, exists := v.hc.powHashCache.Peek(wo.Hash())
 	if !exists {
-		engine := v.getEngineForHeader(wo.WorkObjectHeader())
-		powhash, err = engine.VerifySeal(wo.WorkObjectHeader())
+		powhash, err = v.hc.VerifySeal(wo.WorkObjectHeader())
 		if err != nil {
 			return pubsub.ValidationReject
 		}
@@ -218,8 +216,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 
 	currentHeaderPowHash, exists := v.hc.powHashCache.Peek(currentHeaderHash)
 	if !exists {
-		engine := v.getEngineForHeader(currentHeader.WorkObjectHeader())
-		currentHeaderPowHash, err = engine.VerifySeal(currentHeader.WorkObjectHeader())
+		currentHeaderPowHash, err = v.hc.VerifySeal(currentHeader.WorkObjectHeader())
 		if err != nil {
 			return pubsub.ValidationReject
 		}
@@ -245,8 +242,7 @@ func (v *BlockValidator) ApplyPoWFilter(wo *types.WorkObject) pubsub.ValidationR
 	}
 
 	// Quickly validate the header and propagate the block if it passes
-	engine := v.getEngineForHeader(wo.WorkObjectHeader())
-	err = engine.VerifyHeader(v.hc, wo)
+	err = v.hc.VerifyHeader(wo)
 
 	// Including the ErrUnknownAncestor as well because a filter has already
 	// been applied for all the blocks that come until here. Since there
