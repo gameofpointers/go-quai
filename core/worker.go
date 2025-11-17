@@ -52,6 +52,8 @@ const (
 	chainSideChanSize = 10
 
 	c_uncleCacheSize = 100
+
+	c_auxpowCacheKeySize = 33
 )
 
 // environment is the worker's current environment and holds all
@@ -177,7 +179,7 @@ type worker struct {
 	workerDb ethdb.Database
 
 	pendingBlockBody *lru.Cache[common.Hash, types.WorkObject]
-	pendingAuxPow    *lru.Cache[[33]byte, types.AuxPow] // key is sealhash + powid
+	pendingAuxPow    *lru.Cache[[c_auxpowCacheKeySize]byte, types.AuxPow] // key is sealhash + powid
 
 	snapshotMu    sync.RWMutex // The lock used to protect the snapshots below
 	snapshotBlock *types.WorkObject
@@ -269,7 +271,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 	phBodyCache, _ := lru.New[common.Hash, types.WorkObject](pendingBlockBodyLimit)
 	worker.pendingBlockBody = phBodyCache
 
-	auxPowCache, _ := lru.New[[33]byte, types.AuxPow](1000)
+	auxPowCache, _ := lru.New[[c_auxpowCacheKeySize]byte, types.AuxPow](1000)
 	worker.pendingAuxPow = auxPowCache
 
 	// Sanitize recommit interval if the user-specified one is too short.
@@ -2524,7 +2526,7 @@ func (w *worker) AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxpo
 	if w.hc.NodeCtx() == common.ZONE_CTX && powId != types.Progpow {
 		// Since auxpow can be unique per powid, we need to be able to map one sealhash to multiple auxpows
 		key := append(sealHash.Bytes(), byte(powId))
-		w.pendingAuxPow.Add([33]byte(key), *auxpow)
+		w.pendingAuxPow.Add([c_auxpowCacheKeySize]byte(key), *auxpow)
 	}
 }
 
@@ -2535,7 +2537,7 @@ func (w *worker) GetPendingBlockBody(powId types.PowID, sealHash common.Hash) (*
 		if w.hc.NodeCtx() == common.ZONE_CTX && powId != types.Progpow {
 			// Since auxpow can be unique per powid, we need to be able to map one sealhash to multiple auxpows
 			key := append(sealHash.Bytes(), byte(powId))
-			auxpow, ok := w.pendingAuxPow.Peek([33]byte(key))
+			auxpow, ok := w.pendingAuxPow.Peek([c_auxpowCacheKeySize]byte(key))
 			if ok {
 				body.WorkObjectHeader().SetAuxPow(&auxpow)
 			}
