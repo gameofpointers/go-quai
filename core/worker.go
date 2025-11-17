@@ -2552,16 +2552,6 @@ func (w *worker) SubscribeAsyncPendingHeader(ch chan *types.WorkObject) event.Su
 	return w.scope.Track(w.asyncPhFeed.Subscribe(ch))
 }
 
-// copyReceipts makes a deep copy of the given receipts.
-func copyReceipts(receipts []*types.Receipt) []*types.Receipt {
-	result := make([]*types.Receipt, len(receipts))
-	for i, l := range receipts {
-		cpy := *l
-		result[i] = &cpy
-	}
-	return result
-}
-
 // totalFees computes total consumed miner fees in ETH. Block transactions and receipts have to have the same order.
 func totalFees(block *types.WorkObject, receipts []*types.Receipt) *big.Float {
 	feesWei := new(big.Int)
