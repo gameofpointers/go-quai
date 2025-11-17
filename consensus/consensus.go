@@ -28,7 +28,6 @@ import (
 const (
 	// staleThreshold is the maximum depth of the acceptable stale but valid solution.
 	StaleThreshold = 7
-	MantBits       = 64
 )
 
 // Various error messages to mark blocks invalid. These should be private to

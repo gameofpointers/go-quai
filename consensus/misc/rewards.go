@@ -6,10 +6,8 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/math"
-	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
-	"modernc.org/mathutil"
 )
 
 func CalculateReward(header *types.WorkObjectHeader, difficulty *big.Int, exchangeRate *big.Int) *big.Int {
@@ -114,7 +112,7 @@ func CalculateKQuai(parentExchangeRate *big.Int, minerDifficulty *big.Int, block
 
 	// Calculate log of the difficulty
 	d1 := new(big.Int).Mul(common.Big2e64, minerDifficulty)
-	d2 := LogBig(minerDifficulty)
+	d2 := common.LogBig(minerDifficulty)
 
 	// k_quai += alpha * (x_b_star / x_d - 1) * k_quai
 	// k_quai = k_quai + alpha * (x_b_star / x_d - 1) * k_quai
@@ -164,7 +162,7 @@ func CalculateQuaiReward(header *types.WorkObjectHeader, difficulty *big.Int, ex
 	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 		difficulty = KawPowEquivalentDifficulty(header, difficulty)
 	}
-	numerator := new(big.Int).Mul(exchangeRate, LogBig(difficulty))
+	numerator := new(big.Int).Mul(exchangeRate, common.LogBig(difficulty))
 	reward := new(big.Int).Quo(numerator, common.Big2e64)
 	if reward.Cmp(common.Big0) == 0 {
 		reward = big.NewInt(1)
@@ -238,13 +236,4 @@ func FindMinDenominations(reward *big.Int) map[uint8]uint64 {
 		}
 	}
 	return denominationCount
-}
-
-// IntrinsicLogEntropy returns the logarithm of the intrinsic entropy reduction of a PoW hash
-func LogBig(diff *big.Int) *big.Int {
-	diffCopy := new(big.Int).Set(diff)
-	c, m := mathutil.BinaryLog(diffCopy, consensus.MantBits)
-	bigBits := new(big.Int).Mul(big.NewInt(int64(c)), new(big.Int).Exp(big.NewInt(2), big.NewInt(consensus.MantBits), nil))
-	bigBits = new(big.Int).Add(bigBits, m)
-	return bigBits
 }
