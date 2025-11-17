@@ -425,36 +425,29 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 				var powHash common.Hash
 				var workShareTarget *big.Int
+				var shareDiff, currentHeaderShareDiff, thresholdShareDiff *big.Int
 				if block.WorkObject.AuxPow().PowID() == types.Scrypt {
 					workShareTarget = new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty())
 					powHash = block.WorkObject.AuxPow().Header().PowHash()
-					shareDiff := block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
-					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
-					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
-					if shareDiff.Cmp(thresholdShareDiff) < 0 {
-						backend.Logger().WithFields(log.Fields{
-							"peer":               id,
-							"workshareDiff":      shareDiff,
-							"currentHeaderDiff":  currentHeaderShareDiff,
-							"shareDiffThreshold": thresholdShareDiff,
-						}).Warn("Scrypt workshare difficulty is too high")
-						return pubsub.ValidationReject
-					}
+					shareDiff = block.WorkObject.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+					currentHeaderShareDiff = currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+					thresholdShareDiff = new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
 				} else {
 					workShareTarget = new(big.Int).Div(common.Big2e256, block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty())
 					powHash = block.WorkObject.AuxPow().Header().PowHash()
-					shareDiff := block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
-					currentHeaderShareDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
-					thresholdShareDiff := new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
-					if shareDiff.Cmp(thresholdShareDiff) < 0 {
-						backend.Logger().WithFields(log.Fields{
-							"peer":               id,
-							"workshareDiff":      shareDiff,
-							"currentHeaderDiff":  currentHeaderShareDiff,
-							"shareDiffThreshold": thresholdShareDiff,
-						}).Warn("Sha workshare difficulty is too high")
-						return pubsub.ValidationReject
-					}
+					shareDiff = block.WorkObject.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+					currentHeaderShareDiff = currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+					thresholdShareDiff = new(big.Int).Div(new(big.Int).Mul(currentHeaderShareDiff, params.ShareDiffRelativeThreshold), big.NewInt(100))
+				}
+
+				if shareDiff.Cmp(thresholdShareDiff) < 0 {
+					backend.Logger().WithFields(log.Fields{
+						"peer":               id,
+						"workshareDiff":      shareDiff,
+						"currentHeaderDiff":  currentHeaderShareDiff,
+						"shareDiffThreshold": thresholdShareDiff,
+					}).Warn("workshare difficulty is too high")
+					return pubsub.ValidationReject
 				}
 
 				powHashBigInt := new(big.Int).SetBytes(powHash.Bytes())
