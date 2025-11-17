@@ -228,6 +228,10 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 			if err != nil {
 				workShare = true
 			}
+			_, err = hc.ComputePowHash(uncle)
+			if err != nil {
+				return err
+			}
 		} else {
 			validity := hc.UncleWorkShareClassification(uncle)
 			switch validity {
