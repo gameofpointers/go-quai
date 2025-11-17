@@ -138,12 +138,6 @@ func (v *BlockValidator) SanityCheckWorkObjectBlockViewBody(wo *types.WorkObject
 	if err := v.hc.CheckPowIdValidity(wo.WorkObjectHeader()); err != nil {
 		return err
 	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ShaDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil sha diff and count after kawpow activation")
-	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ScryptDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil scrypt diff and count after kawpow activation")
-	}
 
 	nodeCtx := v.config.Location.Context()
 	header := wo.Header()
@@ -275,12 +269,6 @@ func (v *BlockValidator) SanityCheckWorkObjectHeaderViewBody(wo *types.WorkObjec
 	if err := v.hc.CheckPowIdValidity(wo.WorkObjectHeader()); err != nil {
 		return err
 	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ShaDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil sha diff and count after kawpow activation")
-	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ScryptDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil scrypt diff and count after kawpow activation")
-	}
 
 	header := wo.Header()
 	nodeCtx := v.config.Location.Context()
@@ -345,12 +333,6 @@ func (v *BlockValidator) SanityCheckWorkObjectShareViewBody(wo *types.WorkObject
 	}
 	if err := v.hc.CheckPowIdValidityForWorkshare(wo.WorkObjectHeader()); err != nil {
 		return err
-	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ShaDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil sha diff and count after kawpow activation")
-	}
-	if wo.WorkObjectHeader().KawpowActivationHappened() && wo.WorkObjectHeader().ScryptDiffAndCount() == nil {
-		return fmt.Errorf("work object header has nil scrypt diff and count after kawpow activation")
 	}
 	// Lockup byte for the first two months has to be zero
 	if wo.WorkObjectHeader().NumberU64() < 2*params.BlocksPerMonth && wo.WorkObjectHeader().Lock() != 0 {
