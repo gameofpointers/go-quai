@@ -1066,12 +1066,12 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 					dogeHash := common.Hash(auxTemplate.AuxPow2())
 					auxMerkleRoot = types.CreateAuxMerkleRoot(dogeHash, phCopy.SealHash())
 				}
-				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), auxMerkleRoot, uint32(auxTemplate.NTimeMask()), false)
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), auxMerkleRoot, auxTemplate.SignatureTime(), false)
 
 				merkleRoot := types.CalculateMerkleRoot(powId, coinbaseTransaction, auxTemplate.MerkleBranch())
 
 				// Create a properly configured Ravencoin header for KAWPOW mining
-				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, uint32(auxTemplate.NTimeMask()), auxTemplate.NBits(), 0, auxTemplate.Height())
+				auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, auxTemplate.SignatureTime(), auxTemplate.Bits(), 0, auxTemplate.Height())
 
 				// Dont have the actual hash of the block yet
 				auxPow := types.NewAuxPow(powId, auxHeader, auxTemplate.AuxPow2(), auxTemplate.Sigs(), auxTemplate.MerkleBranch(), coinbaseTransaction)
@@ -1079,9 +1079,9 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 				// Update the auxpow in the best pending header
 				phCopy.WorkObjectHeader().SetAuxPow(auxPow)
 
-				// Create composite cache key: hash(auxMerkleRoot || ntimeMask)
-				// This ensures each template with different ntimeMask gets its own cache entry
-				compositeKey := crypto.Keccak256Hash(auxMerkleRoot.Bytes(), common.BigToHash(big.NewInt(int64(auxTemplate.NTimeMask()))).Bytes())
+				// Create composite cache key: hash(auxMerkleRoot || signatureTime)
+				// This ensures each template with different signatureTime gets its own cache entry
+				compositeKey := crypto.Keccak256Hash(auxMerkleRoot.Bytes(), common.BigToHash(big.NewInt(int64(auxTemplate.SignatureTime()))).Bytes())
 
 				// Update the pending block body cache with the populated AuxPow
 				// This ensures SubmitBlock can retrieve the complete AuxPow including merkle branch

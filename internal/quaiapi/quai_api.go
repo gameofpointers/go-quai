@@ -2117,14 +2117,14 @@ func (s *PublicBlockChainQuaiAPI) SubmitAuxTemplate(ctx context.Context, templat
 	s.b.Logger().WithFields(log.Fields{
 		"powID":          auxTemplate.PowID(),
 		"height":         auxTemplate.Height(),
-		"nBits":          fmt.Sprintf("0x%08x", auxTemplate.NBits()),
+		"nBits":          fmt.Sprintf("0x%08x", auxTemplate.Bits()),
 		"prevHash":       fmt.Sprintf("%x", auxTemplate.PrevHash()),
 		"auxPow2":        hex.EncodeToString(auxTemplate.AuxPow2()),
 		"messageHash":    messageHashHex,
 		"signature":      hex.EncodeToString(auxTemplate.Sigs()),
 		"merkleBranch":   merkleBranch,
 		"version":        auxTemplate.Version(),
-		"ntimeMask":      auxTemplate.NTimeMask(),
+		"signatureTime":  auxTemplate.SignatureTime(),
 		"coinbaseOutLen": len(auxTemplate.CoinbaseOut()),
 		"coinbaseOut":    hex.EncodeToString(auxTemplate.CoinbaseOut()),
 	}).Info("✅ Received signed AuxTemplate with valid Signature")

@@ -171,7 +171,7 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, Id string, topic s
 		backend.Logger().WithFields(log.Fields{
 			"message id": Id,
 			"chainID":    data.PowID(),
-			"nbits":      data.NBits(),
+			"nbits":      data.Bits(),
 		}).Info("Received an aux template broadcast")
 
 		if backend.NodeCtx() == common.ZONE_CTX && backend.ProcessingState() {

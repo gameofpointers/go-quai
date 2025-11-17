@@ -48,9 +48,6 @@ func (p PowID) String() string {
 	}
 }
 
-// NTimeMask represents a time mask for mining operations
-type NTimeMask uint32
-
 // AuxTemplate defines the template structure for auxiliary proof-of-work
 type AuxTemplate struct {
 	// === Consensus-correspondence (signed; Quai validators check against AuxPoW) ===
@@ -59,10 +56,10 @@ type AuxTemplate struct {
 	auxPow2  []byte
 
 	// === Header/DAA knobs for job construction (signed) ===
-	version   uint32    // header.nVersion to use
-	nBits     uint32    // header.nBits
-	nTimeMask NTimeMask // allowed time range/step (e.g., {start, end, step})
-	height    uint32    // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
+	version       uint32 // header.nVersion to use
+	bits          uint32 // header.nBits
+	signatureTime uint32 // time at which the signature was created for this aux template
+	height        uint32 // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 
 	// CoinbaseOut is the coinbase payout
 	coinbaseOut []byte // coinbase out contains the tail of the coinbase transaction including the length of the outputs
@@ -80,16 +77,16 @@ func NewAuxTemplate() *AuxTemplate {
 
 func EmptyAuxTemplate() *AuxTemplate {
 	return &AuxTemplate{
-		powID:        Kawpow,
-		prevHash:     [32]byte{},
-		auxPow2:      nil,
-		version:      536870912, // 0x20000000 (RVN)
-		nBits:        0,
-		nTimeMask:    0,
-		height:       0,
-		coinbaseOut:  []byte{},
-		merkleBranch: [][]byte{},
-		sigs:         []byte{},
+		powID:         Kawpow,
+		prevHash:      [32]byte{},
+		auxPow2:       nil,
+		version:       536870912, // 0x20000000 (RVN)
+		bits:          0,
+		signatureTime: 0,
+		height:        0,
+		coinbaseOut:   []byte{},
+		merkleBranch:  [][]byte{},
+		sigs:          []byte{},
 	}
 }
 
@@ -98,8 +95,8 @@ func (at *AuxTemplate) PowID() PowID           { return at.powID }
 func (at *AuxTemplate) PrevHash() [32]byte     { return at.prevHash }
 func (at *AuxTemplate) AuxPow2() []byte        { return at.auxPow2 }
 func (at *AuxTemplate) Version() uint32        { return at.version }
-func (at *AuxTemplate) NBits() uint32          { return at.nBits }
-func (at *AuxTemplate) NTimeMask() NTimeMask   { return at.nTimeMask }
+func (at *AuxTemplate) Bits() uint32           { return at.bits }
+func (at *AuxTemplate) SignatureTime() uint32  { return at.signatureTime }
 func (at *AuxTemplate) Height() uint32         { return at.height }
 func (at *AuxTemplate) CoinbaseOut() []byte    { return at.coinbaseOut }
 func (at *AuxTemplate) MerkleBranch() [][]byte { return at.merkleBranch }
@@ -110,8 +107,8 @@ func (at *AuxTemplate) SetPowID(id PowID)               { at.powID = id }
 func (at *AuxTemplate) SetPrevHash(hash [32]byte)       { at.prevHash = hash }
 func (at *AuxTemplate) SetAuxPow2(auxPow2 []byte)       { at.auxPow2 = auxPow2 }
 func (at *AuxTemplate) SetVersion(v uint32)             { at.version = v }
-func (at *AuxTemplate) SetNBits(bits uint32)            { at.nBits = bits }
-func (at *AuxTemplate) SetNTimeMask(mask NTimeMask)     { at.nTimeMask = mask }
+func (at *AuxTemplate) SetNBits(bits uint32)            { at.bits = bits }
+func (at *AuxTemplate) SetSignatureTime(time uint32)    { at.signatureTime = time }
 func (at *AuxTemplate) SetHeight(h uint32)              { at.height = h }
 func (at *AuxTemplate) SetCoinbaseOut(out []byte)       { at.coinbaseOut = out }
 func (at *AuxTemplate) SetMerkleBranch(branch [][]byte) { at.merkleBranch = branch }
@@ -125,8 +122,8 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 
 	powID := uint32(at.powID)
 	version := at.version
-	nbits := at.nBits
-	ntimeMask := uint32(at.nTimeMask)
+	bits := at.bits
+	signatureTime := at.signatureTime
 	height := at.height
 	coinbaseOut := at.coinbaseOut
 
@@ -135,16 +132,16 @@ func (at *AuxTemplate) ProtoEncode() *ProtoAuxTemplate {
 	copy(merkleBranch, at.merkleBranch)
 
 	return &ProtoAuxTemplate{
-		ChainId:      &powID,
-		PrevHash:     at.prevHash[:],
-		AuxPow2:      at.auxPow2,
-		Version:      &version,
-		Nbits:        &nbits,
-		NtimeMask:    &ntimeMask,
-		Height:       &height,
-		CoinbaseOut:  coinbaseOut,
-		MerkleBranch: merkleBranch,
-		Sigs:         at.Sigs(),
+		ChainId:       &powID,
+		PrevHash:      at.prevHash[:],
+		AuxPow2:       at.auxPow2,
+		Version:       &version,
+		Bits:          &bits,
+		SignatureTime: &signatureTime,
+		Height:        &height,
+		CoinbaseOut:   coinbaseOut,
+		MerkleBranch:  merkleBranch,
+		Sigs:          at.Sigs(),
 	}
 }
 
@@ -163,8 +160,8 @@ func (at *AuxTemplate) ProtoDecode(data *ProtoAuxTemplate) error {
 
 	at.auxPow2 = data.GetAuxPow2()
 	at.version = data.GetVersion()
-	at.nBits = data.GetNbits()
-	at.nTimeMask = NTimeMask(data.GetNtimeMask())
+	at.bits = data.GetBits()
+	at.signatureTime = data.GetSignatureTime()
 	at.height = data.GetHeight()
 	at.coinbaseOut = data.GetCoinbaseOut()
 
@@ -640,7 +637,7 @@ func (ap *AuxPow) ConvertToTemplate() *AuxTemplate {
 	if err != nil {
 		signatureTime = 0
 	}
-	auxTemplate.SetNTimeMask(NTimeMask(signatureTime))
+	auxTemplate.SetSignatureTime(signatureTime)
 	// Height is encoded in the script sig for non kawpow chains
 	switch ap.powID {
 	case Kawpow:

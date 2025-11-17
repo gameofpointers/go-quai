@@ -864,10 +864,10 @@ type ProtoAuxTemplate struct {
 	ChainId  *uint32 `protobuf:"varint,1,opt,name=chain_id,json=chainId,proto3,oneof" json:"chain_id,omitempty"`   // must match ap.Chain (RVN)
 	PrevHash []byte  `protobuf:"bytes,2,opt,name=prev_hash,json=prevHash,proto3,oneof" json:"prev_hash,omitempty"` // 32 bytes - must equal donor_header.hashPrevBlock
 	// === Header/DAA knobs for job construction (signed) ===
-	Version   *uint32 `protobuf:"varint,3,opt,name=version,proto3,oneof" json:"version,omitempty"`                      // header.nVersion to use
-	Nbits     *uint32 `protobuf:"varint,4,opt,name=nbits,proto3,oneof" json:"nbits,omitempty"`                          // header.nBits
-	NtimeMask *uint32 `protobuf:"varint,5,opt,name=ntime_mask,json=ntimeMask,proto3,oneof" json:"ntime_mask,omitempty"` // allowed time range/step
-	Height    *uint32 `protobuf:"varint,6,opt,name=height,proto3,oneof" json:"height,omitempty"`                        // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
+	Version       *uint32 `protobuf:"varint,3,opt,name=version,proto3,oneof" json:"version,omitempty"`                                  // header.nVersion to use
+	Bits          *uint32 `protobuf:"varint,4,opt,name=bits,proto3,oneof" json:"bits,omitempty"`                                        // header.nBits
+	SignatureTime *uint32 `protobuf:"varint,5,opt,name=signature_time,json=signatureTime,proto3,oneof" json:"signature_time,omitempty"` // time at which the aux template was signed
+	Height        *uint32 `protobuf:"varint,6,opt,name=height,proto3,oneof" json:"height,omitempty"`                                    // BIP34 height (needed for scriptSig + KAWPOW epoch hint)
 	// CoinbaseOut is the coinbase payout
 	CoinbaseOut []byte `protobuf:"bytes,7,opt,name=coinbase_out,json=coinbaseOut,proto3,oneof" json:"coinbase_out,omitempty"` // full coinbase output script (scriptPubKey)
 	// Mode B: LOCKED TX SET (miners get fees; template is larger & updated more often)
@@ -930,16 +930,16 @@ func (x *ProtoAuxTemplate) GetVersion() uint32 {
 	return 0
 }
 
-func (x *ProtoAuxTemplate) GetNbits() uint32 {
-	if x != nil && x.Nbits != nil {
-		return *x.Nbits
+func (x *ProtoAuxTemplate) GetBits() uint32 {
+	if x != nil && x.Bits != nil {
+		return *x.Bits
 	}
 	return 0
 }
 
-func (x *ProtoAuxTemplate) GetNtimeMask() uint32 {
-	if x != nil && x.NtimeMask != nil {
-		return *x.NtimeMask
+func (x *ProtoAuxTemplate) GetSignatureTime() uint32 {
+	if x != nil && x.SignatureTime != nil {
+		return *x.SignatureTime
 	}
 	return 0
 }
@@ -3506,14 +3506,13 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\f_transactionB\x11\n" +
 	"\x0f_signature_timeB\n" +
 	"\n" +
-	"\b_auxpow2\"\xc7\x03\n" +
+	"\b_auxpow2\"\xd0\x03\n" +
 	"\x10ProtoAuxTemplate\x12\x1e\n" +
 	"\bchain_id\x18\x01 \x01(\rH\x00R\achainId\x88\x01\x01\x12 \n" +
 	"\tprev_hash\x18\x02 \x01(\fH\x01R\bprevHash\x88\x01\x01\x12\x1d\n" +
-	"\aversion\x18\x03 \x01(\rH\x02R\aversion\x88\x01\x01\x12\x19\n" +
-	"\x05nbits\x18\x04 \x01(\rH\x03R\x05nbits\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"ntime_mask\x18\x05 \x01(\rH\x04R\tntimeMask\x88\x01\x01\x12\x1b\n" +
+	"\aversion\x18\x03 \x01(\rH\x02R\aversion\x88\x01\x01\x12\x17\n" +
+	"\x04bits\x18\x04 \x01(\rH\x03R\x04bits\x88\x01\x01\x12*\n" +
+	"\x0esignature_time\x18\x05 \x01(\rH\x04R\rsignatureTime\x88\x01\x01\x12\x1b\n" +
 	"\x06height\x18\x06 \x01(\rH\x05R\x06height\x88\x01\x01\x12&\n" +
 	"\fcoinbase_out\x18\a \x01(\fH\x06R\vcoinbaseOut\x88\x01\x01\x12#\n" +
 	"\rmerkle_branch\x18\b \x03(\fR\fmerkleBranch\x12\x17\n" +
@@ -3524,9 +3523,9 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\n" +
 	"_prev_hashB\n" +
 	"\n" +
-	"\b_versionB\b\n" +
-	"\x06_nbitsB\r\n" +
-	"\v_ntime_maskB\t\n" +
+	"\b_versionB\a\n" +
+	"\x05_bitsB\x11\n" +
+	"\x0f_signature_timeB\t\n" +
 	"\a_heightB\x0f\n" +
 	"\r_coinbase_outB\a\n" +
 	"\x05_sigsB\v\n" +

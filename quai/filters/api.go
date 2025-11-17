@@ -924,12 +924,11 @@ func (api *PublicFilterAPI) PendingHeader(ctx context.Context, powId types.PowID
 							// If we have an auxpow template, we need to create a proper Ravencoin header
 							if api.backend.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 
-								coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), pendingHeaderForMining.SealHash(), uint32(auxTemplate.NTimeMask()), false)
+								coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), pendingHeaderForMining.SealHash(), auxTemplate.SignatureTime(), false)
 								merkleRoot := types.CalculateMerkleRoot(powId, coinbaseTransaction, auxTemplate.MerkleBranch())
 
 								// Create a properly configured Ravencoin header for KAWPOW mining
-								auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, uint32(auxTemplate.NTimeMask()), auxTemplate.NBits(), 0, auxTemplate.Height())
-
+								auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, auxTemplate.SignatureTime(), auxTemplate.Bits(), 0, auxTemplate.Height())
 								// Dont have the actual hash of the block yet
 								auxPow := types.NewAuxPow(powId, auxHeader, auxTemplate.AuxPow2(), auxTemplate.Sigs(), auxTemplate.MerkleBranch(), coinbaseTransaction)
 

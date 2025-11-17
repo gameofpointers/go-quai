@@ -531,7 +531,7 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 			// AuxTemplate specific checks
 
-			signatureTime := auxTemplate.NTimeMask()
+			signatureTime := auxTemplate.SignatureTime()
 			backend := *g.consensus.GetBackend(topic.location)
 			if backend == nil {
 				log.Global.WithFields(log.Fields{

@@ -393,7 +393,7 @@ func (p *P2PNode) handleBroadcast(sourcePeer peer.ID, Id string, topic string, d
 		// We also don't cache it as it doesn't have a Hash() method
 		log.Global.WithFields(log.Fields{
 			"chainID": v.PowID(),
-			"nbits":   v.NBits(),
+			"nbits":   v.Bits(),
 		}).Debug("Received AuxTemplate broadcast")
 	}
 
