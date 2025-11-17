@@ -204,7 +204,6 @@ func (hc *HeaderChain) GetEngineForPowID(powID types.PowID) consensus.Engine {
 	// Engine mapping:
 	// engine[0] = Progpow
 	// engine[1] = Kawpow
-	// engine[2] = SHA256d
 	switch powID {
 	case types.Progpow:
 		if len(hc.engine) > 0 {
@@ -213,10 +212,6 @@ func (hc *HeaderChain) GetEngineForPowID(powID types.PowID) consensus.Engine {
 	case types.Kawpow:
 		if len(hc.engine) > 1 {
 			return hc.engine[1]
-		}
-	case types.SHA_BTC, types.SHA_BCH:
-		if len(hc.engine) > 2 {
-			return hc.engine[2]
 		}
 	}
 	// Default to first engine if not found
