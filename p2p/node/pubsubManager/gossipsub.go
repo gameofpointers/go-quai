@@ -537,9 +537,8 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			}
 
 			// AuxTemplate specific checks
-			// TODO: Add sanity checks for AuxTemplate
 
-			time := auxTemplate.NTimeMask()
+			signatureTime := auxTemplate.NTimeMask()
 			backend := *g.consensus.GetBackend(topic.location)
 			if backend == nil {
 				log.Global.WithFields(log.Fields{
@@ -547,13 +546,18 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				}).Error("no backend found for this location")
 			}
 
-			currentHeader := backend.CurrentHeader()
+			currentTime := uint64(time.Now().Unix())
 
-			if currentHeader.Time() > uint64(time)+params.AuxTemplateStaleTime {
+			// If the signature time is too far in the future, reject the message
+			if currentTime+params.AuxTemplateLivenessTime < uint64(signatureTime) {
 				return pubsub.ValidationReject
 			}
-			// AuxTemplate nTimeMask cannot be too far in the future
-			if currentHeader.Time() > uint64(time)+params.AuxTemplateLivenessTime {
+			// If the signature time is too old, reject the message
+			if currentTime > uint64(signatureTime)+params.AuxTemplateStaleTime {
+				return pubsub.ValidationReject
+			}
+			// If the signature time is older than the liveness time, ignore the message
+			if currentTime > uint64(signatureTime)+params.AuxTemplateLivenessTime {
 				return pubsub.ValidationIgnore
 			}
 		}

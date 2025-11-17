@@ -2580,7 +2580,17 @@ func totalFees(block *types.WorkObject, receipts []*types.Receipt) *big.Float {
 
 func (w *worker) AddAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
 	w.auxpowMu.Lock()
-	// TODO: Have criterias on picking the aux template
+	signatureTime := auxTemplate.NTimeMask()
+	oldAuxpow, exist := w.auxpowCache[auxTemplate.PowID()]
+	if exist && oldAuxpow.NTimeMask() >= signatureTime {
+		w.logger.WithFields(log.Fields{
+			"powId":            auxTemplate.PowID(),
+			"signatureTime":    signatureTime,
+			"oldSignatureTime": oldAuxpow.NTimeMask(),
+		}).Debug("Received an auxpow template with an older or equal signature time, ignoring")
+		w.auxpowMu.Unlock()
+		return nil
+	}
 	w.auxpowCache[auxTemplate.PowID()] = auxTemplate
 	w.auxpowMu.Unlock()
 	return nil
