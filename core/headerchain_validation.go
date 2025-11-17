@@ -540,6 +540,57 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 		}
 	}
 
+	// Validate the pow id is valid for this block
+	if err := hc.CheckPowIdValidity(header.WorkObjectHeader()); err != nil {
+		return err
+	}
+
+	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && header.AuxPow() != nil {
+		scryptSig := types.ExtractScriptSigFromCoinbaseTx(header.AuxPow().Transaction())
+
+		coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
+		if err != nil {
+			return fmt.Errorf("coinbase seal hash not found in the auxpow: %v", err)
+		}
+
+		switch header.AuxPow().PowID() {
+		case types.Kawpow, types.SHA_BTC, types.SHA_BCH:
+			if header.SealHash() != coinbaseSealHash {
+				return fmt.Errorf("coinbase seal hash does not match uncle seal hash, expected %v, got %v", header.SealHash(), coinbaseSealHash)
+			}
+		case types.Scrypt:
+			// Since litecoin is merged mined with dogecoin, merkle root
+			// needs to be calculated
+			dogeHash := common.Hash(header.AuxPow().AuxPow2())
+			if (dogeHash == common.Hash{}) {
+				return fmt.Errorf("auxpow2 is empty for scrypt powid")
+			}
+			auxMerkleRoot := types.CreateAuxMerkleRoot(dogeHash, header.SealHash())
+			if auxMerkleRoot != coinbaseSealHash {
+				return fmt.Errorf("coinbase seal hash does not match uncle aux merkle root, expected %v, got %v", auxMerkleRoot, coinbaseSealHash)
+			}
+			merkleSize, merkleNonce, err := types.ExtractMerkleSizeAndNonceFromCoinbase(scryptSig)
+			if err != nil {
+				return err
+			}
+			if merkleSize != params.MerkleSize {
+				return fmt.Errorf("invalid merkle size: have %v, want %v", merkleSize, params.MerkleSize)
+			}
+			if merkleNonce != params.MerkleNonce {
+				return fmt.Errorf("invalid merkle nonce: have %v, want %v", merkleNonce, params.MerkleNonce)
+			}
+		}
+		// Verify the merkle root as well
+		expectedMerkleRoot := types.CalculateMerkleRoot(header.AuxPow().PowID(), header.AuxPow().Transaction(), header.AuxPow().MerkleBranch())
+		if header.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
+			return errors.New("invalid merkle root in auxpow")
+		}
+
+		if !header.AuxPow().ConvertToTemplate().VerifySignature() {
+			return errors.New("invalid auxpow signature")
+		}
+	}
+
 	if nodeCtx == common.ZONE_CTX {
 		// check if the header coinbase is in scope
 		_, err := header.PrimaryCoinbase().InternalAddress()
@@ -643,7 +694,9 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 				return fmt.Errorf("scrypt share target must be nil before kawpow fork block")
 			}
 		}
+
 	}
+
 	// Verify that the block number is parent's +1
 	parentNumber := parent.Number(nodeCtx)
 	if hc.IsGenesisHash(parent.Hash()) {
