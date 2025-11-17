@@ -107,7 +107,7 @@ type Slice struct {
 	recomputeRequired bool
 }
 
-func NewSlice(db ethdb.Database, config *Config, powConfig params.PowConfig, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.WorkObject) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
+func NewSlice(db ethdb.Database, config *Config, powConfig params.PowConfig, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
 	nodeCtx := chainConfig.Location.Context()
 	sl := &Slice{
 		config:            chainConfig,
@@ -136,7 +136,7 @@ func NewSlice(db ethdb.Database, config *Config, powConfig params.PowConfig, txC
 		sl.txPool = NewTxPool(*txConfig, chainConfig, sl.hc, logger, sl.sliceDb)
 		sl.hc.pool = sl.txPool
 	}
-	sl.miner = New(sl.hc, sl.txPool, config, db, chainConfig, engine, isLocalBlock, sl.ProcessingState(), sl.logger)
+	sl.miner = New(sl.hc, sl.txPool, config, db, chainConfig, engine, sl.ProcessingState(), sl.logger)
 
 	pEtxRetryCache, _ := lru.New[common.Hash, pEtxRetry](c_pEtxRetryThreshold)
 	sl.pEtxRetryCache = pEtxRetryCache

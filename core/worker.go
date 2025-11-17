@@ -194,9 +194,6 @@ type worker struct {
 	// non-stop and no real transaction will be included.
 	noempty uint32
 
-	// External functions
-	isLocalBlock func(header *types.WorkObject) bool // Function used to determine whether the specified block is mined by local miner.
-
 	logger *log.Logger
 }
 
@@ -230,7 +227,7 @@ func (ra *RollingAverage) Average() time.Duration {
 	return ra.sum / time.Duration(len(ra.durations))
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Database, engine []consensus.Engine, headerchain *HeaderChain, txPool *TxPool, isLocalBlock func(header *types.WorkObject) bool, init bool, processingState bool, logger *log.Logger) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Database, engine []consensus.Engine, headerchain *HeaderChain, txPool *TxPool, init bool, processingState bool, logger *log.Logger) *worker {
 	worker := &worker{
 		config:                         config,
 		chainConfig:                    chainConfig,
@@ -240,7 +237,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		quaiCoinbase:                   config.QuaiCoinbase,
 		qiCoinbase:                     config.QiCoinbase,
 		lockupContractAddress:          config.LockupContractAddress,
-		isLocalBlock:                   isLocalBlock,
 		workerDb:                       db,
 		chainSideCh:                    make(chan ChainSideEvent, chainSideChanSize),
 		resultCh:                       make(chan *types.WorkObject, resultQueueSize),

@@ -42,12 +42,12 @@ type Miner struct {
 	logger  *log.Logger
 }
 
-func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engines []consensus.Engine, isLocalBlock func(block *types.WorkObject) bool, processingState bool, logger *log.Logger) *Miner {
+func New(hc *HeaderChain, txPool *TxPool, config *Config, db ethdb.Database, chainConfig *params.ChainConfig, engines []consensus.Engine, processingState bool, logger *log.Logger) *Miner {
 	miner := &Miner{
 		hc:      hc,
 		engines: engines,
 		startCh: make(chan []common.Address, 2),
-		worker:  newWorker(config, chainConfig, db, engines, hc, txPool, isLocalBlock, true, processingState, logger),
+		worker:  newWorker(config, chainConfig, db, engines, hc, txPool, true, processingState, logger),
 	}
 
 	miner.SetExtra(miner.MakeExtraData(config.ExtraData))

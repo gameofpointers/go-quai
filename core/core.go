@@ -90,8 +90,8 @@ type Core struct {
 	logger *log.Logger
 }
 
-func NewCore(db ethdb.Database, config *Config, powConfig params.PowConfig, isLocalBlock func(block *types.WorkObject) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
-	slice, err := NewSlice(db, config, powConfig, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, currentExpansionNumber, genesisBlock, engine, cacheConfig, vmConfig, genesis, logger)
+func NewCore(db ethdb.Database, config *Config, powConfig params.PowConfig, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, currentExpansionNumber uint8, genesisBlock *types.WorkObject, engine []consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Core, error) {
+	slice, err := NewSlice(db, config, powConfig, txConfig, txLookupLimit, chainConfig, slicesRunning, currentExpansionNumber, genesisBlock, engine, cacheConfig, vmConfig, genesis, logger)
 	if err != nil {
 		return nil, err
 	}

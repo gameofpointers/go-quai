@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
-	"slices"
 	"sync"
 	"time"
 
@@ -251,7 +250,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 
-	quai.core, err = core.NewCore(chainDb, &config.Miner, config.PowConfig, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, currentExpansionNumber, genesisBlock, quai.engine, cacheConfig, vmConfig, config.Genesis, logger)
+	quai.core, err = core.NewCore(chainDb, &config.Miner, config.PowConfig, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, currentExpansionNumber, genesisBlock, quai.engine, cacheConfig, vmConfig, config.Genesis, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -330,30 +329,6 @@ func (s *Quai) APIs() []rpc.API {
 			Service:   NewPrivateDebugAPI(s),
 		},
 	}...)
-}
-
-// isLocalBlock checks whether the specified block is mined
-// by local miner accounts.
-//
-// We regard two types of accounts as local miner account: etherbase
-// and accounts specified via `txpool.locals` flag.
-func (s *Quai) isLocalBlock(header *types.WorkObject) bool {
-	author := header.PrimaryCoinbase() // Ignore error, we're past header validation
-	// Check whether the given address is etherbase.
-	s.lock.RLock()
-	quaiBase := s.quaiCoinbase
-	qiBase := s.qiCoinbase
-	s.lock.RUnlock()
-	if author.Equal(quaiBase) || author.Equal(qiBase) {
-		return true
-	}
-	internal, err := author.InternalAddress()
-	if err != nil {
-		s.logger.WithField("err", err).Error("Failed to retrieve author internal address")
-	}
-	// Check whether the given address is specified by `txpool.local`
-	// CLI flag.
-	return slices.Contains(s.config.TxPool.Locals, internal)
 }
 
 func (s *Quai) Core() *core.Core         { return s.core }
