@@ -277,11 +277,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	return quai, nil
 }
 
-// getEngineForHeader returns the consensus engine for the given header
-func (s *Quai) getEngineForHeader(header *types.WorkObjectHeader) consensus.Engine {
-	return s.core.GetEngineForHeader(header)
-}
-
 // APIs return the collection of RPC services the go-quai package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Quai) APIs() []rpc.API {
