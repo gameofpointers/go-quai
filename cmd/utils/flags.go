@@ -1556,7 +1556,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 		cfg.Genesis.AllocHash = params.AllocHash
 	}
 	if nodeLocation.Equal(common.Location{0, 0}) {
-		cfg.GenesisAllocs, err = params.VerifyGenesisAllocs("cmd/genallocs/genesis_alloc.json", cfg.Genesis.AllocHash)
+		cfg.GenesisAllocs, err = params.VerifyGenesisAllocs("params/genesis_alloc.json", cfg.Genesis.AllocHash)
 		if err != nil {
 			if viper.GetString(EnvironmentFlag.Name) == params.LighthouseName {
 				cfg.GenesisAllocs = []params.GenesisAccount{}

@@ -98,3 +98,7 @@ func (blake3pow *Blake3pow) SetThreads(threads int) {
 func (blake3pow *Blake3pow) ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error) {
 	return header.Hash(), nil
 }
+
+func (blake3pow *Blake3pow) ComputePowLight(header *types.WorkObjectHeader) (common.Hash, common.Hash) {
+	return common.Hash{}, common.Hash{}
+}

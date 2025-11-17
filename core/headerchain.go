@@ -377,8 +377,8 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 }
 
 // WorkshareAllocation computes the number of shares available per algorithm
-func (hc *HeaderChain) CalculateShareTarget(parent *types.WorkObject) (nonKawpowShares *big.Int) {
-	if parent.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
+func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (nonKawpowShares *big.Int) {
+	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		return params.TargetShaShares
 	}
 

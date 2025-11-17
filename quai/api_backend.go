@@ -856,8 +856,8 @@ func (b *QuaiAPIBackend) CalculatePowDiffAndCount(parent *types.WorkObject, head
 	return b.quai.core.CalculatePowDiffAndCount(parent, header, powId)
 }
 
-func (b *QuaiAPIBackend) CalculateShareTarget(wo *types.WorkObject) *big.Int {
-	return b.quai.core.CalculateShareTarget(wo)
+func (b *QuaiAPIBackend) CalculateShareTarget(parent, wo *types.WorkObject) *big.Int {
+	return b.quai.core.CalculateShareTarget(parent, wo)
 }
 
 func (b *QuaiAPIBackend) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int) {

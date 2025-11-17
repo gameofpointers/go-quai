@@ -1365,8 +1365,8 @@ func (c *Core) CheckPowIdValidityForWorkshare(header *types.WorkObjectHeader) er
 	return c.sl.hc.CheckPowIdValidityForWorkshare(header)
 }
 
-func (c *Core) CalculateShareTarget(wo *types.WorkObject) *big.Int {
-	return c.sl.hc.CalculateShareTarget(wo)
+func (c *Core) CalculateShareTarget(parent, wo *types.WorkObject) *big.Int {
+	return c.sl.hc.CalculateShareTarget(parent, wo)
 }
 
 func (c *Core) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (*big.Int, *big.Int) {

@@ -347,11 +347,11 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 				if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 					_, realizedShaShares := hc.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
 					if uncle.ShaDiffAndCount().Count().Cmp(realizedShaShares) != 0 {
-						return fmt.Errorf("invalid sha share target: have %v, want %v", uncle.ShaDiffAndCount().Count(), realizedShaShares)
+						return fmt.Errorf("invalid sha share count : have %v, want %v", uncle.ShaDiffAndCount().Count(), realizedShaShares)
 					}
 					_, realizedScryptShares := hc.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
 					if uncle.ScryptDiffAndCount().Count().Cmp(realizedScryptShares) != 0 {
-						return fmt.Errorf("invalid scrypt share target: have %v, want %v", uncle.ScryptDiffAndCount().Count(), realizedScryptShares)
+						return fmt.Errorf("invalid scrypt share count : have %v, want %v", uncle.ScryptDiffAndCount().Count(), realizedScryptShares)
 					}
 				}
 			}
@@ -623,11 +623,11 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 			}
 		}
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-			shaShareTarget := hc.CalculateShareTarget(header)
+			shaShareTarget := hc.CalculateShareTarget(parent, header)
 			if header.WorkObjectHeader().ShaShareTarget().Cmp(shaShareTarget) != 0 {
-				return fmt.Errorf("invalid sha share target: have %v, want %v", header.WorkObjectHeader().ShaShareTarget(), shaShareTarget)
+				return fmt.Errorf(": have %v, want %v", header.WorkObjectHeader().ShaShareTarget(), shaShareTarget)
 			}
-			scryptShareTarget := hc.CalculateShareTarget(header)
+			scryptShareTarget := hc.CalculateShareTarget(parent, header)
 			if header.WorkObjectHeader().ScryptShareTarget().Cmp(scryptShareTarget) != 0 {
 				return fmt.Errorf("invalid scrypt share target: have %v, want %v", header.WorkObjectHeader().ScryptShareTarget(), scryptShareTarget)
 			}

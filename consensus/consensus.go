@@ -61,6 +61,8 @@ type Engine interface {
 	// ComputePowHash returns the pow hash of the workobject header
 	ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error)
 
+	ComputePowLight(header *types.WorkObjectHeader) (common.Hash, common.Hash)
+
 	SetThreads(threads int)
 }
 
