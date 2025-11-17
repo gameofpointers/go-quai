@@ -31,7 +31,7 @@ const (
 	msgChanSize                = 500 // 500 requests per subscription
 	c_MaxWorkShareDist         = 5
 	c_BroadcastCacheSize       = 1000
-	c_BroadcastCacheExpiryTime = 20 * time.Second
+	c_BroadcastCacheExpiryTime = 3 * time.Second
 )
 
 var (
@@ -549,6 +549,9 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 			currentHeader := backend.CurrentHeader()
 
+			if currentHeader.Time() > uint64(time)+params.AuxTemplateStaleTime {
+				return pubsub.ValidationReject
+			}
 			// AuxTemplate nTimeMask cannot be too far in the future
 			if currentHeader.Time() > uint64(time)+params.AuxTemplateLivenessTime {
 				return pubsub.ValidationIgnore

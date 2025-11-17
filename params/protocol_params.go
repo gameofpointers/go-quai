@@ -20,6 +20,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
 )
@@ -262,6 +263,7 @@ var (
 	KawPowTransitionPeriod     uint64 = 10 // Number of blocks over which the transition happens
 	TotalPowEngines            uint64 = 2  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
+	AuxTemplateStaleTime       uint64 = uint64(10 * time.Minute)
 	ShareLivenessTime          uint32 = 20             // The time in seconds that a share is considered live for the purposes of inclusion in the block reward calculation
 	ShareDiffRelativeThreshold        = big.NewInt(90) // 90% of the current header diff
 	GammaInverse                      = big.NewInt(1)
