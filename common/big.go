@@ -106,19 +106,6 @@ func IntrinsicLogEntropy(powHash Hash) *big.Int {
 	return bigBits
 }
 
-// GetTarget converts the quai difficulty to the target used in the bitcoin
-// style which has leading zeros, and 3 bytes of mantissa, then zeros
-func GetTarget(diff *big.Int) *big.Int {
-	target := new(big.Int).Div(new(big.Int).Lsh(big.NewInt(1), 256), diff)
-
-	// Convert to Bitcoin compact form using btcd's BigToCompact
-	compact := blockchain.BigToCompact(target)
-	// Conver back to the target to get the full 256-bit target
-	target = new(big.Int).Set(blockchain.CompactToBig(compact))
-
-	return target
-}
-
 // GetDifficultyFromBits calculates the quai difficulty from the given bits
 func GetDifficultyFromBits(bits uint32) *big.Int {
 	// Conert to Big from compact
@@ -131,7 +118,14 @@ func GetDifficultyFromBits(bits uint32) *big.Int {
 
 // GetTargetInHex calculates the target from the given quai difficulty
 func GetTargetInHex(diff *big.Int) string {
-	target := GetTarget(diff)
+
+	target := new(big.Int).Div(new(big.Int).Lsh(big.NewInt(1), 256), diff)
+
+	// Convert to Bitcoin compact form using btcd's BigToCompact
+	compact := blockchain.BigToCompact(target)
+	// Conver back to the target to get the full 256-bit target
+	target = new(big.Int).Set(blockchain.CompactToBig(compact))
+
 	// Return as 64-character hex string (padded with leading zeros)
 	return fmt.Sprintf("%064x", target)
 }
