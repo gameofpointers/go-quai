@@ -701,7 +701,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 					if uncle.NumberU64() == targetBlockNumber {
 						_, err := w.hc.VerifySeal(uncle)
 						if err != nil {
-							uncleEntropy, err = w.hc.IntrinsicLogEntropy(uncle)
+							uncleEntropy, err = w.hc.HeaderIntrinsicLogEntropy(uncle)
 							if err != nil {
 								return nil, err
 							}

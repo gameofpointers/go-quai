@@ -298,7 +298,7 @@ func (hc *HeaderChain) WorkShareLogEntropy(wo *types.WorkObject) (*big.Int, erro
 		} else {
 			bigBitsTotalShares = big.NewInt(0)
 		}
-		bigBitsIntrinsic, err := hc.IntrinsicLogEntropy(wo.WorkObjectHeader())
+		bigBitsIntrinsic, err := hc.HeaderIntrinsicLogEntropy(wo.WorkObjectHeader())
 		if err != nil {
 			return big.NewInt(0), err
 		}
@@ -331,7 +331,7 @@ func (hc *HeaderChain) UncledLogEntropy(block *types.WorkObject) *big.Int {
 	return totalUncledLogS
 }
 
-func (hc *HeaderChain) IntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int, error) {
+func (hc *HeaderChain) HeaderIntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int, error) {
 	// If auxpow is not nil and its not kawpow or progpow, we need to compute it directly as
 	// we dont have engine interface for sha and scrypt
 	if ws.AuxPow() == nil || ws.AuxPow().PowID() <= types.Kawpow {

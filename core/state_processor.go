@@ -1148,7 +1148,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 				if uncle.NumberU64() == targetBlockNumber {
 					_, err := p.hc.VerifySeal(uncle)
 					if err != nil {
-						uncleEntropy, err = p.hc.IntrinsicLogEntropy(uncle)
+						uncleEntropy, err = p.hc.HeaderIntrinsicLogEntropy(uncle)
 						if err != nil {
 							return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute intrinsic log entropy for the workshare")
 						}
