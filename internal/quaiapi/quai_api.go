@@ -1114,13 +1114,11 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 
 // BlockTemplateRequest represents a getblocktemplate request
 type BlockTemplateRequest struct {
-	Mode         string                  `json:"mode,omitempty"`
-	Capabilities []string                `json:"capabilities,omitempty"`
-	Rules        []string                `json:"rules,omitempty"`       // "kawpow", "sha", "scrypt"
-	ExtraNonce1  string                  `json:"extranonce1,omitempty"` // 4 byte hex string
-	ExtraNonce2  string                  `json:"extranonce2,omitempty"` // 8 byte hex string
-	ExtraData    string                  `json:"extradata,omitempty"`   // string less than 30 bytes
-	Coinbase     common.MixedcaseAddress `json:"coinbase,omitempty"`
+	Rules       []string                `json:"rules,omitempty"`       // "kawpow", "sha", "scrypt"
+	ExtraNonce1 string                  `json:"extranonce1,omitempty"` // 4 byte hex string
+	ExtraNonce2 string                  `json:"extranonce2,omitempty"` // 8 byte hex string
+	ExtraData   string                  `json:"extradata,omitempty"`   // string less than 30 bytes
+	Coinbase    common.MixedcaseAddress `json:"coinbase,omitempty"`
 }
 
 // GetBlockTemplate retrieves a new block template to mine
