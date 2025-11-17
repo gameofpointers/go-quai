@@ -188,8 +188,8 @@ func (at *AuxTemplate) Hash() [32]byte {
 	tempTemplate := proto.Clone(protoTemplate).(*ProtoAuxTemplate)
 	tempTemplate.Sigs = nil
 
-	// Since for chains other than ravencoin, version can be grinded for mining,
-	// need to mask them before signing
+	// Since sha chains allow asic boost need to mask them before signing in the
+	// case of sha chains
 	versionMask := uint32(0xE0000000)
 	switch at.powID {
 	case SHA_BTC, SHA_BCH:
