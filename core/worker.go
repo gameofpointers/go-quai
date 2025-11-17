@@ -2466,9 +2466,6 @@ func (w *worker) FinalizeAssemble(newWo *types.WorkObject, parent *types.WorkObj
 
 	// Once the uncles list is assembled in the block
 	if nodeCtx == common.ZONE_CTX {
-		// TODO: uncled entropy should be part of something else now because,
-		// consensus doesnt have access to other pow engines, since we can have
-		// many different kinds of workshares
 		wo.Header().SetUncledEntropy(w.hc.UncledLogEntropy(wo))
 	}
 
