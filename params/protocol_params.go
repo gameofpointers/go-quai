@@ -296,6 +296,10 @@ var (
 	// MerkleNonce, MerkleSize is used for the auxpow2
 	MerkleNonce uint32 = 0
 	MerkleSize  uint32 = 2
+
+	UnlivelySharePenalty      = big.NewInt(90) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to being stale
+	ProgpowPenalty            = big.NewInt(80) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to share being progpow after the fork
+	ShareRewardPenaltyDivisor = big.NewInt(100)
 )
 
 const (

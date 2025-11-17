@@ -1213,9 +1213,6 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 				shareReward = new(big.Int).Mul(blockRewardAtTargetBlock, entropyOfSharesAtTargetBlockDepth[i])
 				shareReward = new(big.Int).Div(shareReward, totalEntropy)
-				if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
-					return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("share reward cannot be greater than the total block reward")
-				}
 			} else {
 
 				shareReward = new(big.Int).Set(rewardPerShare)
@@ -1234,16 +1231,16 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 				// If mining progpow after the fork, 20% is deducted from the
 				// expectation
 				if share.AuxPow() == nil {
-					shareReward = new(big.Int).Mul(shareReward, big.NewInt(80))
-					shareReward = new(big.Int).Div(shareReward, big.NewInt(100))
+					shareReward = new(big.Int).Mul(shareReward, params.ProgpowPenalty)
+					shareReward = new(big.Int).Div(shareReward, params.ShareRewardPenaltyDivisor)
 				} else {
 					// If the share hash unlively template, 10% is deducted from
 					// the expectation
 					scritSig := types.ExtractScriptSigFromCoinbaseTx(share.AuxPow().Transaction())
 					signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scritSig)
 					if err != nil || signatureTime+params.ShareLivenessTime < uint32(targetBlock.Time()) {
-						shareReward = new(big.Int).Mul(shareReward, big.NewInt(90))
-						shareReward = new(big.Int).Div(shareReward, big.NewInt(100))
+						shareReward = new(big.Int).Mul(shareReward, params.UnlivelySharePenalty)
+						shareReward = new(big.Int).Div(shareReward, params.ShareRewardPenaltyDivisor)
 					}
 				}
 
