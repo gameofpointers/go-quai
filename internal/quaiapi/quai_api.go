@@ -1013,10 +1013,9 @@ func RPCMarshalBlock(backend Backend, block *types.WorkObject, inclTx bool, full
 	fields["size"] = hexutil.Uint64(block.Size())
 	_, order, err := backend.CalcOrder(block)
 	if err != nil {
-		fields["order"] = common.ZONE_CTX
-	} else {
-		fields["order"] = order
+		return nil, err
 	}
+	fields["order"] = order
 
 	if inclTx {
 		formatTx := func(tx *types.Transaction) (interface{}, error) {
