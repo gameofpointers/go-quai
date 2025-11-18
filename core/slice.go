@@ -191,6 +191,10 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 		return nil, nil
 	}
 
+	if header.NumberU64(common.ZONE_CTX) > sl.hc.CurrentHeader().NumberU64(common.ZONE_CTX)+c_zoneHorizonThreshold {
+		return nil, ErrSubNotSyncedToDom
+	}
+
 	// Only print in Info level if block is c_startingPrintLimit behind or less
 	if sl.CurrentInfo(header) {
 		sl.logger.WithFields(log.Fields{
