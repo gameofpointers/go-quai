@@ -74,7 +74,9 @@ specific payout account (subject to scope validation for the node's location).
     "sigoplimit": 80000,
     "sizelimit": 1000000,
     "target": "000000674a1f0000000000000000000000000000000000000000000000000000",
-    "version": 805306368
+    "version": 805306368,
+    "quairoot": "12abd412abd4",
+    "quaiheight": 1234,
   }
 }
 ```
@@ -99,6 +101,8 @@ specific payout account (subject to scope validation for the node's location).
 | `sizelimit` | number | Maximum serialized block size. |
 | `target` | string | Full 256-bit target corresponding to `bits`. |
 | `version` | number | Block header version to use. First byte of version cannot be changed, last three bytes can be changed in compliance with bip320 (i.e asicboost). |
+| `quairoot` | string | first 6 bytes of the sealhash without the time, so everytime this changes, new job needs to be sent to the miner|
+| `quaiheight` | number | uint64 encoding of the quai zone chain |
 
 `bits`, `height`, `previousblockhash`, `coinb1`, `coinb2` from byte 31 till end and first byte of `version` are signed donor-chain data.
 Changing them will result in an invalid block.

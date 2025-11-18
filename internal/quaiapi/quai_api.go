@@ -1306,6 +1306,11 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		targetHex = targetHex[2:]
 	}
 
+	// set the pendingheader time to empty
+	woCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
+	woCopy.SetTime(0)
+	sealHashString := hex.EncodeToString(wo.SealHash().Bytes()[:6])
+
 	return map[string]interface{}{
 		"version":           auxHeader.Version(),
 		"previousblockhash": prevBlockHex,
@@ -1326,6 +1331,8 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		"coinb2":                      hex.EncodeToString(coinb2),
 		"merklebranch":                merkleBranch,
 		"merkleroot":                  hex.EncodeToString(common.Hash(merkleRoot).Reverse().Bytes()),
+		"quairoot":                    sealHashString,
+		"quaiheight":                  wo.WorkObjectHeader().NumberU64(),
 	}, nil
 }
 
