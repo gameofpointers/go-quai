@@ -20,7 +20,9 @@ func CalculateBetaFromMiningChoiceAndConversions(hc *HeaderChain, block *types.W
 
 	// Apply KQuai changes based on the table
 	currentBlock := block.NumberU64(common.PRIME_CTX)
-	if currentBlock < params.KQuaiChangeBlock {
+	// Before the KawPow fork, the exchange rate is reduced based on the
+	// KQuaiChangeTable and held for the KQuaiChangeHoldInterval
+	if currentBlock < params.KawPowForkBlock {
 		for _, entry := range params.KQuaiChangeTable {
 			blockNumber := entry[0]
 			reductionPercent := entry[1]
