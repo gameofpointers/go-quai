@@ -87,6 +87,14 @@ func (s *PublicQuaiAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 	return (*hexutil.Big)(blockBaseFee), nil
 }
 
+func (s *PublicQuaiAPI) ClientVersion() string {
+	gitCommit := params.GitCommit
+	if len(gitCommit) > 8 {
+		gitCommit = gitCommit[:8]
+	}
+	return "go-quai/" + params.Version.Full() + "-" + gitCommit
+}
+
 // PublicBlockChainQuaiAPI provides an API to access the Quai blockchain.
 // It offers only methods that operate on public data that is freely available to anyone.
 type PublicBlockChainQuaiAPI struct {
