@@ -60,6 +60,10 @@ func NewRavencoinBlockHeader(version int32, prevBlockHash [32]byte, merkleRootHa
 
 // GetKAWPOWHeaderHash returns the header hash for KAWPOW input
 // This excludes nNonce64 and mixHash, following Ravencoin's CKAWPOWInput
+//
+// IMPORTANT: Returns the hash in BIG-ENDIAN byte order (SHA256 natural output).
+// This matches the format miners submit. The kawpowLight algorithm expects
+// the hash to be reversed to little-endian before hashing.
 func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	input := RavencoinKAWPOWInput{
 		Version:        h.Version,
@@ -76,6 +80,8 @@ func (h *RavencoinBlockHeader) GetKAWPOWHeaderHash() common.Hash {
 	first := sha256.Sum256(data)
 	second := sha256.Sum256(first[:])
 
+	// Return SHA256D output in big-endian (natural SHA256 output order)
+	// Note: This is the same byte order that kawpowminer submits via .hex()
 	return common.BytesToHash(second[:])
 }
 
@@ -313,12 +319,8 @@ func (h *RavencoinBlockHeader) Copy() AuxHeaderData {
 	return &copiedHeader
 }
 
-type RavencoinTx struct {
-	*btcdwire.MsgTx
-}
-
-func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32, witness bool) []byte {
-	coinbaseTx := &RavencoinTx{MsgTx: btcdwire.NewMsgTx(2)} // Version 2 for Ravencoin
+func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {
+	coinbaseTx := btcdwire.NewMsgTx(2) // Version 2 for Ravencoin
 
 	// Create the coinbase input with seal hash
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, 1, signatureTime)
@@ -333,45 +335,21 @@ func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.H
 	coinbaseTx.AddTxIn(coinbaseIn)
 
 	var buffer bytes.Buffer
-	if witness {
-		coinbaseTx.Serialize(&buffer)
-	} else {
-		coinbaseTx.SerializeNoWitness(&buffer)
-	}
+	coinbaseTx.SerializeNoWitness(&buffer)
 
-	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
-	// we need to trim these before appending the coinbaseOut
+	// The empty serialization adds output count (1 byte = 0x00) + locktime (4 bytes) = 5 bytes
+	// We need to trim these before appending the real coinbaseOut
+	// Note: coinbaseOut already includes outputs AND locktime (from ExtractCoinbaseOutFromCoinbaseTx)
 	raw := buffer.Bytes()
 	if len(raw) < 5 {
 		return append([]byte{}, coinbaseOut...)
 	}
-	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+
+	// Trim empty output count (1 byte) + locktime (4 bytes) = 5 bytes
+	trimmed := raw[:len(raw)-5]
+
+	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-func (rct *RavencoinTx) Copy() AuxPowTxData {
-	return &RavencoinTx{MsgTx: rct.MsgTx.Copy()}
-}
-
-func (rct *RavencoinTx) Serialize(w io.Writer) error {
-	if rct.MsgTx == nil {
-		return fmt.Errorf("cannot serialize: MsgTx is nil")
-	}
-	return rct.MsgTx.Serialize(w)
-}
-
-func (rct *RavencoinTx) Deserialize(r io.Reader) error {
-	if rct.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return rct.MsgTx.Deserialize(r)
-}
-
-func (rct *RavencoinTx) DeserializeNoWitness(r io.Reader) error {
-	if rct.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return rct.MsgTx.DeserializeNoWitness(r)
 }
 
 type RavencoinCoinbaseTxOut struct {

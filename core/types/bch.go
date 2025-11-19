@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"errors"
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -13,10 +12,6 @@ import (
 // BitcoinCashHeaderWrapper wraps bchdwire.BlockHeader to implement AuxHeaderData
 type BitcoinCashHeaderWrapper struct {
 	*bchdwire.BlockHeader
-}
-
-type BitcoinCashTxWrapper struct {
-	*bchdwire.MsgTx
 }
 
 type BitcoinCashCoinbaseTxOutWrapper struct {
@@ -125,8 +120,8 @@ func (bch *BitcoinCashHeaderWrapper) Copy() AuxHeaderData {
 	return &BitcoinCashHeaderWrapper{BlockHeader: &copiedHeader}
 }
 
-func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {
-	coinbaseTx := &BitcoinCashTxWrapper{MsgTx: bchdwire.NewMsgTx(2)}
+func NewBitcoinCashCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {
+	coinbaseTx := bchdwire.NewMsgTx(2)
 
 	// Create the coinbase input with seal hash in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, 1, signatureTime)
@@ -149,42 +144,12 @@ func NewBitcoinCashCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash
 	if len(raw) < 5 {
 		return append([]byte{}, coinbaseOut...)
 	}
-	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+
+	// Trim empty output count (1 byte) + locktime (4 bytes) = 5 bytes
+	trimmed := raw[:len(raw)-5]
+
+	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-func (bct *BitcoinCashTxWrapper) Copy() AuxPowTxData {
-	return &BitcoinCashTxWrapper{MsgTx: bct.MsgTx.Copy()}
-}
-
-func (bct *BitcoinCashTxWrapper) Serialize(w io.Writer) error {
-	if bct.MsgTx == nil {
-		return errors.New("cannot serialize: MsgTx is nil")
-	}
-	return bct.MsgTx.Serialize(w)
-}
-
-func (bct *BitcoinCashTxWrapper) SerializeNoWitness(w io.Writer) error {
-	if bct.MsgTx == nil {
-		return errors.New("cannot serialize: MsgTx is nil")
-	}
-	// Bitcoin Cash doesn't use SegWit, so Serialize is the same as SerializeNoWitness
-	return bct.MsgTx.Serialize(w)
-}
-
-func (bct *BitcoinCashTxWrapper) Deserialize(r io.Reader) error {
-	if bct.MsgTx == nil {
-		return errors.New("cannot deserialize: MsgTx is nil")
-	}
-	return bct.MsgTx.Deserialize(r)
-}
-
-func (bct *BitcoinCashTxWrapper) DeserializeNoWitness(r io.Reader) error {
-	if bct.MsgTx == nil {
-		return errors.New("cannot deserialize: MsgTx is nil")
-	}
-	// Bitcoin Cash doesn't use SegWit, so Deserialize is the same as DeserializeNoWitness
-	return bct.MsgTx.Deserialize(r)
 }
 
 func (bco *BitcoinCashCoinbaseTxOutWrapper) Value() int64 {

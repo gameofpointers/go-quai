@@ -8,15 +8,12 @@ import (
 	"io"
 
 	btcblockchain "github.com/btcsuite/btcd/blockchain"
-	btcutil "github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/dominant-strategies/go-quai/common"
 	ltcblockchain "github.com/dominant-strategies/ltcd/blockchain"
 	ltcchainhash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
-	ltcutil "github.com/dominant-strategies/ltcd/ltcutil"
 	bchblockchain "github.com/gcash/bchd/blockchain"
 	bchchainhash "github.com/gcash/bchd/chaincfg/chainhash"
-	bchutil "github.com/gcash/bchutil"
 )
 
 // ExtractSealHashFromCoinbase extracts the seal hash from the coinbase scriptSig format.
@@ -317,86 +314,6 @@ func CalculateMerkleRoot(powId PowID, coinbaseTx []byte, merkleBranch [][]byte) 
 	}
 }
 
-func BuildMerkleTreeStore(powID PowID, txs []*AuxPowTx, witness bool) []*chainhash.Hash {
-	switch powID {
-	case Kawpow:
-		transactions := make([]*btcutil.Tx, len(txs))
-		for i, tx := range txs {
-			ravenTx, ok := tx.inner.(*RavencoinTx)
-			if !ok || ravenTx == nil || ravenTx.MsgTx == nil {
-				return nil
-			}
-			transactions[i] = btcutil.NewTx(ravenTx.MsgTx)
-		}
-		return btcblockchain.BuildMerkleTreeStore(transactions, witness)
-	case Scrypt:
-		transactions := make([]*ltcutil.Tx, len(txs))
-		for i, tx := range txs {
-			litecoinTx, ok := tx.inner.(*LitecoinTxWrapper)
-			if !ok || litecoinTx == nil || litecoinTx.MsgTx == nil {
-				return nil
-			}
-			transactions[i] = ltcutil.NewTx(litecoinTx.MsgTx)
-		}
-		ltcTree := ltcblockchain.BuildMerkleTreeStore(transactions, witness)
-		return convertLTCChainhashSlice(ltcTree)
-	case SHA_BTC:
-		transactions := make([]*btcutil.Tx, len(txs))
-		for i, tx := range txs {
-			bitcoinTx, ok := tx.inner.(*BitcoinTxWrapper)
-			if !ok || bitcoinTx == nil || bitcoinTx.MsgTx == nil {
-				return nil
-			}
-			transactions[i] = btcutil.NewTx(bitcoinTx.MsgTx)
-		}
-		return btcblockchain.BuildMerkleTreeStore(transactions, witness)
-	case SHA_BCH:
-		transactions := make([]*bchutil.Tx, len(txs))
-		for i, tx := range txs {
-			bitcoinCashTx, ok := tx.inner.(*BitcoinCashTxWrapper)
-			if !ok || bitcoinCashTx == nil || bitcoinCashTx.MsgTx == nil {
-				return nil
-			}
-			transactions[i] = bchutil.NewTx(bitcoinCashTx.MsgTx)
-		}
-		bchTree := bchblockchain.BuildMerkleTreeStore(transactions)
-		return convertBCHChainhashSlice(bchTree)
-	}
-	return nil
-}
-
-func convertLTCChainhashSlice(input []*ltcchainhash.Hash) []*chainhash.Hash {
-	if input == nil {
-		return nil
-	}
-	out := make([]*chainhash.Hash, len(input))
-	for i, h := range input {
-		if h == nil {
-			continue
-		}
-		converted := new(chainhash.Hash)
-		copy(converted[:], h[:])
-		out[i] = converted
-	}
-	return out
-}
-
-func convertBCHChainhashSlice(input []*bchchainhash.Hash) []*chainhash.Hash {
-	if input == nil {
-		return nil
-	}
-	out := make([]*chainhash.Hash, len(input))
-	for i, h := range input {
-		if h == nil {
-			continue
-		}
-		converted := new(chainhash.Hash)
-		copy(converted[:], h[:])
-		out[i] = converted
-	}
-	return out
-}
-
 // ExtractMerkleBranch extracts the merkle branch for the coinbase (index 0)
 // from a complete merkle tree
 func ExtractMerkleBranch(merkleTree []*chainhash.Hash, txCount int) [][]byte {
@@ -562,6 +479,8 @@ func ExtractCoinbaseOutFromCoinbaseTx(coinbaseTx []byte) []byte {
 	}
 
 	// Record the start of the outputs (includes the outputs count varint)
+	// Return everything from outputs to the end (includes outputs + locktime)
+	// Note: Locktime is part of the signed template data and cannot be modified by miners
 	outputsStart := int(r.Size()) - r.Len()
 
 	return coinbaseTx[outputsStart:]
@@ -711,4 +630,70 @@ func doubleSHA256(data []byte) [32]byte {
 	var result [32]byte
 	copy(result[:], first)
 	return result
+}
+
+// HasWitnessCommitment detects if coinbase output bytes contain a witness commitment.
+// The witness commitment is an OP_RETURN output with the following format:
+//
+//	OP_RETURN (0x6a) 0x24 0xaa 0x21 0xa9 0xed <32-byte commitment>
+//
+// This output must be the LAST output in the coinbase transaction.
+// See Litecoin validation.cpp:3718-3720 and BIP 141 for specification.
+//
+// The coinbaseOut parameter should be the serialized outputs section starting
+// with the output count varint.
+func HasWitnessCommitment(coinbaseOut []byte) bool {
+	if len(coinbaseOut) == 0 {
+		return false
+	}
+
+	// Parse the output count
+	r := bytes.NewReader(coinbaseOut)
+	outputCount, _, err := readVarInt(r)
+	if err != nil || outputCount == 0 {
+		return false
+	}
+
+	// We need to find the LAST output to check for witness commitment
+	// Parse through all outputs to find the last one
+	var lastOutputScript []byte
+
+	for i := uint64(0); i < outputCount; i++ {
+		// Read output value (8 bytes)
+		var value [8]byte
+		if _, err := io.ReadFull(r, value[:]); err != nil {
+			return false
+		}
+
+		// Read script length
+		scriptLen, _, err := readVarInt(r)
+		if err != nil {
+			return false
+		}
+
+		// Read script
+		script := make([]byte, scriptLen)
+		if _, err := io.ReadFull(r, script); err != nil {
+			return false
+		}
+
+		// Keep track of the last output's script
+		lastOutputScript = script
+	}
+
+	// Check if the last output is a witness commitment
+	// Format: OP_RETURN (0x6a) 0x24 0xaa 0x21 0xa9 0xed <32-byte commitment>
+	// Minimum length: 1 + 1 + 4 + 32 = 38 bytes
+	if len(lastOutputScript) < 38 {
+		return false
+	}
+
+	// Check the witness commitment pattern
+	return lastOutputScript[0] == 0x6a && // OP_RETURN
+		lastOutputScript[1] == 0x24 && // Push 36 bytes
+		lastOutputScript[2] == 0xaa &&
+		lastOutputScript[3] == 0x21 &&
+		lastOutputScript[4] == 0xa9 &&
+		lastOutputScript[5] == 0xed
+	// The remaining 32 bytes are the actual commitment
 }
