@@ -38,25 +38,25 @@ func auxPowTestData(powID PowID) *AuxPow {
 			MixHash:        EmptyRootHash,
 		}
 		coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
-		coinbaseTx := NewAuxPowCoinbaseTx(Kawpow, 100, coinbaseOut, EmptyRootHash, uint32(0), false)
+		coinbaseTx := NewAuxPowCoinbaseTx(Kawpow, 100, coinbaseOut, EmptyRootHash, uint32(0))
 		auxPow.SetHeader(NewAuxPowHeader(ravencoinHeader))
 		auxPow.SetTransaction(coinbaseTx)
 	case SHA_BTC:
 		bitcoinHeader := NewBitcoinBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
 		coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
-		coinbaseTx := NewAuxPowCoinbaseTx(powID, 100, coinbaseOut, EmptyRootHash, uint32(1234), false)
+		coinbaseTx := NewAuxPowCoinbaseTx(powID, 100, coinbaseOut, EmptyRootHash, uint32(1234))
 		auxPow.SetHeader(NewAuxPowHeader(bitcoinHeader))
 		auxPow.SetTransaction(coinbaseTx)
 	case SHA_BCH:
 		bitcoinCashHeader := NewBitcoinCashBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
 		coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
-		coinbaseTx := NewAuxPowCoinbaseTx(SHA_BCH, 100, coinbaseOut, EmptyRootHash, uint32(1234), false)
+		coinbaseTx := NewAuxPowCoinbaseTx(SHA_BCH, 100, coinbaseOut, EmptyRootHash, uint32(1234))
 		auxPow.SetHeader(NewAuxPowHeader(bitcoinCashHeader))
 		auxPow.SetTransaction(coinbaseTx)
 	case Scrypt:
 		litecoinHeader := NewLitecoinBlockHeader(c_version, EmptyRootHash, EmptyRootHash, c_time, c_bits, 0)
 		coinbaseOut := []byte{0x76, 0xa9, 0x14, 0x89, 0xab, 0xcd, 0xef, 0x88, 0xac}
-		coinbaseTx := NewAuxPowCoinbaseTx(Scrypt, 100, coinbaseOut, EmptyRootHash, uint32(1234), false)
+		coinbaseTx := NewAuxPowCoinbaseTx(Scrypt, 100, coinbaseOut, EmptyRootHash, uint32(1234))
 		auxPow.SetHeader(NewAuxPowHeader(litecoinHeader))
 		auxPow.SetTransaction(coinbaseTx)
 	}

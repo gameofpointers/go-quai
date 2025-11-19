@@ -428,16 +428,16 @@ type AuxPowTxData interface {
 	Copy() AuxPowTxData
 }
 
-func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32, witness bool) []byte {
+func NewAuxPowCoinbaseTx(powId PowID, height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32) []byte {
 	switch powId {
 	case Kawpow:
-		return NewRavencoinCoinbaseTx(height, coinbaseOut, auxMerkleRoot, signatureTime, witness)
+		return NewRavencoinCoinbaseTx(height, coinbaseOut, auxMerkleRoot, signatureTime)
 	case SHA_BTC:
-		return NewBitcoinCoinbaseTxWrapper(height, coinbaseOut, auxMerkleRoot, signatureTime, witness)
+		return NewBitcoinCoinbaseTx(height, coinbaseOut, auxMerkleRoot, signatureTime)
 	case SHA_BCH:
-		return NewBitcoinCashCoinbaseTxWrapper(height, coinbaseOut, auxMerkleRoot, signatureTime)
+		return NewBitcoinCashCoinbaseTx(height, coinbaseOut, auxMerkleRoot, signatureTime)
 	case Scrypt:
-		return NewLitecoinCoinbaseTxWrapper(height, coinbaseOut, auxMerkleRoot, signatureTime, witness)
+		return NewLitecoinCoinbaseTx(height, coinbaseOut, auxMerkleRoot, signatureTime)
 	default:
 		return []byte{}
 	}
@@ -629,7 +629,13 @@ func (ap *AuxPow) ConvertToTemplate() *AuxTemplate {
 	auxTemplate.SetPrevHash(ap.header.PrevBlock())
 	auxTemplate.SetVersion(uint32(ap.header.Version()))
 	auxTemplate.SetNBits(ap.header.Bits())
-	auxTemplate.SetAuxPow2(ap.auxPow2)
+	// Set auxPow2 to empty slice if nil to match subsidy-pool's behavior
+	// This ensures consistent protobuf encoding between signing and verification
+	if ap.auxPow2 == nil {
+		auxTemplate.SetAuxPow2([]byte{})
+	} else {
+		auxTemplate.SetAuxPow2(ap.auxPow2)
+	}
 
 	scriptSig := ExtractScriptSigFromCoinbaseTx(ap.transaction)
 

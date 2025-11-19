@@ -1070,7 +1070,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 					dogeHash := common.Hash(auxTemplate.AuxPow2())
 					auxMerkleRoot = types.CreateAuxMerkleRoot(dogeHash, phCopy.SealHash())
 				}
-				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), auxMerkleRoot, auxTemplate.SignatureTime(), false)
+				coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), auxMerkleRoot, auxTemplate.SignatureTime())
 
 				merkleRoot := types.CalculateMerkleRoot(powId, coinbaseTransaction, auxTemplate.MerkleBranch())
 

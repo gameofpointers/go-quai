@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	btchash "github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -13,10 +12,6 @@ import (
 // BitcoinHeaderWrapper wraps btcdwire.BlockHeader to implement AuxHeaderData
 type BitcoinHeaderWrapper struct {
 	*btcdwire.BlockHeader
-}
-
-type BitcoinTxWrapper struct {
-	*btcdwire.MsgTx
 }
 
 type BitcoinCoinbaseTxOutWrapper struct {
@@ -133,8 +128,8 @@ func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
 	return bto.TxOut.PkScript
 }
 
-func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32, witness bool) []byte {
-	coinbaseTx := &BitcoinTxWrapper{MsgTx: btcdwire.NewMsgTx(1)}
+func NewBitcoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {
+	coinbaseTx := btcdwire.NewMsgTx(1)
 
 	// Create the coinbase input with seal hash in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, sealHash, 1, signatureTime)
@@ -148,43 +143,19 @@ func NewBitcoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, sealHash com
 	})
 
 	var buffer bytes.Buffer
-	if witness {
-		coinbaseTx.Serialize(&buffer)
-	} else {
-		coinbaseTx.SerializeNoWitness(&buffer)
-	}
+	coinbaseTx.SerializeNoWitness(&buffer)
 
-	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
-	// we need to trim these before appending the coinbaseOut
+	// The empty serialization adds output count (1 byte = 0x00) + locktime (4 bytes) = 5 bytes
+	// We need to trim these before appending the real coinbaseOut
+	// Note: coinbaseOut already includes outputs AND locktime (from ExtractCoinbaseOutFromCoinbaseTx)
 	raw := buffer.Bytes()
 	if len(raw) < 5 {
 		return append([]byte{}, coinbaseOut...)
 	}
-	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+
+	// Trim empty output count (1 byte) + locktime (4 bytes) = 5 bytes
+	trimmed := raw[:len(raw)-5]
+
+	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-func (btt *BitcoinTxWrapper) Copy() AuxPowTxData {
-	return &BitcoinTxWrapper{MsgTx: btt.MsgTx.Copy()}
-}
-
-func (btt *BitcoinTxWrapper) Serialize(w io.Writer) error {
-	if btt.MsgTx == nil {
-		return fmt.Errorf("cannot serialize: MsgTx is nil")
-	}
-	return btt.MsgTx.Serialize(w)
-}
-
-func (btt *BitcoinTxWrapper) Deserialize(r io.Reader) error {
-	if btt.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return btt.MsgTx.Deserialize(r)
-}
-
-func (btt *BitcoinTxWrapper) DeserializeNoWitness(r io.Reader) error {
-	if btt.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return btt.MsgTx.DeserializeNoWitness(r)
 }

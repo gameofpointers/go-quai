@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -14,10 +13,6 @@ import (
 // LitecoinHeaderWrapper wraps ltcdwire.BlockHeader to implement AuxHeaderData
 type LitecoinHeaderWrapper struct {
 	*ltcdwire.BlockHeader
-}
-
-type LitecoinTxWrapper struct {
-	*ltcdwire.MsgTx
 }
 
 type LitecoinCoinbaseTxOutWrapper struct {
@@ -128,8 +123,8 @@ func (ltc *LitecoinHeaderWrapper) Copy() AuxHeaderData {
 
 // CoinbaseTx functions
 
-func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32, witness bool) []byte {
-	coinbaseTx := &LitecoinTxWrapper{MsgTx: ltcdwire.NewMsgTx(2)}
+func NewLitecoinCoinbaseTx(height uint32, coinbaseOut []byte, auxMerkleRoot common.Hash, signatureTime uint32) []byte {
+	coinbaseTx := ltcdwire.NewMsgTx(2)
 	// Create the coinbase input with seal hash in scriptSig
 	scriptSig := BuildCoinbaseScriptSigWithNonce(height, 0, 0, auxMerkleRoot, params.MerkleSize, signatureTime)
 	coinbaseTx.AddTxIn(&ltcdwire.TxIn{
@@ -142,53 +137,23 @@ func NewLitecoinCoinbaseTxWrapper(height uint32, coinbaseOut []byte, auxMerkleRo
 	})
 
 	var buffer bytes.Buffer
-	if witness {
-		coinbaseTx.Serialize(&buffer)
-	} else {
-		coinbaseTx.SerializeNoWitness(&buffer)
-	}
+	// Always use non-witness serialization for the template
+	// The witness nonce will be added later if needed
+	coinbaseTx.SerializeNoWitness(&buffer)
 
-	// Since the emtpty serialization of the coinbase transaction adds 5 bytes at the end,
-	// we need to trim these before appending the coinbaseOut
+	// The empty serialization adds output count (1 byte = 0x00) + locktime (4 bytes) = 5 bytes
+	// We need to trim these before appending the real coinbaseOut
+	// Note: coinbaseOut already includes outputs AND locktime (from ExtractCoinbaseOutFromCoinbaseTx)
 	raw := buffer.Bytes()
 	if len(raw) < 5 {
 		return append([]byte{}, coinbaseOut...)
 	}
-	trimmed := append([]byte{}, raw[:len(raw)-5]...)
+
+	// Trim empty output count (1 byte) + locktime (4 bytes) = 5 bytes
+	trimmed := raw[:len(raw)-5]
+
+	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-func (lct *LitecoinTxWrapper) Copy() AuxPowTxData {
-	return &LitecoinTxWrapper{MsgTx: lct.MsgTx.Copy()}
-}
-
-func (lct *LitecoinTxWrapper) Serialize(w io.Writer) error {
-	if lct.MsgTx == nil {
-		return fmt.Errorf("cannot serialize: MsgTx is nil")
-	}
-	return lct.MsgTx.Serialize(w)
-}
-
-func (lct *LitecoinTxWrapper) SerializeNoWitness(w io.Writer) error {
-	if lct.MsgTx == nil {
-		return fmt.Errorf("cannot serialize: MsgTx is nil")
-	}
-	// Litecoin doesn't use SegWit, so Serialize is the same as SerializeNoWitness
-	return lct.MsgTx.Serialize(w)
-}
-
-func (lct *LitecoinTxWrapper) Deserialize(r io.Reader) error {
-	if lct.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return lct.MsgTx.Deserialize(r)
-}
-
-func (lct *LitecoinTxWrapper) DeserializeNoWitness(r io.Reader) error {
-	if lct.MsgTx == nil {
-		return fmt.Errorf("cannot deserialize: MsgTx is nil")
-	}
-	return lct.MsgTx.DeserializeNoWitness(r)
 }
 
 // CoinbaseTxOut functions

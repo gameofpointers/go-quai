@@ -822,14 +822,14 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 	// Extract ntimeMask from the submitted coinbase transaction
 	scriptSig := types.ExtractScriptSigFromCoinbaseTx(coinbaseTx)
 	if len(scriptSig) == 0 {
-		c.logger.Error("Failed to extract scriptSig from Scrypt coinbase transaction")
-		return nil, errors.New("failed to extract scriptSig from Scrypt coinbase transaction")
+		c.logger.Errorf("Failed to extract scriptSig from %s coinbase transaction", powType.String())
+		return nil, errors.New("failed to extract scriptSig from " + powType.String() + " coinbase transaction")
 	}
 
 	signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scriptSig)
 	if err != nil {
-		c.logger.WithField("error", err.Error()).Error("Failed to extract signature time from Scrypt coinbase")
-		return nil, fmt.Errorf("failed to extract signature time from Scrypt coinbase: %w", err)
+		c.logger.WithField("error", err.Error()).Error("Failed to extract signature time from " + powType.String() + " coinbase")
+		return nil, fmt.Errorf("failed to extract signature time from "+powType.String()+" coinbase: %w", err)
 	}
 
 	// Create composite key: hash(auxMerkleRoot || ntimeMask)
