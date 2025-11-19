@@ -179,18 +179,6 @@ func parseScriptPush(script []byte) ([]byte, int, error) {
 	switch {
 	case opcode <= 75:
 		dataLen = int(opcode)
-	case opcode == 0x4c: // OP_PUSHDATA1
-		if len(script) < 2 {
-			return nil, 0, errors.New("short OP_PUSHDATA1")
-		}
-		dataLen = int(script[1])
-		read++
-	case opcode == 0x4d: // OP_PUSHDATA2
-		if len(script) < 3 {
-			return nil, 0, errors.New("short OP_PUSHDATA2")
-		}
-		dataLen = int(binary.LittleEndian.Uint16(script[1:3]))
-		read += 2
 	default:
 		return nil, 0, fmt.Errorf("unsupported opcode 0x%x in coinbase script", opcode)
 	}
