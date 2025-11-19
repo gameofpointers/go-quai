@@ -14,16 +14,8 @@ type BitcoinCashHeaderWrapper struct {
 	*bchdwire.BlockHeader
 }
 
-type BitcoinCashCoinbaseTxOutWrapper struct {
-	*bchdwire.TxOut
-}
-
 func NewBitcoinCashHeaderWrapper(header *bchdwire.BlockHeader) *BitcoinCashHeaderWrapper {
 	return &BitcoinCashHeaderWrapper{BlockHeader: header}
-}
-
-func NewBitcoinCashCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCashCoinbaseTxOutWrapper {
-	return &BitcoinCashCoinbaseTxOutWrapper{TxOut: &bchdwire.TxOut{Value: value, PkScript: pkScript}}
 }
 
 func NewBitcoinCashBlockHeader(version int32, prevBlockHash [32]byte, merkleRootHash [32]byte, time uint32, bits uint32, nonce uint32) *BitcoinCashHeaderWrapper {
@@ -150,12 +142,4 @@ func NewBitcoinCashCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common
 
 	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-func (bco *BitcoinCashCoinbaseTxOutWrapper) Value() int64 {
-	return bco.TxOut.Value
-}
-
-func (bco *BitcoinCashCoinbaseTxOutWrapper) PkScript() []byte {
-	return bco.TxOut.PkScript
 }

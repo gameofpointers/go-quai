@@ -351,21 +351,3 @@ func NewRavencoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.H
 	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
 }
-
-type RavencoinCoinbaseTxOut struct {
-	*btcdwire.TxOut
-}
-
-func NewRavencoinCoinbaseTxOut(value int64, pkScript []byte) *RavencoinCoinbaseTxOut {
-	return &RavencoinCoinbaseTxOut{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
-}
-
-// Value implements AuxPowCoinbaseOutData interface
-func (rco *RavencoinCoinbaseTxOut) Value() int64 {
-	return rco.TxOut.Value
-}
-
-// PkScript implements AuxPowCoinbaseOutData interface
-func (rco *RavencoinCoinbaseTxOut) PkScript() []byte {
-	return rco.TxOut.PkScript
-}

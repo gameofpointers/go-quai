@@ -14,16 +14,8 @@ type BitcoinHeaderWrapper struct {
 	*btcdwire.BlockHeader
 }
 
-type BitcoinCoinbaseTxOutWrapper struct {
-	*btcdwire.TxOut
-}
-
 func NewBitcoinHeaderWrapper(header *btcdwire.BlockHeader) *BitcoinHeaderWrapper {
 	return &BitcoinHeaderWrapper{BlockHeader: header}
-}
-
-func NewBitcoinCoinbaseTxOut(value int64, pkScript []byte) *BitcoinCoinbaseTxOutWrapper {
-	return &BitcoinCoinbaseTxOutWrapper{TxOut: &btcdwire.TxOut{Value: value, PkScript: pkScript}}
 }
 
 func (bth *BitcoinHeaderWrapper) PowHash() common.Hash {
@@ -118,14 +110,6 @@ func (bth *BitcoinHeaderWrapper) Copy() AuxHeaderData {
 	copiedHeader.Bits = bth.BlockHeader.Bits
 	copiedHeader.Nonce = bth.BlockHeader.Nonce
 	return &BitcoinHeaderWrapper{BlockHeader: &copiedHeader}
-}
-
-func (bto *BitcoinCoinbaseTxOutWrapper) Value() int64 {
-	return bto.TxOut.Value
-}
-
-func (bto *BitcoinCoinbaseTxOutWrapper) PkScript() []byte {
-	return bto.TxOut.PkScript
 }
 
 func NewBitcoinCoinbaseTx(height uint32, coinbaseOut []byte, sealHash common.Hash, signatureTime uint32) []byte {

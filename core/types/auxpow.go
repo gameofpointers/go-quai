@@ -8,15 +8,12 @@ import (
 	"io"
 
 	btcchainhash "github.com/btcsuite/btcd/chaincfg/chainhash"
-	btcdwire "github.com/btcsuite/btcd/wire"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/crypto/musig2"
 	"github.com/dominant-strategies/go-quai/log"
 	ltcchainhash "github.com/dominant-strategies/ltcd/chaincfg/chainhash"
-	ltcdwire "github.com/dominant-strategies/ltcd/wire"
 	bchchainhash "github.com/gcash/bchd/chaincfg/chainhash"
-	bchdwire "github.com/gcash/bchd/wire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -482,124 +479,6 @@ func (ac *AuxPowTx) Deserialize(r io.Reader, witness bool) error {
 		return ac.inner.Deserialize(r)
 	}
 	return ac.inner.DeserializeNoWitness(r)
-}
-
-type AuxPowCoinbaseOut struct {
-	inner AuxPowCoinbaseOutData
-}
-
-type AuxPowCoinbaseOutData interface {
-	Value() int64
-	PkScript() []byte
-}
-
-func NewAuxPowCoinbaseOut(powId PowID, value int64, pkScript []byte) *AuxPowCoinbaseOut {
-	switch powId {
-	case Kawpow:
-		return &AuxPowCoinbaseOut{inner: NewRavencoinCoinbaseTxOut(value, pkScript)}
-	case SHA_BTC:
-		return &AuxPowCoinbaseOut{inner: NewBitcoinCoinbaseTxOut(value, pkScript)}
-	case SHA_BCH:
-		return &AuxPowCoinbaseOut{inner: NewBitcoinCashCoinbaseTxOut(value, pkScript)}
-	case Scrypt:
-		return &AuxPowCoinbaseOut{inner: NewLitecoinCoinbaseTxOut(value, pkScript)}
-	default:
-		return &AuxPowCoinbaseOut{}
-	}
-}
-
-func (aco *AuxPowCoinbaseOut) Value() int64 {
-	if aco.inner == nil {
-		return 0
-	}
-	return aco.inner.Value()
-}
-
-func (aco *AuxPowCoinbaseOut) PkScript() []byte {
-	if aco.inner == nil {
-		return nil
-	}
-	return aco.inner.PkScript()
-}
-
-func (aco *AuxPowCoinbaseOut) RPCMarshal() map[string]interface{} {
-	if aco == nil || aco.inner == nil {
-		return nil
-	}
-
-	return map[string]interface{}{
-		"powid":        hexutil.Uint64(aco.PowId()),
-		"value":        hexutil.Uint64(aco.Value()),
-		"scriptPubKey": hexutil.Bytes(aco.inner.PkScript()),
-	}
-}
-
-func (aco *AuxPowCoinbaseOut) PowId() PowID {
-	if aco == nil || aco.inner == nil {
-		return 0
-	}
-
-	switch aco.inner.(type) {
-	case *RavencoinCoinbaseTxOut:
-		return Kawpow
-	case *BitcoinCoinbaseTxOutWrapper:
-		return SHA_BTC
-	case *BitcoinCashCoinbaseTxOutWrapper:
-		return SHA_BCH
-	case *LitecoinCoinbaseTxOutWrapper:
-		return Scrypt
-	default:
-		return 0
-	}
-}
-
-func (aco *AuxPowCoinbaseOut) MarshalJSON() ([]byte, error) {
-	return json.Marshal(aco.RPCMarshal())
-}
-
-func (aco *AuxPowCoinbaseOut) UnmarshalJSON(data []byte) error {
-
-	var dec struct {
-		PowId  *hexutil.Uint64 `json:"powid"`
-		Value  *hexutil.Uint64 `json:"value"`
-		Script hexutil.Bytes   `json:"scriptPubKey"`
-	}
-
-	if err := json.Unmarshal(data, &dec); err != nil {
-		return err
-	}
-
-	if dec.PowId == nil || dec.Value == nil || dec.Script == nil {
-		return errors.New("missing required fields in AuxPowCoinbaseOut")
-	}
-
-	powId := PowID(*dec.PowId)
-	value := *dec.Value
-	scriptHex := dec.Script
-
-	// Initialize inner
-	aco.inner = &AuxPowCoinbaseOut{}
-
-	switch powId {
-	case Kawpow:
-		txOut := *btcdwire.NewTxOut(int64(value), scriptHex)
-		// Here we assume RavencoinCoinbaseTxOut for simplicity; adapt as needed
-		aco.inner = &RavencoinCoinbaseTxOut{TxOut: &txOut}
-	case SHA_BTC:
-		txOut := *btcdwire.NewTxOut(int64(value), scriptHex)
-		// Here we assume BitcoinCoinbaseTxOutWrapper for simplicity; adapt as needed
-		aco.inner = &BitcoinCoinbaseTxOutWrapper{TxOut: &txOut}
-	case SHA_BCH:
-		txOut := *bchdwire.NewTxOut(int64(value), scriptHex, bchdwire.TokenData{})
-		// Here we assume BitcoinCashCoinbaseTxOutWrapper for simplicity; adapt as needed
-		aco.inner = &BitcoinCashCoinbaseTxOutWrapper{TxOut: &txOut}
-	case Scrypt:
-		txOut := *ltcdwire.NewTxOut(int64(value), scriptHex)
-		// Here we assume LitecoinCoinbaseTxOutWrapper for simplicity; adapt as needed
-		aco.inner = &LitecoinCoinbaseTxOutWrapper{TxOut: &txOut}
-	}
-
-	return nil
 }
 
 // AuxPow represents auxiliary proof-of-work data

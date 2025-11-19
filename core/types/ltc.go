@@ -15,16 +15,8 @@ type LitecoinHeaderWrapper struct {
 	*ltcdwire.BlockHeader
 }
 
-type LitecoinCoinbaseTxOutWrapper struct {
-	*ltcdwire.TxOut
-}
-
 func NewLitecoinHeaderWrapper(header *ltcdwire.BlockHeader) *LitecoinHeaderWrapper {
 	return &LitecoinHeaderWrapper{BlockHeader: header}
-}
-
-func NewLitecoinCoinbaseTxOut(value int64, pkScript []byte) *LitecoinCoinbaseTxOutWrapper {
-	return &LitecoinCoinbaseTxOutWrapper{TxOut: &ltcdwire.TxOut{Value: value, PkScript: pkScript}}
 }
 
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {
@@ -154,13 +146,4 @@ func NewLitecoinCoinbaseTx(height uint32, coinbaseOut []byte, auxMerkleRoot comm
 
 	// Append coinbaseOut which contains [output count] [outputs] [locktime]
 	return append(trimmed, coinbaseOut...)
-}
-
-// CoinbaseTxOut functions
-func (lco *LitecoinCoinbaseTxOutWrapper) Value() int64 {
-	return lco.TxOut.Value
-}
-
-func (lco *LitecoinCoinbaseTxOutWrapper) PkScript() []byte {
-	return lco.TxOut.PkScript
 }
