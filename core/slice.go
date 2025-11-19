@@ -1461,6 +1461,9 @@ func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader 
 		if header.WorkObjectHeader().ScryptShareTarget() != nil {
 			combinedPendingHeader.WorkObjectHeader().SetScryptShareTarget(header.WorkObjectHeader().ScryptShareTarget())
 		}
+		if header.WorkObjectHeader().KawpowDifficulty() != nil {
+			combinedPendingHeader.WorkObjectHeader().SetKawpowDifficulty(header.WorkObjectHeader().KawpowDifficulty())
+		}
 
 		combinedPendingHeader.Header().SetEtxRollupHash(header.EtxRollupHash())
 		combinedPendingHeader.Header().SetUncledEntropy(header.Header().UncledEntropy())

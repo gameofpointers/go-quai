@@ -262,12 +262,50 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 		return header.Difficulty()
 	}
 
+	// If 80% of the ravencoin hashrate is reached, then only allow 3 shares per
+	// block, If 90% is reached, only allow 1 share per block
+
 	kawpowShareTarget := new(big.Int).Sub(maxTarget, nonKawpowShareTarget)
 
 	kawpowShareDiff := new(big.Int).Mul(header.Difficulty(), common.Big2e32)
 	kawpowShareDiff = new(big.Int).Div(kawpowShareDiff, kawpowShareTarget)
 
 	return kawpowShareDiff
+}
+
+func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObject) *big.Int {
+	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
+		return params.InitialKawpowDiff
+	}
+
+	if parent.AuxPow() != nil {
+		// Also need to make sure that the header auxtemplate is lively, only
+		// then update
+		scritSig := types.ExtractScriptSigFromCoinbaseTx(parent.AuxPow().Transaction())
+		signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scritSig)
+		if err != nil {
+			// This should never happen, as its validated during header
+			// validation but if it does, we will just return the
+			// previous difficulty
+			return parent.KawpowDifficulty()
+		}
+		// If the share is unlive, return the previous difficulty
+		if signatureTime+params.ShareLivenessTime < uint32(parent.Time()) {
+			return parent.KawpowDifficulty()
+		}
+		// Compare the current kawpow difficulty with the subsidy chain difficulty
+		subsidyChainDiff := common.GetDifficultyFromBits(parent.AuxPow().Header().Bits())
+		// Normalize the difficulty, to quai block time
+		subsidyChainDiff = new(big.Int).Div(subsidyChainDiff, params.RavenQuaiBlockTimeRatio)
+
+		// Taking a long term average
+		newKawpowDiff := new(big.Int).Mul(parent.KawpowDifficulty(), params.WorkShareEmaBlocks)
+		newKawpowDiff = new(big.Int).Add(newKawpowDiff, subsidyChainDiff)
+		return newKawpowDiff
+
+	} else {
+		return parent.KawpowDifficulty()
+	}
 }
 
 // WorkshareAllocation computes the number of shares available per algorithm

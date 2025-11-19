@@ -1051,6 +1051,7 @@ type ProtoWorkObjectHeader struct {
 	ShaDiffAndCount     *ProtoPowShareDiffAndCount `protobuf:"bytes,16,opt,name=sha_diff_and_count,json=shaDiffAndCount,proto3,oneof" json:"sha_diff_and_count,omitempty"`
 	ShaShareTarget      []byte                     `protobuf:"bytes,17,opt,name=sha_share_target,json=shaShareTarget,proto3,oneof" json:"sha_share_target,omitempty"`
 	ScryptShareTarget   []byte                     `protobuf:"bytes,18,opt,name=scrypt_share_target,json=scryptShareTarget,proto3,oneof" json:"scrypt_share_target,omitempty"`
+	KawpowDifficulty    []byte                     `protobuf:"bytes,19,opt,name=kawpow_difficulty,json=kawpowDifficulty,proto3,oneof" json:"kawpow_difficulty,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1207,6 +1208,13 @@ func (x *ProtoWorkObjectHeader) GetShaShareTarget() []byte {
 func (x *ProtoWorkObjectHeader) GetScryptShareTarget() []byte {
 	if x != nil {
 		return x.ScryptShareTarget
+	}
+	return nil
+}
+
+func (x *ProtoWorkObjectHeader) GetKawpowDifficulty() []byte {
+	if x != nil {
+		return x.KawpowDifficulty
 	}
 	return nil
 }
@@ -3536,7 +3544,7 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"difficulty\x88\x01\x01\x12\x19\n" +
 	"\x05count\x18\x02 \x01(\fH\x01R\x05count\x88\x01\x01B\r\n" +
 	"\v_difficultyB\b\n" +
-	"\x06_count\"\xa0\t\n" +
+	"\x06_count\"\xe8\t\n" +
 	"\x15ProtoWorkObjectHeader\x127\n" +
 	"\vheader_hash\x18\x01 \x01(\v2\x11.common.ProtoHashH\x00R\n" +
 	"headerHash\x88\x01\x01\x127\n" +
@@ -3561,7 +3569,8 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\x15scrypt_diff_and_count\x18\x0f \x01(\v2 .block.ProtoPowShareDiffAndCountH\rR\x12scryptDiffAndCount\x88\x01\x01\x12R\n" +
 	"\x12sha_diff_and_count\x18\x10 \x01(\v2 .block.ProtoPowShareDiffAndCountH\x0eR\x0fshaDiffAndCount\x88\x01\x01\x12-\n" +
 	"\x10sha_share_target\x18\x11 \x01(\fH\x0fR\x0eshaShareTarget\x88\x01\x01\x123\n" +
-	"\x13scrypt_share_target\x18\x12 \x01(\fH\x10R\x11scryptShareTarget\x88\x01\x01B\x0e\n" +
+	"\x13scrypt_share_target\x18\x12 \x01(\fH\x10R\x11scryptShareTarget\x88\x01\x01\x120\n" +
+	"\x11kawpow_difficulty\x18\x13 \x01(\fH\x11R\x10kawpowDifficulty\x88\x01\x01B\x0e\n" +
 	"\f_header_hashB\x0e\n" +
 	"\f_parent_hashB\t\n" +
 	"\a_numberB\r\n" +
@@ -3580,7 +3589,8 @@ const file_core_types_proto_block_proto_rawDesc = "" +
 	"\x16_scrypt_diff_and_countB\x15\n" +
 	"\x13_sha_diff_and_countB\x13\n" +
 	"\x11_sha_share_targetB\x16\n" +
-	"\x14_scrypt_share_target\"U\n" +
+	"\x14_scrypt_share_targetB\x14\n" +
+	"\x12_kawpow_difficulty\"U\n" +
 	"\x16ProtoWorkObjectHeaders\x12;\n" +
 	"\n" +
 	"wo_headers\x18\x01 \x03(\v2\x1c.block.ProtoWorkObjectHeaderR\twoHeaders\"\xe0\x03\n" +

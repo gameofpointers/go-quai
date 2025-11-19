@@ -365,6 +365,7 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
 		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
+		KawpowDifficulty    *hexutil.Big          `json:"kawpowDifficulty,omitempty"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -405,6 +406,9 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 		enc.ScryptShareTarget = (*hexutil.Big)(scryptShareTarget)
 	}
 
+	if wh.KawpowDifficulty() != nil {
+		enc.KawpowDifficulty = (*hexutil.Big)(wh.KawpowDifficulty())
+	}
 	raw, err := json.Marshal(&enc)
 	return raw, err
 }
@@ -429,6 +433,7 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 		ShaDiffAndCount     *PowShareDiffAndCount `json:"shaDiffAndCount,omitempty"`
 		ShaShareTarget      *hexutil.Big          `json:"shaShareTarget,omitempty"`
 		ScryptShareTarget   *hexutil.Big          `json:"scryptShareTarget,omitempty"`
+		KawpowDifficulty    *hexutil.Big          `json:"kawpowDifficulty,omitempty"`
 	}
 
 	err := json.Unmarshal(input, &dec)
@@ -478,6 +483,9 @@ func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	}
 	if dec.ScryptShareTarget != nil {
 		wh.SetScryptShareTarget((*big.Int)(dec.ScryptShareTarget))
+	}
+	if dec.KawpowDifficulty != nil {
+		wh.SetKawpowDifficulty((*big.Int)(dec.KawpowDifficulty))
 	}
 
 	return nil

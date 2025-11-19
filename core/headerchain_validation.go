@@ -686,12 +686,19 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 			if header.WorkObjectHeader().ScryptShareTarget().Cmp(scryptShareTarget) != 0 {
 				return fmt.Errorf("invalid scrypt share target: have %v, want %v", header.WorkObjectHeader().ScryptShareTarget(), scryptShareTarget)
 			}
+			kawpowDifficulty := hc.CalculateKawpowDifficulty(parent, header)
+			if header.WorkObjectHeader().KawpowDifficulty().Cmp(kawpowDifficulty) != 0 {
+				return fmt.Errorf("invalid kawpow difficulty: have %v, want %v", header.WorkObjectHeader().KawpowDifficulty(), kawpowDifficulty)
+			}
 		} else {
 			if header.WorkObjectHeader().ShaShareTarget() != nil {
 				return fmt.Errorf("sha share target must be nil before kawpow fork block")
 			}
 			if header.WorkObjectHeader().ScryptShareTarget() != nil {
 				return fmt.Errorf("scrypt share target must be nil before kawpow fork block")
+			}
+			if header.WorkObjectHeader().KawpowDifficulty() != nil {
+				return fmt.Errorf("kawpow difficulty must be nil before kawpow fork block")
 			}
 		}
 

@@ -282,6 +282,9 @@ var (
 	MaxSubsidyNumerator   = big.NewInt(4)
 	MaxSubsidyDenominator = big.NewInt(60) //This also includes the blocktime ratio between raven, ie (60s/5s = 12), and quai 5 * 12
 
+	InitialKawpowDiff       = big.NewInt(5e12) // 5 TH
+	RavenQuaiBlockTimeRatio = big.NewInt(12)   // 60s/5s = 12
+
 	// The number of blocks to use in the exponential moving average
 	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks
 

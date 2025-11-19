@@ -203,6 +203,7 @@ func EmptyWorkObject(nodeCtx int) *WorkObject {
 	wo.woHeader.SetScryptDiffAndCount(NewPowShareDiffAndCount(params.InitialScryptDiff, big.NewInt(0)))
 	wo.woHeader.SetShaShareTarget(big.NewInt(0))
 	wo.woHeader.SetScryptShareTarget(big.NewInt(0))
+	wo.woHeader.SetKawpowDifficulty(big.NewInt(0))
 	wo.woBody.SetHeader(h)
 	wo.woBody.SetUncles([]*WorkObjectHeader{})
 	wo.woBody.SetTransactions([]*Transaction{})
