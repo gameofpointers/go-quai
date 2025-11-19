@@ -262,10 +262,35 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 		return header.Difficulty()
 	}
 
-	// If 80% of the ravencoin hashrate is reached, then only allow 3 shares per
-	// block, If 90% is reached, only allow 1 share per block
-
+	// Calculate the kawpow share target by subtracting the non-kawpow share
+	// target from the max target
 	kawpowShareTarget := new(big.Int).Sub(maxTarget, nonKawpowShareTarget)
+
+	// Precision is 1/100th of percent
+	// If the quai hash rate reaches 75% of the ravencoin hash rate then we
+	// start applying a discount to the kawpow share target, linearly decreasing
+	// it until it reaches 0 at 90%
+	quaiDiffAsPercentOfRavencoin := new(big.Int).Div(new(big.Int).Mul(header.Difficulty(), params.RavencoinDiffPercentage), header.KawpowDifficulty())
+	if quaiDiffAsPercentOfRavencoin.Cmp(params.RavencoinDiffCutoffStart) >= 0 {
+		// At the 90% threshold, no kawpow shares are allowed
+		var kawpowShareTargetWithDiscount *big.Int
+		if quaiDiffAsPercentOfRavencoin.Cmp(params.RavencoinDiffCutoffEnd) >= 0 {
+			kawpowShareTargetWithDiscount = new(big.Int).Set(common.Big2e32)
+		} else {
+			// Apply a linear discount
+			errInDiff := new(big.Int).Sub(params.RavencoinDiffCutoffEnd, quaiDiffAsPercentOfRavencoin)
+			kawpowShareTargetWithDiscount = new(big.Int).Mul(maxTarget, errInDiff)
+			kawpowShareTargetWithDiscount = new(big.Int).Div(kawpowShareTargetWithDiscount, params.RavencoinDiffCutoffRange)
+		}
+
+		kawpowShareTarget = new(big.Int).Set(math.BigMin(kawpowShareTarget, kawpowShareTargetWithDiscount))
+	}
+
+	// If the kawpow share target is less than 1, then the kawpow share diff is
+	// the block difficulty
+	if kawpowShareTarget.Cmp(common.Big2e32) < 0 {
+		return header.Difficulty()
+	}
 
 	kawpowShareDiff := new(big.Int).Mul(header.Difficulty(), common.Big2e32)
 	kawpowShareDiff = new(big.Int).Div(kawpowShareDiff, kawpowShareTarget)
@@ -301,6 +326,7 @@ func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObjec
 		// Taking a long term average
 		newKawpowDiff := new(big.Int).Mul(parent.KawpowDifficulty(), params.WorkShareEmaBlocks)
 		newKawpowDiff = new(big.Int).Add(newKawpowDiff, subsidyChainDiff)
+		newKawpowDiff = new(big.Int).Div(newKawpowDiff, params.WorkShareEmaBlocks)
 		return newKawpowDiff
 
 	} else {
@@ -315,19 +341,15 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 	}
 
 	var newShareTarget *big.Int
-	if parent.AuxPow() != nil {
-		// Compare the current kawpow difficulty with the subsidy chain difficulty
-		subsidyChainDiff := common.GetDifficultyFromBits(parent.AuxPow().Header().Bits())
-		maximumSubsidyChainDiff := new(big.Int).Div(new(big.Int).Mul(subsidyChainDiff, params.MaxSubsidyNumerator), params.MaxSubsidyDenominator)
+	// Compare the current kawpow difficulty with the subsidy chain difficulty
+	subsidyChainDiff := parent.KawpowDifficulty()
+	maximumSubsidyChainDiff := new(big.Int).Div(new(big.Int).Mul(subsidyChainDiff, params.MaxSubsidyNumerator), params.MaxSubsidyDenominator)
 
-		// calculate the difference
-		difference := new(big.Int).Sub(parent.Difficulty(), maximumSubsidyChainDiff)
-		newShareTarget = new(big.Int).Mul(difference, parent.ShaShareTarget())
-		newShareTarget = newShareTarget.Div(newShareTarget, parent.Difficulty())
-		newShareTarget = newShareTarget.Add(newShareTarget, parent.ShaShareTarget())
-	} else {
-		newShareTarget = parent.ShaShareTarget()
-	}
+	// calculate the difference
+	difference := new(big.Int).Sub(parent.Difficulty(), maximumSubsidyChainDiff)
+	newShareTarget = new(big.Int).Mul(difference, parent.ShaShareTarget())
+	newShareTarget = newShareTarget.Div(newShareTarget, parent.Difficulty())
+	newShareTarget = newShareTarget.Add(newShareTarget, parent.ShaShareTarget())
 
 	// Make sure the new share target is within bounds
 	newShareTarget = math.BigMax(newShareTarget, params.TargetShaShares)

@@ -680,7 +680,7 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 			shaShareTarget := hc.CalculateShareTarget(parent, header)
 			if header.WorkObjectHeader().ShaShareTarget().Cmp(shaShareTarget) != 0 {
-				return fmt.Errorf(": have %v, want %v", header.WorkObjectHeader().ShaShareTarget(), shaShareTarget)
+				return fmt.Errorf("invalid sha share target: have %v, want %v", header.WorkObjectHeader().ShaShareTarget(), shaShareTarget)
 			}
 			scryptShareTarget := hc.CalculateShareTarget(parent, header)
 			if header.WorkObjectHeader().ScryptShareTarget().Cmp(scryptShareTarget) != 0 {

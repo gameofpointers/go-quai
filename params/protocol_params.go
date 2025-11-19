@@ -285,6 +285,11 @@ var (
 	InitialKawpowDiff       = big.NewInt(5e12) // 5 TH
 	RavenQuaiBlockTimeRatio = big.NewInt(12)   // 60s/5s = 12
 
+	RavencoinDiffPercentage  = big.NewInt(10000) // 100% in basis points
+	RavencoinDiffCutoffEnd   = big.NewInt(9000)  // 90%
+	RavencoinDiffCutoffStart = big.NewInt(7500)  // 75%
+	RavencoinDiffCutoffRange = big.NewInt(1500)
+
 	// The number of blocks to use in the exponential moving average
 	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks
 

@@ -2227,10 +2227,11 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
 		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount))
 
+		newWo.WorkObjectHeader().SetKawpowDifficulty(w.hc.CalculateKawpowDifficulty(parent, newWo))
+
 		newWo.WorkObjectHeader().SetShaShareTarget(w.hc.CalculateShareTarget(parent, newWo))
 		newWo.WorkObjectHeader().SetScryptShareTarget(w.hc.CalculateShareTarget(parent, newWo))
 
-		newWo.WorkObjectHeader().SetKawpowDifficulty(w.hc.CalculateKawpowDifficulty(parent, newWo))
 	}
 
 	// Only zone should calculate state
