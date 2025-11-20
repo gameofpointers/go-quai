@@ -67,7 +67,7 @@ func createTestAuxTemplate(nonce uint64) *types.AuxTemplate {
 	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
 	template.SetNBits(0x1d00ffff)
-	template.SetNTimeMask(0xffffffff)
+	template.SetSignatureTime(0xffffffff)
 	template.SetHeight(uint32(12345 + nonce))
 
 	if nonce%2 != 0 { // If not coinbase-only, add merkle branch

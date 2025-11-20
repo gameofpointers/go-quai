@@ -9,6 +9,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 )
 
 // TestKAWPOWImplementation tests our KAWPOW implementation with various scenarios
@@ -41,7 +42,7 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 	t.Run("Algorithm_Consistency", func(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
-		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+		kawpow := New(params.PowConfig{PowMode: params.ModeNormal}, nil, false, logger)
 
 		blockHeight := uint64(1219737)
 		headerHash := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
@@ -83,7 +84,7 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 	t.Run("Mining_vs_Validation", func(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
-		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+		kawpow := New(params.PowConfig{PowMode: params.ModeNormal}, nil, false, logger)
 
 		blockHeight := uint64(1219737)
 		nonce64 := uint64(0x123456789abcdef0)
@@ -107,7 +108,6 @@ func TestKAWPOWImplementation(t *testing.T) {
 			coinbaseOut,
 			types.EmptyRootHash,
 			100,
-			false,
 		)
 
 		auxPow := types.NewAuxPow(
@@ -148,7 +148,7 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 	t.Run("First Ravencoin KAWPOW block 1219737", func(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
-		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+		kawpow := New(params.PowConfig{PowMode: params.ModeNormal}, nil, false, logger)
 
 		// First KAWPOW block on Ravencoin blockchain
 		blockHeight := uint64(1219737)
@@ -198,7 +198,7 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 	t.Run("GPU Mined block validation", func(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
-		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+		kawpow := New(params.PowConfig{PowMode: params.ModeNormal}, nil, false, logger)
 
 		// Block from log: headerHash=0xc09b76e782c9c43795599f0e3f204ea87efab090800055547621301b0f5fa899
 		blockHeight := uint64(1219736)
@@ -237,7 +237,7 @@ func TestKAWPOWImplementation(t *testing.T) {
 
 	t.Run("Epoch_Progression", func(t *testing.T) {
 		logger := log.NewLogger("test.log", "info", 100)
-		kawpow := New(Config{PowMode: ModeNormal}, nil, false, logger)
+		kawpow := New(params.PowConfig{PowMode: params.ModeNormal}, nil, false, logger)
 
 		testEpochs := []struct {
 			epoch  uint64

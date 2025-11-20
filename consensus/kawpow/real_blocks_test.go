@@ -10,6 +10,7 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,7 +222,7 @@ func TestRavencoinKAWPOWVectors(t *testing.T) {
 	require.NotEmpty(t, vectors, "expected at least one vector")
 
 	logger := log.NewLogger("kawpow-vectors.log", "info", 100)
-	engine := New(Config{PowMode: ModeNormal, CachesInMem: 1}, nil, false, logger)
+	engine := New(params.PowConfig{PowMode: params.ModeNormal, CachesInMem: 1}, nil, false, logger)
 
 	for _, vector := range vectors {
 		vector := vector

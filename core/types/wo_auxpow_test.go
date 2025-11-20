@@ -227,7 +227,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
 	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
-	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
+	kawpowDifficulty := big.NewInt(3000000)
+	shaTarget := big.NewInt(100)
+	scryptTarget := big.NewInt(200)
 
 	// Create WorkObjectHeader without AuxPow
 	woHeaderWithoutAuxPow := &WorkObjectHeader{
@@ -246,7 +248,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 		lock:                lock,
 		shaDiffAndCount:     shaDiffAndCount,
 		scryptDiffAndCount:  scryptDiffAndCount,
-		shareTarget:         shareTarget,
+		kawpowDifficulty:    kawpowDifficulty,
+		shaShareTarget:      shaTarget,
+		scryptShareTarget:   scryptTarget,
 		auxPow:              nil,
 	}
 
@@ -270,7 +274,9 @@ func TestWorkObjectHashComparison(t *testing.T) {
 		lock:                lock,
 		shaDiffAndCount:     shaDiffAndCount,
 		scryptDiffAndCount:  scryptDiffAndCount,
-		shareTarget:         shareTarget,
+		kawpowDifficulty:    kawpowDifficulty,
+		shaShareTarget:      shaTarget,
+		scryptShareTarget:   scryptTarget,
 		auxPow:              auxPow,
 	}
 
@@ -320,7 +326,9 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
 	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
-	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
+	kawpowDifficulty := big.NewInt(3000000)
+	shaTarget := big.NewInt(100)
+	scryptTarget := big.NewInt(200)
 
 	// Create AuxPow data
 	auxPow := auxPowTestData(Kawpow)
@@ -343,7 +351,9 @@ func TestWorkObjectProtoEncodeDecodeWithAuxPow(t *testing.T) {
 		auxPow:              auxPow,
 		shaDiffAndCount:     shaDiffAndCount,
 		scryptDiffAndCount:  scryptDiffAndCount,
-		shareTarget:         shareTarget,
+		shaShareTarget:      shaTarget,
+		scryptShareTarget:   scryptTarget,
+		kawpowDifficulty:    kawpowDifficulty,
 	}
 
 	// Encode to protobuf
@@ -497,7 +507,9 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	mixHash := common.HexToHash("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
 	shaDiffAndCount := NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(10))
 	scryptDiffAndCount := NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(20))
-	shareTarget := [4]byte{0x00, 0x00, 0x0f, 0xff} // Example target
+	kawpowDifficulty := big.NewInt(3000000)
+	shaTarget := big.NewInt(100)
+	scryptTarget := big.NewInt(200)
 
 	// Scenario 1: Old WorkObjectHeader (without AuxPow field in struct)
 	oldHeader := &OldWorkObjectHeader{
@@ -537,7 +549,9 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	if primeTerminusNumber.Uint64() >= params.KawPowForkBlock {
 		newHeaderNil.shaDiffAndCount = shaDiffAndCount
 		newHeaderNil.scryptDiffAndCount = scryptDiffAndCount
-		newHeaderNil.shareTarget = shareTarget
+		newHeaderNil.shaShareTarget = shaTarget
+		newHeaderNil.scryptShareTarget = scryptTarget
+		newHeaderNil.kawpowDifficulty = kawpowDifficulty
 	}
 
 	// Scenario 3: New WorkObjectHeader with auxPow populated
@@ -563,7 +577,9 @@ func TestThreeScenarioCompatibility(t *testing.T) {
 	if primeTerminusNumber.Uint64() >= params.KawPowForkBlock {
 		newHeaderWithAux.shaDiffAndCount = shaDiffAndCount
 		newHeaderWithAux.scryptDiffAndCount = scryptDiffAndCount
-		newHeaderWithAux.shareTarget = shareTarget
+		newHeaderWithAux.shaShareTarget = shaTarget
+		newHeaderWithAux.scryptShareTarget = scryptTarget
+		newHeaderWithAux.kawpowDifficulty = kawpowDifficulty
 	}
 
 	// Compute hashes for all three scenarios

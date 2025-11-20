@@ -25,7 +25,7 @@ func testAuxTemplate() *AuxTemplate {
 	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
 	template.SetNBits(0x1d00ffff)
-	template.SetNTimeMask(0xffffffff)
+	template.SetSignatureTime(0xffffffff)
 	template.SetHeight(12345)
 	template.SetMerkleBranch([][]byte{
 		bytes.Repeat([]byte{0xaa}, 32),
@@ -116,8 +116,8 @@ func TestAuxTemplateProtoEncodeDecode(t *testing.T) {
 	require.Equal(t, original.PrevHash(), decoded.PrevHash())
 	require.Equal(t, original.CoinbaseOut(), decoded.CoinbaseOut())
 	require.Equal(t, original.Version(), decoded.Version())
-	require.Equal(t, original.NBits(), decoded.NBits())
-	require.Equal(t, original.NTimeMask(), decoded.NTimeMask())
+	require.Equal(t, original.Bits(), decoded.Bits())
+	require.Equal(t, original.SignatureTime(), decoded.SignatureTime())
 	require.Equal(t, original.Height(), decoded.Height())
 	require.Equal(t, original.MerkleBranch(), decoded.MerkleBranch())
 
@@ -200,8 +200,8 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 	require.Equal(t, original.CoinbaseOut(), decoded.CoinbaseOut())
 
 	// Optional fields should be zero
-	require.Equal(t, uint32(0), decoded.NBits())
-	require.Equal(t, NTimeMask(0), decoded.NTimeMask())
+	require.Equal(t, uint32(0), decoded.Bits())
+	require.Equal(t, 0, decoded.SignatureTime())
 	require.Equal(t, uint32(0), decoded.Version())
 	require.Equal(t, uint32(0), decoded.Height())
 	require.Empty(t, decoded.MerkleBranch())
@@ -261,8 +261,8 @@ func TestAuxTemplateBroadcastFlow(t *testing.T) {
 	require.Equal(t, auxTemplate.PrevHash(), receivedTemplate.PrevHash())
 	require.Equal(t, auxTemplate.CoinbaseOut(), receivedTemplate.CoinbaseOut())
 	require.Equal(t, auxTemplate.Version(), receivedTemplate.Version())
-	require.Equal(t, auxTemplate.NBits(), receivedTemplate.NBits())
-	require.Equal(t, auxTemplate.NTimeMask(), receivedTemplate.NTimeMask())
+	require.Equal(t, auxTemplate.Bits(), receivedTemplate.Bits())
+	require.Equal(t, auxTemplate.SignatureTime(), receivedTemplate.SignatureTime())
 	require.Equal(t, auxTemplate.Height(), receivedTemplate.Height())
 	require.Equal(t, auxTemplate.MerkleBranch(), receivedTemplate.MerkleBranch())
 	require.Len(t, receivedTemplate.Sigs(), len(auxTemplate.Sigs()))
@@ -311,8 +311,8 @@ func TestAuxTemplateGossipMessage(t *testing.T) {
 	require.NotNil(t, protoTemplate.PrevHash)
 	require.NotNil(t, protoTemplate.CoinbaseOut)
 	require.NotNil(t, protoTemplate.Version)
-	require.NotNil(t, protoTemplate.Nbits)
-	require.NotNil(t, protoTemplate.NtimeMask)
+	require.NotNil(t, protoTemplate.Bits)
+	require.NotNil(t, protoTemplate.SignatureTime)
 	require.NotNil(t, protoTemplate.Height)
 	require.NotNil(t, protoTemplate.MerkleBranch)
 	require.NotNil(t, protoTemplate.Sigs)

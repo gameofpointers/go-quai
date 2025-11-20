@@ -582,17 +582,14 @@ func (g *PubsubManager) Broadcast(location common.Location, data interface{}) er
 		return err
 	}
 
-	backend := *g.consensus.GetBackend(location)
-	if backend == nil {
-		log.Global.WithFields(log.Fields{
-			"location": location,
-		}).Error("no backend found for this location")
-	}
-
-	if location.Context() == common.ZONE_CTX && backend.ChainConfig().TelemetryEnabled {
-		// If broadcasting a workshare, track it as received (by network)
-		if wsv, ok := data.(*types.WorkObjectShareView); ok && wsv != nil && wsv.WorkObject != nil && wsv.WorkObject.WorkObjectHeader() != nil {
-			telemetry.RemoveMinedShare(wsv.WorkObject.WorkObjectHeader().Hash())
+	backend := g.consensus.GetBackend(location)
+	if backend != nil {
+		apiBackend := *backend
+		if location.Context() == common.ZONE_CTX && backend != nil && apiBackend.ChainConfig().TelemetryEnabled {
+			// If broadcasting a workshare, track it as received (by network)
+			if wsv, ok := data.(*types.WorkObjectShareView); ok && wsv != nil && wsv.WorkObject != nil && wsv.WorkObject.WorkObjectHeader() != nil {
+				telemetry.RemoveMinedShare(wsv.WorkObject.WorkObjectHeader().Hash())
+			}
 		}
 	}
 

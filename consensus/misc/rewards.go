@@ -1,7 +1,6 @@
 package misc
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -200,10 +199,6 @@ func KawPowEquivalentDifficulty(header *types.WorkObjectHeader, difficulty *big.
 	numerator := new(big.Int).Mul(header.Difficulty(), expectedTotalShares)
 	denominator := new(big.Int).Sub(expectedTotalShares, totalMultiAlgoShares)
 	adjustedDifficulty := new(big.Int).Div(numerator, denominator)
-	if scryptShares.Cmp(common.Big0) == 0 || shaShares.Cmp(common.Big0) == 0 {
-		// Add print for debugging
-		fmt.Printf("KawPowEquivalentDifficulty: Header Number: %d, Header Difficulty: %s, Scrypt Shares: %s, Sha Shares: %s, Adjusted Difficulty: %s\n", header.NumberU64(), header.Difficulty().String(), scryptShares.String(), shaShares.String(), adjustedDifficulty.String())
-	}
 	return adjustedDifficulty
 }
 

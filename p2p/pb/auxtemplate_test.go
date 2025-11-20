@@ -25,7 +25,7 @@ func createTestAuxTemplate() *types.AuxTemplate {
 	template.SetCoinbaseOut(coinbaseOut)
 	template.SetVersion(0x20000000)
 	template.SetNBits(0x1d00ffff)
-	template.SetNTimeMask(0xffffffff)
+	template.SetSignatureTime(0xffffffff)
 	template.SetHeight(uint32(12345 + nonce))
 
 	template.SetMerkleBranch([][]byte{
@@ -79,8 +79,8 @@ func TestGossipAuxTemplateEncodeDecode(t *testing.T) {
 	require.Equal(t, auxTemplate.CoinbaseOut(), decodedTemplate.CoinbaseOut())
 	require.Equal(t, auxTemplate.MerkleBranch(), decodedTemplate.MerkleBranch())
 	require.Equal(t, auxTemplate.Version(), decodedTemplate.Version())
-	require.Equal(t, auxTemplate.NBits(), decodedTemplate.NBits())
-	require.Equal(t, auxTemplate.NTimeMask(), decodedTemplate.NTimeMask())
+	require.Equal(t, auxTemplate.Bits(), decodedTemplate.Bits())
+	require.Equal(t, auxTemplate.SignatureTime(), decodedTemplate.SignatureTime())
 	require.Equal(t, auxTemplate.Height(), decodedTemplate.Height())
 	require.Equal(t, auxTemplate.Sigs(), decodedTemplate.Sigs())
 }

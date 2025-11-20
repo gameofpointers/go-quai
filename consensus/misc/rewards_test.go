@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/stretchr/testify/require"
 )
@@ -185,4 +186,36 @@ func TestCalculateKQuaiSlowdownAfterKQuaiChangeBlock(t *testing.T) {
 		t.Logf("At KQuaiChangeBlock: increase = %v", increaseAtChange)
 		t.Logf("After KQuaiChangeBlock: increase = %v", increaseAfterChange)
 	})
+}
+
+func TestKawpowEquivalentDifficulty(t *testing.T) {
+	testCases := []struct {
+		difficulty         *big.Int
+		shaCount           *big.Int
+		scryptCount        *big.Int
+		expectedDifficulty *big.Int
+	}{
+		// If the sha and scrypt shares are zero, the equivalent difficulty doesnt change
+		{big.NewInt(1000000), big.NewInt(0), big.NewInt(0), big.NewInt(1000000)},
+		// If the sha and scrypt shares are over the expected shares, the equivalent should reach a ceil
+		{big.NewInt(1000000), new(big.Int).Mul(big.NewInt(0), common.Big2e32), new(big.Int).Mul(big.NewInt(8), common.Big2e32), big.NewInt(9000000)},
+		{big.NewInt(1000000), new(big.Int).Mul(big.NewInt(8), common.Big2e32), new(big.Int).Mul(big.NewInt(0), common.Big2e32), big.NewInt(9000000)},
+		{big.NewInt(1000000), new(big.Int).Mul(big.NewInt(4), common.Big2e32), new(big.Int).Mul(big.NewInt(4), common.Big2e32), big.NewInt(9000000)},
+		{big.NewInt(1000000), new(big.Int).Mul(big.NewInt(10), common.Big2e32), new(big.Int).Mul(big.NewInt(10), common.Big2e32), big.NewInt(9000000)},
+		// If the sha and scrypt shares are half of the expected shares, the equivalent difficulty should be 1.8x
+		{big.NewInt(1000000), new(big.Int).Mul(big.NewInt(2), common.Big2e32), new(big.Int).Mul(big.NewInt(2), common.Big2e32), big.NewInt(1800000)},
+	}
+
+	shaDiff := big.NewInt(10)
+	scryptDiff := big.NewInt(20)
+
+	for _, tc := range testCases {
+		header := types.EmptyWorkObject(common.ZONE_CTX)
+		header.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(shaDiff, tc.shaCount))
+		header.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(scryptDiff, tc.scryptCount))
+		header.WorkObjectHeader().SetDifficulty(tc.difficulty)
+
+		result := KawPowEquivalentDifficulty(header.WorkObjectHeader(), tc.difficulty)
+		require.Equal(t, tc.expectedDifficulty, result, "Expected %v got %v", tc.expectedDifficulty, result)
+	}
 }
