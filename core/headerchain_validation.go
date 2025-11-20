@@ -201,6 +201,9 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 	ancestors[block.Hash()] = block
 	uncles.Add(block.Hash())
 
+	shaCount := 0
+	scryptCount := 0
+
 	// Verify each of the uncles that it's recent, but not an ancestor
 	for _, uncle := range block.Uncles() {
 		// Make sure every uncle is rewarded only once
@@ -251,6 +254,24 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 			err := hc.CheckPowIdValidity(uncle)
 			if err != nil {
 				return err
+			}
+		}
+
+		if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+			if uncle.AuxPow() != nil {
+				switch uncle.AuxPow().PowID() {
+				case types.SHA_BTC, types.SHA_BCH:
+					shaCount++
+				case types.Scrypt:
+					scryptCount++
+				}
+				if shaCount > params.MaxShaSharesCount {
+					return fmt.Errorf("too many sha shares in the block: have %v, want %v", shaCount, params.MaxShaSharesCount)
+				}
+
+				if scryptCount > params.MaxScryptSharesCount {
+					return fmt.Errorf("too many scrypt shares in the block: have %v, want %v", scryptCount, params.MaxScryptSharesCount)
+				}
 			}
 		}
 

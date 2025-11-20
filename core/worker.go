@@ -2343,6 +2343,30 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 					env.uncleMu.RUnlock()
 					break
 				}
+
+				if env.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
+					// If the max number of sha and scrypt uncles is reached, skip
+					// sha and scrypt uncles
+					shaCount, scryptCount := CountNonKawpowWorkShares(env.uncles)
+
+					// If the max number of sha uncles is reached, skip sha uncles
+					if shaCount >= params.MaxShaSharesCount {
+						if uncle.AuxPow() != nil &&
+							(uncle.AuxPow().PowID() == types.SHA_BTC || uncle.AuxPow().PowID() == types.SHA_BCH) {
+							env.uncleMu.RUnlock()
+							continue
+						}
+					}
+
+					// If the max number of scrypt uncles is reached, skip scrypt uncles
+					if scryptCount >= params.MaxScryptSharesCount {
+						if uncle.AuxPow() != nil && uncle.AuxPow().PowID() == types.Scrypt {
+							env.uncleMu.RUnlock()
+							continue
+						}
+					}
+				}
+
 				env.uncleMu.RUnlock()
 				if err := w.commitUncle(env, uncle); err != nil {
 					w.logger.WithFields(log.Fields{
@@ -2368,6 +2392,22 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		return &environment{wo: proposedWo}, nil
 	}
 
+}
+
+func CountNonKawpowWorkShares(uncles map[common.Hash]*types.WorkObjectHeader) (int, int) {
+	shaCount := 0
+	scryptCount := 0
+	for _, uncle := range uncles {
+		if uncle.AuxPow() != nil {
+			switch uncle.AuxPow().PowID() {
+			case types.SHA_BTC, types.SHA_BCH:
+				shaCount++
+			case types.Scrypt:
+				scryptCount++
+			}
+		}
+	}
+	return shaCount, scryptCount
 }
 
 // fillTransactions retrieves the pending transactions from the txpool and fills them

@@ -278,6 +278,12 @@ var (
 	TargetShaShares = big.NewInt(12884901888)
 	MaxShaShares    = big.NewInt(17179869184) // 2x the target
 
+	// Maximum number of shares that can be included in a block for each algo.
+	// This is to prevent a single block from being filled with shares from one
+	// specific algo
+	MaxShaSharesCount    = 8
+	MaxScryptSharesCount = 8
+
 	// Maximum amount of hashrate allowed on subsidy chain
 	MaxSubsidyNumerator   = big.NewInt(4)
 	MaxSubsidyDenominator = big.NewInt(60) //This also includes the blocktime ratio between raven, ie (60s/5s = 12), and quai 5 * 12
