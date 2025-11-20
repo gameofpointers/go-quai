@@ -297,7 +297,8 @@ var (
 	RavencoinDiffCutoffRange = big.NewInt(1500)
 
 	// The number of blocks to use in the exponential moving average
-	WorkShareEmaBlocks = big.NewInt(17280) // About 1 day worth of blocks
+	// TODO: Set this to the correct number
+	WorkShareEmaBlocks = big.NewInt(1000) // About 1 day worth of blocks
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
