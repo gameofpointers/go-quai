@@ -585,6 +585,11 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 	return etxRollup, nil
 }
 
+// CheckPowIdValidity checks the validity of the pow id for the given  block
+// This check can only be used on a block/uncle
+// 1) Before the kawpow fork, the pow id must be nil
+// 2) After the kawpow fork and transition, the pow id must be kawpow
+// 3) During the transition, the pow id has to be kawpow or auxpow has to be nil(progpow)
 func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 	if wo == nil {
 		return fmt.Errorf("wo is nil")
@@ -597,7 +602,7 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
 		wo.AuxPow() != nil &&
 		wo.AuxPow().PowID() != types.Kawpow {
-		return fmt.Errorf("wo auxpow is nil for kawpow block")
+		return fmt.Errorf("wo auxpow is not nil and not kawpow after the kawpow fork block")
 	}
 	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock+params.KawPowTransitionPeriod {
 		if wo.AuxPow() == nil {
@@ -631,8 +636,12 @@ func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader
 		if wo.AuxPow() == nil {
 			return fmt.Errorf("workshare auxpow powid is nil after kawpow transition")
 		}
+		// This case is not possible but still dont want to allow progpow pow id
 		if wo.AuxPow() != nil && wo.AuxPow().PowID() == types.Progpow {
 			return fmt.Errorf("workshare auxpow powid is progpow after kawpow transition")
+		}
+		if wo.AuxPow() != nil && wo.AuxPow().PowID() > types.Scrypt {
+			return fmt.Errorf("workshare auxpow powid is not valid during kawpow transition")
 		}
 	}
 	return nil

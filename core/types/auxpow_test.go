@@ -201,7 +201,7 @@ func TestAuxTemplatePartialFields(t *testing.T) {
 
 	// Optional fields should be zero
 	require.Equal(t, uint32(0), decoded.Bits())
-	require.Equal(t, 0, decoded.SignatureTime())
+	require.Equal(t, uint32(0), decoded.SignatureTime())
 	require.Equal(t, uint32(0), decoded.Version())
 	require.Equal(t, uint32(0), decoded.Height())
 	require.Empty(t, decoded.MerkleBranch())
