@@ -396,9 +396,9 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
 		// TODO: Set the initial count back to zero
-		error = new(big.Int).Sub(shares.Count(), parent.ShaShareTarget())
+		error = new(big.Int).Sub(numShares, parent.ShaShareTarget())
 	case types.Scrypt:
-		error = new(big.Int).Sub(shares.Count(), parent.ScryptShareTarget())
+		error = new(big.Int).Sub(numShares, parent.ScryptShareTarget())
 	default:
 		return big.NewInt(0), big.NewInt(0)
 	}
@@ -413,9 +413,8 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	// stable, so its a noop for scrypt, but for sha it scales appropriately
 	k, _ := mathutil.BinaryLog(new(big.Int).Set(shares.Difficulty()), 64)
 	newDiff = new(big.Int).Mul(newDiff, big.NewInt(int64(k)))
-	newDiff = new(big.Int).Div(newDiff, big.NewInt(30))
+	newDiff = new(big.Int).Div(newDiff, big.NewInt(30000000))
 
-	newDiff = newDiff.Div(newDiff, params.WorkShareEmaBlocks)
 	newDiff = newDiff.Div(newDiff, common.Big2e32)
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
 
