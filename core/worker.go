@@ -2631,7 +2631,7 @@ func (w *worker) AddAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
 
 func (w *worker) AddWorkShare(workShare *types.WorkObjectHeader) error {
 	// Don't add the workshare into the list if its farther than the worksharefilterdist
-	if workShare.NumberU64()+uint64(params.WorkSharesInclusionDepth) < w.hc.CurrentHeader().NumberU64(common.ZONE_CTX) {
+	if workShare.NumberU64()+uint64(2*params.WorkSharesInclusionDepth) < w.hc.CurrentHeader().NumberU64(common.ZONE_CTX) {
 		return nil
 	}
 
