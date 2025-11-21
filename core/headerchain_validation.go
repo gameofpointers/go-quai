@@ -293,6 +293,20 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 
 			scryptSig := types.ExtractScriptSigFromCoinbaseTx(uncle.AuxPow().Transaction())
 
+			signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scryptSig)
+			if err != nil {
+				return err
+			}
+			// auxpow header time and quai block time cannot be less than the
+			// signature time in the coinbase (time at which the template was
+			// signed)
+			if uncle.AuxPow().Header().Timestamp() < signatureTime {
+				return fmt.Errorf("auxpow header time %v is less than signature time %v", uncle.AuxPow().Header().Timestamp(), signatureTime)
+			}
+			if uncle.Time() < uint64(signatureTime) {
+				return fmt.Errorf("quai block time %v is less than signature time %v", uncle.Time(), signatureTime)
+			}
+
 			coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
 			if err != nil {
 				return fmt.Errorf("coinbase seal hash not found in the auxpow: %v", err)
@@ -572,6 +586,20 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 
 	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock && header.AuxPow() != nil {
 		scryptSig := types.ExtractScriptSigFromCoinbaseTx(header.AuxPow().Transaction())
+
+		signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scryptSig)
+		if err != nil {
+			return err
+		}
+		// auxpow header time and quai block time cannot be less than the
+		// signature time in the coinbase (time at which the template was
+		// signed)
+		if header.AuxPow().Header().Timestamp() < signatureTime {
+			return fmt.Errorf("auxpow header time %v is less than signature time %v", header.AuxPow().Header().Timestamp(), signatureTime)
+		}
+		if header.Time() < uint64(signatureTime) {
+			return fmt.Errorf("quai block time %v is less than signature time %v", header.Time(), signatureTime)
+		}
 
 		coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
 		if err != nil {

@@ -1240,7 +1240,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 					// the expectation
 					scritSig := types.ExtractScriptSigFromCoinbaseTx(share.AuxPow().Transaction())
 					signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scritSig)
-					if err != nil || signatureTime+params.ShareLivenessTime < uint32(targetBlock.Time()) {
+					if err != nil || signatureTime+params.ShareLivenessTime < share.AuxPow().Header().Timestamp() {
 						shareReward = new(big.Int).Mul(shareReward, params.UnlivelySharePenalty)
 						shareReward = new(big.Int).Div(shareReward, params.ShareRewardPenaltyDivisor)
 					}
