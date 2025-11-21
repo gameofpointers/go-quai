@@ -25,6 +25,7 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/trie"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"modernc.org/mathutil"
 )
 
 const (
@@ -405,6 +406,15 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	// Calculate the new difficulty based on the error
 	// newDiff = prevDiff + (error * prevDiff)/(2^32 * c_difficultyAdjustDivisor)
 	newDiff = new(big.Int).Mul(error, shares.Difficulty())
+
+	// Multiplying by the binary log of the share diff, similar to the DAA, so
+	// that, the gain is correct for a several magnitudes of share difficulty
+	// Dividing by 30 here because the response of scrypt controller seems
+	// stable, so its a noop for scrypt, but for sha it scales appropriately
+	k, _ := mathutil.BinaryLog(new(big.Int).Set(shares.Difficulty()), 64)
+	newDiff = new(big.Int).Mul(newDiff, big.NewInt(int64(k)))
+	newDiff = new(big.Int).Div(newDiff, big.NewInt(30))
+
 	newDiff = newDiff.Div(newDiff, params.WorkShareEmaBlocks)
 	newDiff = newDiff.Div(newDiff, common.Big2e32)
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
