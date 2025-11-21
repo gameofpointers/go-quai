@@ -938,6 +938,10 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 		return nil, fmt.Errorf("coinbase seal hash not found in the auxpow: %v", err)
 	}
 
+	if err := types.ValidatePrevOutPointIndexAndSequenceOfCoinbase(workObjectCopy.AuxPow().Transaction()); err != nil {
+		return nil, fmt.Errorf("invalid prev out point index and sequence in coinbase transaction: %v", err)
+	}
+
 	switch workObjectCopy.AuxPow().PowID() {
 	case types.Kawpow, types.SHA_BTC, types.SHA_BCH:
 		if workObjectCopy.SealHash() != coinbaseSealHash {

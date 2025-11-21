@@ -332,6 +332,10 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 				return errors.New("invalid merkle root in auxpow")
 			}
 
+			if err := types.ValidatePrevOutPointIndexAndSequenceOfCoinbase(uncle.AuxPow().Transaction()); err != nil {
+				return fmt.Errorf("invalid prev out point index and sequence in coinbase transaction: %v", err)
+			}
+
 			if !uncle.AuxPow().ConvertToTemplate().VerifySignature() && !uncle.IsShaOrScryptShareWithInvalidAddress() {
 				return errors.New("invalid auxpow signature")
 			}
@@ -605,6 +609,10 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 		expectedMerkleRoot := types.CalculateMerkleRoot(header.AuxPow().PowID(), header.AuxPow().Transaction(), header.AuxPow().MerkleBranch())
 		if header.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
 			return errors.New("invalid merkle root in auxpow")
+		}
+
+		if err := types.ValidatePrevOutPointIndexAndSequenceOfCoinbase(header.AuxPow().Transaction()); err != nil {
+			return fmt.Errorf("invalid prev out point index and sequence in coinbase transaction: %v", err)
 		}
 
 		if !header.AuxPow().ConvertToTemplate().VerifySignature() {
