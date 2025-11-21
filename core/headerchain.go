@@ -324,7 +324,7 @@ func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObjec
 		subsidyChainDiff = new(big.Int).Div(subsidyChainDiff, params.RavenQuaiBlockTimeRatio)
 
 		// Taking a long term average
-		newKawpowDiff := new(big.Int).Mul(parent.KawpowDifficulty(), params.WorkShareEmaBlocks)
+		newKawpowDiff := new(big.Int).Mul(parent.KawpowDifficulty(), new(big.Int).Sub(params.WorkShareEmaBlocks, common.Big1))
 		newKawpowDiff = new(big.Int).Add(newKawpowDiff, subsidyChainDiff)
 		newKawpowDiff = new(big.Int).Div(newKawpowDiff, params.WorkShareEmaBlocks)
 		return newKawpowDiff
@@ -410,7 +410,7 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
 
 	// Calculate the new workshares
-	newAverageShares = new(big.Int).Mul(shares.Count(), params.WorkShareEmaBlocks)
+	newAverageShares = new(big.Int).Mul(shares.Count(), new(big.Int).Sub(params.WorkShareEmaBlocks, common.Big1))
 	newAverageShares = newAverageShares.Add(newAverageShares, numShares)
 	newAverageShares = newAverageShares.Div(newAverageShares, params.WorkShareEmaBlocks)
 
