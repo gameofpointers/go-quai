@@ -413,7 +413,7 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	// stable, so its a noop for scrypt, but for sha it scales appropriately
 	k, _ := mathutil.BinaryLog(new(big.Int).Set(shares.Difficulty()), 64)
 	newDiff = new(big.Int).Mul(newDiff, big.NewInt(int64(k)))
-	newDiff = new(big.Int).Div(newDiff, big.NewInt(30000000))
+	newDiff = new(big.Int).Div(newDiff, big.NewInt(300000))
 
 	newDiff = newDiff.Div(newDiff, common.Big2e32)
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)
