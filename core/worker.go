@@ -701,18 +701,21 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				for _, uncle := range uncles {
 					var uncleEntropy *big.Int
 					if uncle.NumberU64() == targetBlockNumber {
-						_, err := w.hc.VerifySeal(uncle)
-						if err != nil {
-							uncleEntropy, err = w.hc.HeaderIntrinsicLogEntropy(uncle)
+						// Only run this before the fork
+						if work.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+							_, err := w.hc.VerifySeal(uncle)
 							if err != nil {
-								return nil, err
+								uncleEntropy, err = w.hc.HeaderIntrinsicLogEntropy(uncle)
+								if err != nil {
+									return nil, err
+								}
+								totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
+							} else {
+								// Add the target weight into the uncles
+								target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
+								uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+								totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 							}
-							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
-						} else {
-							// Add the target weight into the uncles
-							target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-							uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
-							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						}
 
 						if work.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {

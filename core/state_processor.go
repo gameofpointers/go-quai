@@ -1146,18 +1146,20 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			for _, uncle := range uncles {
 				var uncleEntropy *big.Int
 				if uncle.NumberU64() == targetBlockNumber {
-					_, err := p.hc.VerifySeal(uncle)
-					if err != nil {
-						uncleEntropy, err = p.hc.HeaderIntrinsicLogEntropy(uncle)
+					if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+						_, err := p.hc.VerifySeal(uncle)
 						if err != nil {
-							return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute intrinsic log entropy for the workshare")
+							uncleEntropy, err = p.hc.HeaderIntrinsicLogEntropy(uncle)
+							if err != nil {
+								return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute intrinsic log entropy for the workshare")
+							}
+							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
+						} else {
+							// Add the target weight into the uncles
+							target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
+							uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
+							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						}
-						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
-					} else {
-						// Add the target weight into the uncles
-						target := new(big.Int).Div(common.Big2e256, uncle.Difficulty())
-						uncleEntropy = common.IntrinsicLogEntropy(common.BytesToHash(target.Bytes()))
-						totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 					}
 
 					if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
