@@ -598,8 +598,8 @@ func CreateAuxMerkleRoot(dogeHash common.Hash, quaiSealHash common.Hash) common.
 
 	// Reverse the bytes of each chain's block hash before inserting
 	// (This is required by the merged mining spec)
-	dogeHashReversed := reverseBytesCopy(dogeHash[:])
-	quaiHashReversed := reverseBytesCopy(quaiSealHash[:])
+	dogeHashReversed := dogeHash.Reverse().Bytes()
+	quaiHashReversed := quaiSealHash.Reverse().Bytes()
 
 	leaves[dogeSlot] = dogeHashReversed
 	leaves[quaiSlot] = quaiHashReversed
@@ -625,7 +625,7 @@ func CreateAuxMerkleRoot(dogeHash common.Hash, quaiSealHash common.Hash) common.
 
 	// Reverse the bytes of the merkle root before returning
 	// (Required by the merged mining spec for coinbase insertion)
-	merkleRootReversed := reverseBytesCopy(merkleRoot)
+	merkleRootReversed := common.BytesToHash(merkleRoot).Reverse().Bytes()
 
 	return common.BytesToHash(merkleRootReversed)
 }
