@@ -302,42 +302,6 @@ func CalculateMerkleRoot(powId PowID, coinbaseTx []byte, merkleBranch [][]byte) 
 	}
 }
 
-// ExtractMerkleBranch extracts the merkle branch for the coinbase (index 0)
-// from a complete merkle tree
-func ExtractMerkleBranch(merkleTree []*chainhash.Hash, txCount int) [][]byte {
-	if len(merkleTree) == 0 || txCount == 0 {
-		return nil
-	}
-
-	var branch [][]byte
-
-	// blockchain.BuildMerkleTreeStore lays out the tree level-by-level using a
-	// power-of-two leaf width. Determine that width so we can walk the levels.
-	width := 1
-	for width < txCount {
-		width <<= 1
-	}
-
-	index := 0
-	levelOffset := 0
-	levelWidth := width
-
-	for levelWidth > 1 {
-		siblingIndex := index ^ 1
-		siblingPos := levelOffset + siblingIndex
-		if siblingIndex >= levelWidth || siblingPos >= len(merkleTree) || merkleTree[siblingPos] == nil {
-			siblingPos = levelOffset + index
-		}
-		branch = append(branch, merkleTree[siblingPos][:])
-
-		levelOffset += levelWidth
-		index >>= 1
-		levelWidth >>= 1
-	}
-
-	return branch
-}
-
 // encodeHeightForBIP34 encodes block height in minimal little-endian format
 // This matches Bitcoin's CScriptNum serialization used for BIP34 compliance.
 // The height must be encoded with the minimum number of bytes required.
@@ -362,7 +326,6 @@ func encodeHeightForBIP34(height uint32) []byte {
 	return result
 }
 
-// TODO: Replace with a method from btcd/ltcd/bchd if available
 // readVarInt decodes Bitcoin-style VarInts and returns the decoded value along with the number of bytes consumed.
 func readVarInt(buf *bytes.Reader) (uint64, int, error) {
 	b, err := buf.ReadByte()
