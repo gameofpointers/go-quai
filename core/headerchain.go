@@ -251,8 +251,11 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 	// kawpowsharetarget = max(0, 8 * 2^32 - (shaSharesAverage + scryptSharesAverage))
 	// kawpowShareDiff = difficulty * 2^32 / kawpowShareTarget
 
-	shaSharesAverage := header.ShaDiffAndCount().Count()
-	scryptSharesAverage := header.ScryptDiffAndCount().Count()
+	// If sha or scrypt target is less than the share target then use the count,
+	// otherwise use the target
+	shaSharesAverage := math.BigMin(header.ShaDiffAndCount().Count(), header.ShaShareTarget())
+	scryptSharesAverage := math.BigMin(header.ScryptDiffAndCount().Count(), header.ScryptShareTarget())
+
 	nonKawpowShareTarget := new(big.Int).Add(shaSharesAverage, scryptSharesAverage)
 
 	maxTarget := new(big.Int).Mul(big.NewInt(int64(params.ExpectedWorksharesPerBlock)), common.Big2e32)
@@ -351,6 +354,8 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 
 	// calculate the difference
 	difference := new(big.Int).Sub(parent.Difficulty(), maximumSubsidyChainDiff)
+	// NOTE: Using shashare target in this calculation because sha and scrypt target
+	// are the same
 	newShareTarget = new(big.Int).Mul(difference, parent.ShaShareTarget())
 	newShareTarget = newShareTarget.Div(newShareTarget, parent.Difficulty())
 	newShareTarget = newShareTarget.Add(newShareTarget, parent.ShaShareTarget())
