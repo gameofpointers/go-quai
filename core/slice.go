@@ -1085,6 +1085,8 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 					phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
 				}
 
+				phCopy.WorkObjectHeader().SetTime(uint64(time.Now().Unix()))
+
 				auxMerkleRoot := phCopy.SealHash()
 				if powId == types.Scrypt {
 					if len(auxTemplate.AuxPow2()) == 0 {
