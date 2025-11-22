@@ -264,8 +264,11 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 	}
 
 	// Calculate the kawpow share target by subtracting the non-kawpow share
-	// target from the max target
-	kawpowShareTarget := new(big.Int).Sub(maxTarget, nonKawpowShareTarget)
+	// target from the max target + 2^32 because on expectation to get x number
+	// of shares that are not block, the difficulty has to be divided by (x+1),
+	// so that on average the number of shares other than block is x and you
+	// have a normal block
+	kawpowShareTarget := new(big.Int).Sub(new(big.Int).Add(maxTarget, common.Big2e32), nonKawpowShareTarget)
 
 	// Precision is 1/100th of percent
 	// If the quai hash rate reaches 75% of the ravencoin hash rate then we
