@@ -996,10 +996,8 @@ func (w *worker) commitUncle(env *environment, uncle *types.WorkObjectHeader) er
 
 		return err
 	}
-	if env.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || uncle.AuxPow() == nil || uncle.AuxPow().PowID() == types.Kawpow {
-		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-			return errors.New("workshare coinbase is in Qi, but Qi is disabled")
-		}
+	if uncle.PrimaryCoinbase().IsInQiLedgerScope() && env.wo.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+		return errors.New("workshare coinbase is in Qi, but Qi is disabled")
 	}
 	// If the uncle is a workshare, we should allow siblings
 	validity := w.hc.UncleWorkShareClassification(uncle)

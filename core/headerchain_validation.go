@@ -213,10 +213,8 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 		}
 		uncles.Add(hash)
 
-		if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock || uncle.AuxPow() == nil || uncle.AuxPow().PowID() == types.Kawpow {
-			if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
-				return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
-			}
+		if uncle.PrimaryCoinbase().IsInQiLedgerScope() && block.PrimeTerminusNumber().Uint64() < params.ControllerKickInBlock {
+			return fmt.Errorf("uncle inclusion is not allowed before block %v", params.ControllerKickInBlock)
 		}
 
 		// Make sure the uncle has a valid ancestry
