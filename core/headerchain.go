@@ -286,7 +286,7 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 		} else {
 			// Apply a linear discount
 			errInDiff := new(big.Int).Sub(params.RavencoinDiffCutoffEnd, quaiDiffAsPercentOfRavencoin)
-			kawpowShareTargetWithDiscount = new(big.Int).Mul(maxTarget, errInDiff)
+			kawpowShareTargetWithDiscount = new(big.Int).Mul(new(big.Int).Add(maxTarget, common.Big2e32), errInDiff)
 			kawpowShareTargetWithDiscount = new(big.Int).Div(kawpowShareTargetWithDiscount, params.RavencoinDiffCutoffRange)
 		}
 
