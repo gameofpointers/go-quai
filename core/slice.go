@@ -785,6 +785,24 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 
 	_, shaDiff, scryptDiff := sl.hc.DifficultyByAlgo(block)
 	kawpowShares, shaShares, scryptShares := sl.hc.CountWorkSharesByAlgo(block)
+
+	shaCount := big.NewInt(1)
+	scryptCount := big.NewInt(1)
+	shaTarget := big.NewInt(1)
+	scryptTarget := big.NewInt(1)
+
+	if shaDiffAndCount := block.ShaDiffAndCount(); shaDiffAndCount != nil && shaDiffAndCount.Count() != nil {
+		shaCount = shaDiffAndCount.Count()
+	}
+	if scryptDiffAndCount := block.ScryptDiffAndCount(); scryptDiffAndCount != nil && scryptDiffAndCount.Count() != nil {
+		scryptCount = scryptDiffAndCount.Count()
+	}
+	if shaShareTarget := block.ShaShareTarget(); shaShareTarget != nil {
+		shaTarget = new(big.Int).Set(shaShareTarget)
+	}
+	if scryptShareTarget := block.ScryptShareTarget(); scryptShareTarget != nil {
+		scryptTarget = new(big.Int).Set(scryptShareTarget)
+	}
 	sl.logger.WithFields(log.Fields{
 		"number":               block.NumberArray(),
 		"hash":                 block.Hash(),
@@ -796,10 +814,10 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 		"kawpowShareDiff":      CalculateKawpowShareDiff(block.WorkObjectHeader()),
 		"shaShares":            shaShares,
 		"scryptShares":         scryptShares,
-		"shaAvgShares":         new(big.Float).Quo(new(big.Float).SetInt(block.ShaDiffAndCount().Count()), new(big.Float).SetInt(common.Big2e32)),
-		"scryptAvgShares":      new(big.Float).Quo(new(big.Float).SetInt(block.ScryptDiffAndCount().Count()), new(big.Float).SetInt(common.Big2e32)),
-		"shaTarget":            new(big.Float).Quo(new(big.Float).SetInt(block.ShaShareTarget()), new(big.Float).SetInt(common.Big2e32)),
-		"scryptTarget":         new(big.Float).Quo(new(big.Float).SetInt(block.ScryptShareTarget()), new(big.Float).SetInt(common.Big2e32)),
+		"shaAvgShares":         new(big.Float).Quo(new(big.Float).SetInt(shaCount), new(big.Float).SetInt(common.Big2e32)),
+		"scryptAvgShares":      new(big.Float).Quo(new(big.Float).SetInt(scryptCount), new(big.Float).SetInt(common.Big2e32)),
+		"shaTarget":            new(big.Float).Quo(new(big.Float).SetInt(shaTarget), new(big.Float).SetInt(common.Big2e32)),
+		"scryptTarget":         new(big.Float).Quo(new(big.Float).SetInt(scryptTarget), new(big.Float).SetInt(common.Big2e32)),
 		"totalTxs":             len(block.Transactions()),
 		"iworkShare":           common.BigBitsToBitsFloat(workShare),
 		"intrinsicS":           common.BigBitsToBits(intrinsicS),

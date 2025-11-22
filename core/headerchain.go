@@ -248,6 +248,9 @@ func (hc *HeaderChain) HeaderIntrinsicLogEntropy(ws *types.WorkObjectHeader) (*b
 }
 
 func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
+	if header.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+		return big.NewInt(0)
+	}
 	// kawpowsharetarget = max(0, 8 * 2^32 - (shaSharesAverage + scryptSharesAverage))
 	// kawpowShareDiff = difficulty * 2^32 / kawpowShareTarget
 
