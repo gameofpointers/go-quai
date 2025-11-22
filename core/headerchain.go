@@ -368,9 +368,9 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		switch powId {
 		case types.SHA_BTC, types.SHA_BCH:
-			return params.InitialShaDiff, new(big.Int).Set(params.TargetShaShares)
+			return params.InitialShaDiff, big.NewInt(0)
 		case types.Scrypt:
-			return params.InitialScryptDiff, new(big.Int).Set(params.TargetShaShares)
+			return params.InitialScryptDiff, big.NewInt(0)
 		default:
 			return big.NewInt(0), big.NewInt(0)
 		}
@@ -398,7 +398,6 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	var error *big.Int
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
-		// TODO: Set the initial count back to zero
 		error = new(big.Int).Sub(numShares, parent.ShaShareTarget())
 	case types.Scrypt:
 		error = new(big.Int).Sub(numShares, parent.ScryptShareTarget())
