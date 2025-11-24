@@ -297,7 +297,8 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 	}
 
 	// If the kawpow share target is less than 1, then the kawpow share diff is
-	// the block difficulty
+	// the block difficulty, This should never happen but adding it for sanity
+	// check
 	if kawpowShareTarget.Cmp(common.Big2e32) < 0 {
 		return header.Difficulty()
 	}
@@ -308,6 +309,9 @@ func CalculateKawpowShareDiff(header *types.WorkObjectHeader) *big.Int {
 	return kawpowShareDiff
 }
 
+// CalculateKawpowDifficulty calculates the average ravencoin difficulty
+// normalized to quai block time. This only updates if the auxpow used in the
+// block is lively
 func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObject) *big.Int {
 	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		return params.InitialKawpowDiff
@@ -334,6 +338,8 @@ func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObjec
 		return newKawpowDiff
 
 	} else {
+		// If the parent is a transition progpow block, there is no information
+		// to update the kawpow difficulty
 		return parent.KawpowDifficulty()
 	}
 }
