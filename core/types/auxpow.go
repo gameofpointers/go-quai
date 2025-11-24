@@ -207,8 +207,7 @@ func (at *AuxTemplate) Hash() [32]byte {
 }
 
 // VerifySignature verifies the composite MuSig2 signature over this AuxTemplate.
-// It tries all possible 2-of-3 signer index combinations. If 'signature' is nil or empty,
-// it falls back to using the embedded at.sigs. Returns true on any valid combination.
+// It tries all possible 2-of-3 signer index combinations.
 func (at *AuxTemplate) VerifySignature() bool {
 	// Check Signature presence
 	if len(at.sigs) == 0 {
