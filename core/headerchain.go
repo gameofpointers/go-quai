@@ -318,14 +318,8 @@ func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObjec
 		// then update
 		scritSig := types.ExtractScriptSigFromCoinbaseTx(parent.AuxPow().Transaction())
 		signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scritSig)
-		if err != nil {
-			// This should never happen, as its validated during header
-			// validation but if it does, we will just return the
-			// previous difficulty
-			return parent.KawpowDifficulty()
-		}
 		// If the share is unlive, return the previous difficulty
-		if signatureTime+params.ShareLivenessTime < parent.AuxPow().Header().Timestamp() {
+		if err != nil || signatureTime+params.ShareLivenessTime < parent.AuxPow().Header().Timestamp() {
 			return parent.KawpowDifficulty()
 		}
 		// Compare the current kawpow difficulty with the subsidy chain difficulty
