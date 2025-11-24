@@ -422,9 +422,9 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	// that, the gain is correct for a several magnitudes of share difficulty
 	// Dividing by 30 here because the response of scrypt controller seems
 	// stable, so its a noop for scrypt, but for sha it scales appropriately
-	k, _ := mathutil.BinaryLog(new(big.Int).Set(shares.Difficulty()), 64)
+	k, _ := mathutil.BinaryLog(new(big.Int).Set(shares.Difficulty()), common.MantBits)
 	newDiff = new(big.Int).Mul(newDiff, big.NewInt(int64(k)))
-	newDiff = new(big.Int).Div(newDiff, big.NewInt(300000))
+	newDiff = new(big.Int).Div(newDiff, params.PowDiffAdjustmentFactor)
 
 	newDiff = newDiff.Div(newDiff, common.Big2e32)
 	newDiff = newDiff.Add(shares.Difficulty(), newDiff)

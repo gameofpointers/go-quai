@@ -270,9 +270,10 @@ var (
 	AlphaInverse                      = big.NewInt(1)
 
 	// PoW share difficulty parameters
-	InitialShaDiff    = big.NewInt(8e12) // Minimum difficulty for a SHA work share, With 4TH/s, diff to get a share every 5 secs 20e12
-	InitialScryptDiff = big.NewInt(8e8)  // Minimum difficulty for a Scrypt work share, With 1GH/s, diff to get a share every 5 secs is 5e9
-	MinPowDivisor     = big.NewInt(20)   // Minimum multiple of the target difficulty that a share must meet to be valid
+	InitialShaDiff          = big.NewInt(8e12) // Minimum difficulty for a SHA work share, With 4TH/s, diff to get a share every 5 secs 20e12
+	InitialScryptDiff       = big.NewInt(8e8)  // Minimum difficulty for a Scrypt work share, With 1GH/s, diff to get a share every 5 secs is 5e9
+	MinPowDivisor           = big.NewInt(20)   // Minimum multiple of the target difficulty that a share must meet to be valid
+	PowDiffAdjustmentFactor = big.NewInt(300000)
 
 	// Target number of shares per algo times 2^32
 	TargetShaShares = big.NewInt(12884901888)
