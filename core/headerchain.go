@@ -325,7 +325,7 @@ func (hc *HeaderChain) CalculateKawpowDifficulty(parent, header *types.WorkObjec
 			return parent.KawpowDifficulty()
 		}
 		// If the share is unlive, return the previous difficulty
-		if signatureTime+params.ShareLivenessTime < uint32(parent.Time()) {
+		if signatureTime+params.ShareLivenessTime < parent.AuxPow().Header().Timestamp() {
 			return parent.KawpowDifficulty()
 		}
 		// Compare the current kawpow difficulty with the subsidy chain difficulty
