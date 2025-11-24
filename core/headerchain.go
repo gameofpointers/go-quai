@@ -361,6 +361,7 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 	// are the same
 	newShareTarget = new(big.Int).Mul(difference, parent.ShaShareTarget())
 	newShareTarget = newShareTarget.Div(newShareTarget, parent.Difficulty())
+	newShareTarget = newShareTarget.Div(newShareTarget, new(big.Int).SetInt64(int64(params.BlocksPerDay)))
 	newShareTarget = newShareTarget.Add(newShareTarget, parent.ShaShareTarget())
 
 	// Make sure the new share target is within bounds
