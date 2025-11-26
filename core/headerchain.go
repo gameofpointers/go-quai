@@ -377,9 +377,9 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		switch powId {
 		case types.SHA_BTC, types.SHA_BCH:
-			return params.InitialShaDiff, big.NewInt(0)
+			return params.InitialShaDiff, params.TargetShaShares
 		case types.Scrypt:
-			return params.InitialScryptDiff, big.NewInt(0)
+			return params.InitialScryptDiff, params.TargetShaShares
 		default:
 			return big.NewInt(0), big.NewInt(0)
 		}

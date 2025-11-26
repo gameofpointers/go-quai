@@ -272,7 +272,7 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiff          = big.NewInt(8e12) // Minimum difficulty for a SHA work share, With 4TH/s, diff to get a share every 5 secs 20e12
 	InitialScryptDiff       = big.NewInt(8e8)  // Minimum difficulty for a Scrypt work share, With 1GH/s, diff to get a share every 5 secs is 5e9
-	MinPowDivisor           = big.NewInt(20)   // Minimum multiple of the target difficulty that a share must meet to be valid
+	MinPowDivisor           = big.NewInt(2)    // Minimum multiple of the target difficulty that a share must meet to be valid
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
 	// Target number of shares per algo times 2^32
@@ -289,8 +289,8 @@ var (
 	MaxSubsidyNumerator   = big.NewInt(4)
 	MaxSubsidyDenominator = big.NewInt(60) //This also includes the blocktime ratio between raven, ie (60s/5s = 12), and quai 5 * 12
 
-	InitialKawpowDiff       = big.NewInt(5e12) // 5 TH
-	RavenQuaiBlockTimeRatio = big.NewInt(12)   // 60s/5s = 12
+	InitialKawpowDiff       = big.NewInt(1300000000) // Ravencoin testnet has 260Mh/s
+	RavenQuaiBlockTimeRatio = big.NewInt(12)         // 60s/5s = 12
 
 	RavencoinDiffPercentage  = big.NewInt(10000) // 100% in basis points
 	RavencoinDiffCutoffEnd   = big.NewInt(9000)  // 90%
@@ -298,7 +298,6 @@ var (
 	RavencoinDiffCutoffRange = big.NewInt(1500)
 
 	// The number of blocks to use in the exponential moving average
-	// TODO: Set this to the correct number
 	WorkShareEmaBlocks = big.NewInt(1000) // About 1 day worth of blocks
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
