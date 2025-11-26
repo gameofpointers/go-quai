@@ -286,8 +286,8 @@ var (
 	MaxScryptSharesCount = 8
 
 	// Maximum amount of hashrate allowed on subsidy chain
-	MaxSubsidyNumerator   = big.NewInt(4)
-	MaxSubsidyDenominator = big.NewInt(60) //This also includes the blocktime ratio between raven, ie (60s/5s = 12), and quai 5 * 12
+	MaxSubsidyNumerator   = big.NewInt(3)
+	MaxSubsidyDenominator = big.NewInt(4)
 
 	InitialKawpowDiff       = big.NewInt(1300000000) // Ravencoin testnet has 260Mh/s
 	RavenQuaiBlockTimeRatio = big.NewInt(12)         // 60s/5s = 12

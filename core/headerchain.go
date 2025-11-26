@@ -353,6 +353,7 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 	var newShareTarget *big.Int
 	// Compare the current kawpow difficulty with the subsidy chain difficulty
 	subsidyChainDiff := parent.KawpowDifficulty()
+	// maximum subsidy chain diff should be 75% of the parent difficulty
 	maximumSubsidyChainDiff := new(big.Int).Div(new(big.Int).Mul(subsidyChainDiff, params.MaxSubsidyNumerator), params.MaxSubsidyDenominator)
 
 	// calculate the difference
