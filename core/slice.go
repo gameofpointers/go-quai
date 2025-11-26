@@ -803,34 +803,50 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 	if scryptShareTarget := block.ScryptShareTarget(); scryptShareTarget != nil {
 		scryptTarget = new(big.Int).Set(scryptShareTarget)
 	}
+
+	var quaiDiffAsPercentOfRavencoin, quaiDiffAsPercentOfRavencoinInstantaneous *big.Int
+	if header.AuxPow() != nil {
+		// Compare the current kawpow difficulty with the subsidy chain difficulty
+		subsidyChainDiff := common.GetDifficultyFromBits(header.AuxPow().Header().Bits())
+		// Normalize the difficulty, to quai block time
+		subsidyChainDiff = new(big.Int).Div(subsidyChainDiff, params.RavenQuaiBlockTimeRatio)
+		quaiDiffAsPercentOfRavencoinInstantaneous = new(big.Int).Div(new(big.Int).Mul(header.Difficulty(), params.RavencoinDiffPercentage), subsidyChainDiff)
+	}
+
+	if header.KawpowDifficulty() != nil {
+		quaiDiffAsPercentOfRavencoin = new(big.Int).Div(new(big.Int).Mul(header.Difficulty(), params.RavencoinDiffPercentage), header.KawpowDifficulty())
+	}
+
 	sl.logger.WithFields(log.Fields{
-		"number":               block.NumberArray(),
-		"hash":                 block.Hash(),
-		"difficulty":           block.Difficulty(),
-		"shaDiff":              shaDiff,
-		"scryptDiff":           scryptDiff,
-		"workshares":           len(block.Uncles()),
-		"kawpowShares":         kawpowShares,
-		"kawpowShareDiff":      CalculateKawpowShareDiff(block.WorkObjectHeader()),
-		"shaShares":            shaShares,
-		"scryptShares":         scryptShares,
-		"shaAvgShares":         new(big.Float).Quo(new(big.Float).SetInt(shaCount), new(big.Float).SetInt(common.Big2e32)),
-		"scryptAvgShares":      new(big.Float).Quo(new(big.Float).SetInt(scryptCount), new(big.Float).SetInt(common.Big2e32)),
-		"shaTarget":            new(big.Float).Quo(new(big.Float).SetInt(shaTarget), new(big.Float).SetInt(common.Big2e32)),
-		"scryptTarget":         new(big.Float).Quo(new(big.Float).SetInt(scryptTarget), new(big.Float).SetInt(common.Big2e32)),
-		"totalTxs":             len(block.Transactions()),
-		"iworkShare":           common.BigBitsToBitsFloat(workShare),
-		"intrinsicS":           common.BigBitsToBits(intrinsicS),
-		"inboundEtxs from dom": len(newInboundEtxs),
-		"gas":                  block.GasUsed(),
-		"gasLimit":             block.GasLimit(),
-		"evmRoot":              block.EVMRoot(),
-		"utxoRoot":             block.UTXORoot(),
-		"etxSetRoot":           block.EtxSetRoot(),
-		"order":                order,
-		"location":             block.Location(),
-		"elapsed":              common.PrettyDuration(time.Since(start)),
-		"coinbaseType":         coinbaseType,
+		"number":                        block.NumberArray(),
+		"hash":                          block.Hash(),
+		"difficulty":                    block.Difficulty(),
+		"shaDiff":                       shaDiff,
+		"scryptDiff":                    scryptDiff,
+		"workshares":                    len(block.Uncles()),
+		"kawpowShares":                  kawpowShares,
+		"kawpowShareDiff":               CalculateKawpowShareDiff(block.WorkObjectHeader()),
+		"shaShares":                     shaShares,
+		"scryptShares":                  scryptShares,
+		"shaAvgShares":                  new(big.Float).Quo(new(big.Float).SetInt(shaCount), new(big.Float).SetInt(common.Big2e32)),
+		"scryptAvgShares":               new(big.Float).Quo(new(big.Float).SetInt(scryptCount), new(big.Float).SetInt(common.Big2e32)),
+		"shaTarget":                     new(big.Float).Quo(new(big.Float).SetInt(shaTarget), new(big.Float).SetInt(common.Big2e32)),
+		"scryptTarget":                  new(big.Float).Quo(new(big.Float).SetInt(scryptTarget), new(big.Float).SetInt(common.Big2e32)),
+		"totalTxs":                      len(block.Transactions()),
+		"iworkShare":                    common.BigBitsToBitsFloat(workShare),
+		"intrinsicS":                    common.BigBitsToBits(intrinsicS),
+		"inboundEtxs from dom":          len(newInboundEtxs),
+		"quai diff % of ravencoin":      quaiDiffAsPercentOfRavencoin,
+		"quai diff % of ravencoin inst": quaiDiffAsPercentOfRavencoinInstantaneous,
+		"gas":                           block.GasUsed(),
+		"gasLimit":                      block.GasLimit(),
+		"evmRoot":                       block.EVMRoot(),
+		"utxoRoot":                      block.UTXORoot(),
+		"etxSetRoot":                    block.EtxSetRoot(),
+		"order":                         order,
+		"location":                      block.Location(),
+		"elapsed":                       common.PrettyDuration(time.Since(start)),
+		"coinbaseType":                  coinbaseType,
 	}).Info("Appended new block")
 
 	if nodeCtx == common.ZONE_CTX {
