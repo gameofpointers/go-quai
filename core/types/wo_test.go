@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"lukechampine.com/blake3"
 )
 
 var locations = []common.Location{
@@ -815,4 +817,55 @@ func fuzzPowDiffAndCountAfterKawpowFork(f *testing.F, getVal func(*WorkObjectHea
 			require.Equal(t, localWo.Hash(), hash, "Hash shouldnt change without changing the auxpow\noriginal: %v, modified: %v", getVal(wo.woHeader), powDiff)
 		}
 	})
+}
+
+func TestSealHashChange(t *testing.T) {
+	wo, _ := woTestDataWithAuxPow()
+
+	// Changin the primary coinbase or setting it to nil should change the
+	// sealhash
+
+	woCopy := CopyWorkObject(wo)
+	woCopy.WorkObjectHeader().SetPrimaryCoinbase(common.BytesToAddress([]byte{0x0, 0x0, 0x1, 0x2}, common.Location{0, 0}))
+	require.NotEqual(t, woCopy.SealHash(), wo.SealHash(), "Seal hash didn't change when auxpow coinbase tx set to nil")
+
+	woCopy2 := CopyWorkObject(wo)
+	woCopy2.WorkObjectHeader().SetPrimaryCoinbase(common.BytesToAddress([]byte{0x0, 0x0, 0x1, 0x3}, common.Location{0, 0}))
+	require.NotEqual(t, woCopy2.SealHash(), wo.SealHash(), "Seal hash didn't change when auxpow coinbase tx changed")
+
+	_, intermediateWo1 := wo.WorkObjectHeader().SealHashWithIntermediateHash()
+	_, intermediateWo2 := woCopy.WorkObjectHeader().SealHashWithIntermediateHash()
+
+	require.Equal(t, intermediateWo1, intermediateWo2, "Intermediate seal hash changed when auxpow coinbase tx changed")
+}
+
+func (wh *WorkObjectHeader) SealHashWithIntermediateHash() (final, intermediate common.Hash) {
+	hasherMu.Lock()
+	defer hasherMu.Unlock()
+	hasher.Reset()
+	protoSealData := wh.SealEncode()
+	primaryCoinbase := wh.PrimaryCoinbase().Bytes()
+	// After the kawpow activation update the seal hash to be
+	// without the primary coinbase and then hash the coinbase
+	// with the sealhash
+	if wh.KawpowActivationHappened() {
+		protoSealData.PrimaryCoinbase = nil
+	}
+	data, err := proto.Marshal(protoSealData)
+	if err != nil {
+		log.Global.Error("Failed to marshal seal data ", "err", err)
+	}
+
+	sum := blake3.Sum256(data[:])
+
+	intermediate.SetBytes(sum[:])
+
+	if wh.KawpowActivationHappened() {
+		// Encode the primary coinbase separately
+		sum = blake3.Sum256(append(sum[:], primaryCoinbase...))
+	}
+
+	final.SetBytes(sum[:])
+
+	return final, intermediate
 }
