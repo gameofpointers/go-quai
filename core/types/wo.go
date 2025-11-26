@@ -123,6 +123,19 @@ func (p *PowShareDiffAndCount) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (p *PowShareDiffAndCount) Cmp(other *PowShareDiffAndCount) bool {
+	if p == nil || other == nil {
+		return false
+	}
+	if p.difficulty == nil || other.difficulty == nil {
+		return false
+	}
+	if p.count == nil || other.count == nil {
+		return false
+	}
+	return p.difficulty.Cmp(other.difficulty) == 0 && p.count.Cmp(other.count) == 0
+}
+
 func (p *PowShareDiffAndCount) Clone() *PowShareDiffAndCount {
 	var difficulty *big.Int
 	if p.difficulty != nil {
