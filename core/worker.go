@@ -803,10 +803,6 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 					}
 				}
 
-				if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
-					return nil, errors.New("share reward cannot be greater than the total block reward")
-				}
-
 				uncleCoinbase := share.PrimaryCoinbase()
 				var originHash common.Hash
 				if uncleCoinbase.IsInQuaiLedgerScope() {

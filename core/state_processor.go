@@ -1248,10 +1248,6 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 
 			}
 
-			if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
-				return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("share reward cannot be greater than the total block reward")
-			}
-
 			uncleCoinbase := share.PrimaryCoinbase()
 			var originHash common.Hash
 			if uncleCoinbase.IsInQuaiLedgerScope() {
