@@ -1225,6 +1225,16 @@ func (sl *Slice) SendPendingEtxsToDom(pEtxs types.PendingEtxs) error {
 func (sl *Slice) GetPEtxRollupAfterRetryThreshold(blockHash common.Hash, hash common.Hash, location common.Location) (types.PendingEtxsRollup, error) {
 	pEtx, exists := sl.pEtxRetryCache.Get(blockHash)
 	if !exists || pEtx.retries < c_pEtxRetryThreshold {
+		// Keeping track of the number of times pending etx fails and if it crossed the retry threshold
+		// ask the sub for the pending etx/rollup data
+		val, exist := sl.pEtxRetryCache.Get(blockHash)
+		var retry uint64
+		if exist {
+			pEtxCurrent := val
+			retry = pEtxCurrent.retries + 1
+		}
+		pEtxNew := pEtxRetry{hash: blockHash, retries: retry}
+		sl.pEtxRetryCache.Add(blockHash, pEtxNew)
 		return types.PendingEtxsRollup{}, ErrPendingEtxNotFound
 	}
 	return sl.GetPendingEtxsRollupFromSub(hash, location)
@@ -1259,6 +1269,16 @@ func (sl *Slice) GetPendingEtxsRollupFromSub(hash common.Hash, location common.L
 func (sl *Slice) GetPEtxAfterRetryThreshold(blockHash common.Hash, hash common.Hash, location common.Location) (types.PendingEtxs, error) {
 	pEtx, exists := sl.pEtxRetryCache.Get(blockHash)
 	if !exists || pEtx.retries < c_pEtxRetryThreshold {
+		// Keeping track of the number of times pending etx fails and if it crossed the retry threshold
+		// ask the sub for the pending etx/rollup data
+		val, exist := sl.pEtxRetryCache.Get(blockHash)
+		var retry uint64
+		if exist {
+			pEtxCurrent := val
+			retry = pEtxCurrent.retries + 1
+		}
+		pEtxNew := pEtxRetry{hash: blockHash, retries: retry}
+		sl.pEtxRetryCache.Add(blockHash, pEtxNew)
 		return types.PendingEtxs{}, ErrPendingEtxNotFound
 	}
 	return sl.GetPendingEtxsFromSub(hash, location)
