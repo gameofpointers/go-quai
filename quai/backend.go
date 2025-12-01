@@ -79,6 +79,8 @@ type Quai struct {
 
 	logger    *log.Logger
 	maxWsSubs int
+
+	rpcVersion string
 }
 
 // New creates a new Quai object (including the
@@ -165,6 +167,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 		logger:            logger,
 		maxWsSubs:         maxWsSubs,
+		rpcVersion:        config.RpcVersion,
 	}
 
 	// Copy the chainConfig
