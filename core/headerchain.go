@@ -231,6 +231,9 @@ func (hc *HeaderChain) GetEngineForHeader(header *types.WorkObjectHeader) consen
 	return hc.GetEngineForPowID(types.Progpow)
 }
 
+// NOTE: This function should not be used after the kawpow fork, only place this is
+// used before the fork is in the reward calculation for uncles and for print in
+// the slice.go.
 func (hc *HeaderChain) HeaderIntrinsicLogEntropy(ws *types.WorkObjectHeader) (*big.Int, error) {
 	// If auxpow is not nil and its not kawpow or progpow, we need to compute it directly as
 	// we dont have engine interface for sha and scrypt
