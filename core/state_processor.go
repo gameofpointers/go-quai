@@ -1215,6 +1215,9 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 			if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 				shareReward = new(big.Int).Mul(blockRewardAtTargetBlock, entropyOfSharesAtTargetBlockDepth[i])
 				shareReward = new(big.Int).Div(shareReward, totalEntropy)
+				if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
+					return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("share reward cannot be greater than the total block reward")
+				}
 			} else {
 
 				shareReward = new(big.Int).Set(rewardPerShare)

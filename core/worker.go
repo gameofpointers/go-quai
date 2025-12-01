@@ -771,6 +771,9 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 				if work.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 					shareReward = new(big.Int).Mul(blockRewardAtTargetBlock, entropyOfSharesAtTargetBlockDepth[i])
 					shareReward = new(big.Int).Div(shareReward, totalEntropy)
+					if shareReward.Cmp(blockRewardAtTargetBlock) > 0 {
+						return nil, errors.New("share reward cannot be greater than the total block reward")
+					}
 				} else {
 
 					shareReward = new(big.Int).Set(rewardPerShare)
