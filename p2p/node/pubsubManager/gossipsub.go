@@ -423,6 +423,12 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 					block.WorkObject.AuxPow().PowID() == types.SHA_BTC ||
 					block.WorkObject.AuxPow().PowID() == types.Scrypt) {
 
+				// If the current header is not a block after kawpow activation,
+				// node cannot do entropy checks
+				if !currentHeader.WorkObjectHeader().KawpowActivationHappened() {
+					return pubsub.ValidationIgnore
+				}
+
 				var powHash common.Hash
 				var workShareTarget *big.Int
 				var shareDiff, currentHeaderShareDiff, thresholdShareDiff *big.Int
