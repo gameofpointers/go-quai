@@ -231,8 +231,6 @@ func (at *AuxTemplate) VerifySignature() bool {
 		}
 	}
 
-	log.Global.Warn("Signature verification failed for all signer combinations", at)
-
 	return false
 }
 
