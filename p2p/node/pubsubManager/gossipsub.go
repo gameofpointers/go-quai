@@ -411,9 +411,105 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 				return pubsub.ValidationReject
 			}
 
-			if block.AuxPow() != nil && !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() && !block.WorkObjectHeader().IsShaOrScryptShareWithInvalidAddress() {
-				backend.Logger().Warn("Work share auxpow signature verification failed")
-				return pubsub.ValidationReject
+			if block.AuxPow() != nil {
+
+				scryptSig := types.ExtractScriptSigFromCoinbaseTx(block.WorkObject.AuxPow().Transaction())
+
+				signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scryptSig)
+				if err != nil {
+					backend.Logger().WithField("err", err).Error("signature time not found in the auxpow")
+					return pubsub.ValidationReject
+				}
+				// auxpow header time and quai block time cannot be less than the
+				// signature time in the coinbase (time at which the template was
+				// signed)
+				if block.WorkObject.AuxPow().Header().Timestamp() < signatureTime {
+					backend.Logger().WithFields(log.Fields{
+						"auxpowHeaderTime": block.WorkObject.AuxPow().Header().Timestamp(),
+						"signatureTime":    signatureTime,
+					}).Error("auxpowheader time is less than signature time")
+					return pubsub.ValidationReject
+				}
+				if block.WorkObject.Time() < uint64(signatureTime) {
+					backend.Logger().WithFields(log.Fields{
+						"auxpowHeaderTime": block.WorkObject.Time(),
+						"signatureTime":    signatureTime,
+					}).Error("quai block time is less than signature time")
+					return pubsub.ValidationReject
+				}
+
+				coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
+				if err != nil {
+					backend.Logger().WithField("err", err).Error("coinbase seal hash not found in the auxpow")
+					return pubsub.ValidationReject
+				}
+
+				switch block.WorkObject.AuxPow().PowID() {
+				case types.Kawpow, types.SHA_BTC, types.SHA_BCH:
+					if block.WorkObject.SealHash() != coinbaseSealHash {
+						backend.Logger().WithFields(log.Fields{
+							"expectedSealHash": block.WorkObject.SealHash(),
+							"actualSealHash":   coinbaseSealHash,
+						}).Error("coinbase seal hash does not match uncle seal hash")
+						return pubsub.ValidationReject
+					}
+				case types.Scrypt:
+					// Since litecoin is merged mined with dogecoin, merkle root
+					// needs to be calculated
+					dogeHash := common.Hash(block.WorkObject.AuxPow().AuxPow2())
+					if (dogeHash == common.Hash{}) {
+						backend.Logger().Error("doge hash is nil in scrypt auxpow")
+						return pubsub.ValidationReject
+					}
+					auxMerkleRoot := types.CreateAuxMerkleRoot(dogeHash, block.WorkObject.SealHash())
+					if auxMerkleRoot != coinbaseSealHash {
+						backend.Logger().WithFields(log.Fields{
+							"expectedAuxMerkleRoot":  auxMerkleRoot,
+							"actualCoinbaseSealHash": coinbaseSealHash,
+						}).Error("coinbase seal hash does not match uncle aux merkle root")
+						return pubsub.ValidationReject
+					}
+					merkleSize, merkleNonce, err := types.ExtractMerkleSizeAndNonceFromCoinbase(scryptSig)
+					if err != nil {
+						backend.Logger().WithField("err", err).Error("failed to extract merkle size and nonce from coinbase")
+						return pubsub.ValidationReject
+					}
+					if merkleSize != params.MerkleSize {
+						backend.Logger().WithFields(log.Fields{
+							"expectedMerkleSize": params.MerkleSize,
+							"actualMerkleSize":   merkleSize,
+						}).Error("invalid merkle size in coinbase")
+						return pubsub.ValidationReject
+					}
+					if merkleNonce != params.MerkleNonce {
+						backend.Logger().WithFields(log.Fields{
+							"expectedMerkleNonce": params.MerkleNonce,
+							"actualMerkleNonce":   merkleNonce,
+						}).Error("invalid merkle nonce in coinbase")
+						return pubsub.ValidationReject
+					}
+				}
+
+				// Verify the merkle root as well
+				expectedMerkleRoot := types.CalculateMerkleRoot(block.WorkObject.AuxPow().PowID(), block.WorkObject.AuxPow().Transaction(), block.WorkObject.AuxPow().MerkleBranch())
+				if block.WorkObject.AuxPow().Header().MerkleRoot() != expectedMerkleRoot {
+					backend.Logger().WithFields(log.Fields{
+						"expectedMerkleRoot": expectedMerkleRoot,
+						"actualMerkleRoot":   block.WorkObject.AuxPow().Header().MerkleRoot(),
+					}).Error("invalid merkle root in auxpow")
+					return pubsub.ValidationReject
+				}
+
+				if err := types.ValidatePrevOutPointIndexAndSequenceOfCoinbase(block.WorkObject.AuxPow().Transaction()); err != nil {
+					backend.Logger().WithField("err", err).Error("invalid prev out point index and sequence in coinbase transaction")
+					return pubsub.ValidationReject
+				}
+
+				if !block.WorkObject.AuxPow().ConvertToTemplate().VerifySignature() && !block.WorkObjectHeader().IsShaOrScryptShareWithInvalidAddress() {
+					backend.Logger().Warn("Work share auxpow signature verification failed")
+					return pubsub.ValidationReject
+				}
+
 			}
 
 			// If the workshare is of sha or scrypt the work validation is different than the progpow or kawpow
