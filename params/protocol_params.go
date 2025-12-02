@@ -240,6 +240,8 @@ var (
 	KQuaiChangeBlock        uint64 = 752000 // Prime block number at which k quai change happens
 	KQuaiChangeHoldInterval uint64 = 20000  // Around 6-7 days worth of the prime blocks
 
+        QitoQuaiDissallowmentInterval uint64 = 0 // Recommended 5000 Prime Blocks
+
 	// KQuaiChangeTable is the table that defines the KQuai change at different blocks
 	// The first value is the block number and the second value is the KQuai value left after the reduction
 	KQuaiChangeTable = [][2]uint64{
