@@ -623,7 +623,7 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 			return fmt.Errorf("wo auxpow powid is not nil before kawpow fork")
 		}
 	}
-	if wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
+	if wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock &&
 		wo.AuxPow() != nil &&
 		wo.AuxPow().PowID() != types.Kawpow {
 		return fmt.Errorf("wo auxpow is not nil and not kawpow after the kawpow fork block")

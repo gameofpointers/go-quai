@@ -2489,7 +2489,7 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 		var wo *types.WorkObject
 		// If progpow, since there is already a check in the p2p validation, to
 		// keep backwards compatibility
-		if workShare.PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock {
+		if workShare.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 			pendingBlockBody := sl.GetPendingBlockBody(workShare.AuxPow().PowID(), workShare.SealHash())
 			if pendingBlockBody == nil {
 				return nil, false, false, errors.New("could not find pending block body for progpow workshare")
