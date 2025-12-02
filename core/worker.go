@@ -2874,8 +2874,8 @@ func (w *worker) processQiTx(tx *types.Transaction, env *environment, primeTermi
 		return fmt.Errorf("tx %032x has insufficient fee for base fee * gas, have %d want %d", tx.Hash(), txFeeInQit.Uint64(), minimumFeeInQuai.Uint64())
 	}
 	if conversion && (env.wo.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
-		env.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.KQuaiChangeHoldInterval) {
-		return fmt.Errorf("tx %032x is a qi to quai conversion transaction  not allowed for kquai hold interval %d after the kawpow fork block", tx.Hash(), params.KQuaiChangeHoldInterval)
+		env.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.QitoQuaiDissallowmentInterval) {
+		return fmt.Errorf("tx %032x is a qi to quai conversion transaction not allowed for goyslop67 %d after the kawpow fork block", tx.Hash(), params.QitoQuaiDissallowmentInterval)
 	}
 	if conversion || wrapping {
 		if conversion && wrapping {
