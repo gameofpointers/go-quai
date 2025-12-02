@@ -31,6 +31,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
+	quaimath "github.com/dominant-strategies/go-quai/common/math"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
@@ -2181,4 +2182,229 @@ func (s *PublicBlockChainQuaiAPI) HashesPerQits(ctx context.Context, qiAmount he
 	totalHashes := new(big.Int).Mul(qiAmount.ToInt(), hashesPerQit)
 
 	return (*hexutil.Big)(totalHashes), nil
+}
+
+// GetMiningInfo returns the current mining difficulty per algorithm and the reward per workshare.
+// This is useful for miners to understand the current mining parameters.
+func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string]interface{}, error) {
+	if s.b.NodeLocation().Context() != common.ZONE_CTX {
+		return nil, errors.New("getMiningInfo can only be called in zone chain")
+	}
+
+	currentHeader := s.b.CurrentHeader()
+	if currentHeader == nil {
+		return nil, errors.New("cannot get current header")
+	}
+
+	// Check if we're past the KawPow fork
+	if currentHeader.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
+		return nil, errors.New("getMiningInfo is only available after the KawPow fork")
+	}
+
+	fields := make(map[string]interface{})
+
+	// Get difficulties per algorithm
+	kawpowDiff := currentHeader.WorkObjectHeader().KawpowDifficulty()
+	shaDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
+	scryptDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
+
+	fields["kawpowDifficulty"] = (*hexutil.Big)(kawpowDiff)
+	fields["shaDifficulty"] = (*hexutil.Big)(shaDiff)
+	fields["scryptDifficulty"] = (*hexutil.Big)(scryptDiff)
+
+	// Get share targets
+	shaShareTarget := currentHeader.WorkObjectHeader().ShaShareTarget()
+	scryptShareTarget := currentHeader.WorkObjectHeader().ScryptShareTarget()
+
+	fields["shaShareTarget"] = (*hexutil.Big)(shaShareTarget)
+	fields["scryptShareTarget"] = (*hexutil.Big)(scryptShareTarget)
+
+	// Get exchange rate from prime terminus for reward calculation
+	primeTerminus := s.b.GetBlockByHash(currentHeader.PrimeTerminusHash())
+	if primeTerminus == nil {
+		return nil, errors.New("cannot find the prime terminus")
+	}
+	exchangeRate := primeTerminus.ExchangeRate()
+
+	// Calculate base block reward (in Quai) without fees
+	baseBlockReward := misc.CalculateQuaiReward(currentHeader.WorkObjectHeader(), currentHeader.Difficulty(), exchangeRate)
+
+	// Calculate average block time and total fees over the last 15 minutes
+	const targetDuration = 15 * 60 // 15 minutes in seconds
+	currentTime := currentHeader.Time()
+	cutoffTime := currentTime - uint64(targetDuration)
+
+	var blockCount int64
+	totalFees := big.NewInt(0)
+	var oldestBlockTime uint64
+
+	// Count actual shares by algorithm for verification
+	var actualKawpowShares, actualShaShares, actualScryptShares int64
+
+	block := currentHeader
+	for block != nil && block.Time() > cutoffTime {
+		blockCount++
+		totalFees = new(big.Int).Add(totalFees, block.TotalFees())
+		oldestBlockTime = block.Time()
+
+		// Count the block itself as a KawPow share
+		actualKawpowShares++
+
+		// Count workshares (uncles) by algorithm
+		for _, uncle := range block.Uncles() {
+			if uncle.AuxPow() == nil {
+				// No AuxPow means Progpow/Kawpow
+				actualKawpowShares++
+			} else {
+				switch uncle.AuxPow().PowID() {
+				case types.Kawpow:
+					actualKawpowShares++
+				case types.SHA_BTC, types.SHA_BCH:
+					actualShaShares++
+				case types.Scrypt:
+					actualScryptShares++
+				}
+			}
+		}
+
+		// Get parent block
+		parentHash := block.ParentHash(common.ZONE_CTX)
+		if s.b.IsGenesisHash(parentHash) {
+			break
+		}
+		block = s.b.GetBlockByHash(parentHash)
+	}
+
+	var avgBlockTime float64
+	var avgTotalFees *big.Int
+	if blockCount > 1 {
+		// Average block time = time span / (number of blocks - 1)
+		timeSpan := currentTime - oldestBlockTime
+		avgBlockTime = float64(timeSpan) / float64(blockCount-1)
+		// Average fees per block
+		avgTotalFees = new(big.Int).Div(totalFees, big.NewInt(blockCount))
+	} else {
+		avgBlockTime = 5.0 // Default to target block time
+		avgTotalFees = big.NewInt(0)
+	}
+
+	fields["avgBlockTime"] = math.Round(avgBlockTime*1000) / 1000 // Round to 3 decimal places
+	fields["avgTotalFees"] = (*hexutil.Big)(avgTotalFees)
+	fields["blocksAnalyzed"] = blockCount
+
+	// Calculate actual share times from observed data (for verification)
+	totalTimeSpan := float64(currentTime - oldestBlockTime)
+	if totalTimeSpan > 0 {
+		if actualKawpowShares > 0 {
+			fields["actualKawpowShareTime"] = math.Round(totalTimeSpan/float64(actualKawpowShares)*1000) / 1000
+		} else {
+			fields["actualKawpowShareTime"] = float64(0)
+		}
+		if actualShaShares > 0 {
+			fields["actualShaShareTime"] = math.Round(totalTimeSpan/float64(actualShaShares)*1000) / 1000
+		} else {
+			fields["actualShaShareTime"] = float64(0)
+		}
+		if actualScryptShares > 0 {
+			fields["actualScryptShareTime"] = math.Round(totalTimeSpan/float64(actualScryptShares)*1000) / 1000
+		} else {
+			fields["actualScryptShareTime"] = float64(0)
+		}
+	} else {
+		fields["actualKawpowShareTime"] = float64(0)
+		fields["actualShaShareTime"] = float64(0)
+		fields["actualScryptShareTime"] = float64(0)
+	}
+	fields["actualKawpowShares"] = actualKawpowShares
+	fields["actualShaShares"] = actualShaShares
+	fields["actualScryptShares"] = actualScryptShares
+
+	// Calculate estimated workshare reward including average fees
+	// Workshare reward = (baseReward + avgTxFees + avgTotalFees/2) / (ExpectedWorksharesPerBlock + 1)
+	estimatedBlockReward := new(big.Int).Set(baseBlockReward)
+	estimatedBlockReward = new(big.Int).Add(estimatedBlockReward, currentHeader.AvgTxFees())
+	estimatedBlockReward = new(big.Int).Add(estimatedBlockReward, new(big.Int).Div(avgTotalFees, common.Big2))
+
+	workshareReward := new(big.Int).Div(estimatedBlockReward, big.NewInt(int64(params.ExpectedWorksharesPerBlock+1)))
+
+	fields["baseBlockReward"] = (*hexutil.Big)(baseBlockReward)
+	fields["estimatedBlockReward"] = (*hexutil.Big)(estimatedBlockReward)
+	fields["workshareReward"] = (*hexutil.Big)(workshareReward)
+
+	// Calculate average share timing for each algorithm
+	// SHA and Scrypt: Count is the EMA of shares per block in 2^32 units
+	// avgShareTime = avgBlockTime / (Count / 2^32) = avgBlockTime * 2^32 / Count
+	shaShareCount := currentHeader.WorkObjectHeader().ShaDiffAndCount().Count()
+	scryptShareCount := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Count()
+
+	// SHA average share time
+	if shaShareCount != nil && shaShareCount.Cmp(common.Big0) > 0 {
+		shaSharesPerBlock := new(big.Float).Quo(new(big.Float).SetInt(shaShareCount), new(big.Float).SetInt(common.Big2e32))
+		shaSharesPerBlockFloat, _ := shaSharesPerBlock.Float64()
+		if shaSharesPerBlockFloat > 0 {
+			fields["avgShaShareTime"] = math.Round(avgBlockTime/shaSharesPerBlockFloat*1000) / 1000
+		} else {
+			fields["avgShaShareTime"] = float64(0)
+		}
+	} else {
+		fields["avgShaShareTime"] = float64(0)
+	}
+
+	// Scrypt average share time
+	if scryptShareCount != nil && scryptShareCount.Cmp(common.Big0) > 0 {
+		scryptSharesPerBlock := new(big.Float).Quo(new(big.Float).SetInt(scryptShareCount), new(big.Float).SetInt(common.Big2e32))
+		scryptSharesPerBlockFloat, _ := scryptSharesPerBlock.Float64()
+		if scryptSharesPerBlockFloat > 0 {
+			fields["avgScryptShareTime"] = math.Round(avgBlockTime/scryptSharesPerBlockFloat*1000) / 1000
+		} else {
+			fields["avgScryptShareTime"] = float64(0)
+		}
+	} else {
+		fields["avgScryptShareTime"] = float64(0)
+	}
+
+	// KawPow average share time
+	// Uses same logic as CalculateKawpowShareDiff in headerchain.go:
+	// kawpowShareTarget = (ExpectedWorksharesPerBlock * 2^32 + 2^32) - min(shaCount, shaTarget) - min(scryptCount, scryptTarget)
+	// expectedKawpowSharesPerBlock = kawpowShareTarget / 2^32
+	shaSharesAvg := new(big.Int)
+	scryptSharesAvg := new(big.Int)
+	if shaShareCount != nil && shaShareTarget != nil {
+		shaSharesAvg = quaimath.BigMin(shaShareCount, shaShareTarget)
+	}
+	if scryptShareCount != nil && scryptShareTarget != nil {
+		scryptSharesAvg = quaimath.BigMin(scryptShareCount, scryptShareTarget)
+	}
+
+	maxTarget := new(big.Int).Mul(big.NewInt(int64(params.ExpectedWorksharesPerBlock)), common.Big2e32)
+	nonKawpowShares := new(big.Int).Add(shaSharesAvg, scryptSharesAvg)
+
+	// If non-kawpow shares >= maxTarget, kawpow only gets the block itself (1 share per block)
+	// Since only KawPow can build blocks, there's always at least 1 KawPow "share" per block
+	if maxTarget.Cmp(nonKawpowShares) <= 0 {
+		fields["avgKawpowShareTime"] = math.Round(avgBlockTime*1000) / 1000
+	} else {
+		// kawpowShareTarget = maxTarget + 2^32 - nonKawpowShares
+		// The +2^32 accounts for the block itself (to get x workshares, divide by x+1)
+		kawpowShareTarget := new(big.Int).Sub(new(big.Int).Add(maxTarget, common.Big2e32), nonKawpowShares)
+		kawpowSharesPerBlock := new(big.Float).Quo(new(big.Float).SetInt(kawpowShareTarget), new(big.Float).SetInt(common.Big2e32))
+		kawpowSharesPerBlockFloat, _ := kawpowSharesPerBlock.Float64()
+		if kawpowSharesPerBlockFloat > 0 {
+			fields["avgKawpowShareTime"] = math.Round(avgBlockTime/kawpowSharesPerBlockFloat*1000) / 1000
+		} else {
+			fields["avgKawpowShareTime"] = math.Round(avgBlockTime*1000) / 1000
+		}
+	}
+
+	// Include current block number and hash for reference
+	fields["blockNumber"] = hexutil.Uint64(currentHeader.NumberU64(common.ZONE_CTX))
+	fields["blockHash"] = currentHeader.Hash()
+
+	// Get quaiSupplyTotal from the database for the current block
+	_, _, totalSupplyQuai, _, _, _, err := rawdb.ReadSupplyAnalyticsForBlock(s.b.Database(), currentHeader.Hash())
+	if err == nil && totalSupplyQuai != nil {
+		fields["quaiSupplyTotal"] = (*hexutil.Big)(totalSupplyQuai)
+	}
+
+	return fields, nil
 }
