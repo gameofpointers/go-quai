@@ -1754,8 +1754,8 @@ func ValidateQiTxOutputsAndSignature(tx *types.Transaction, chain ChainContext, 
 		return nil, fmt.Errorf("tx %032x has insufficient fee for base fee, have %d want %d", tx.Hash(), txFeeInQuai.Uint64(), minimumFeeInQuai.Uint64())
 	}
 	if conversion && (currentHeader.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
-		currentHeader.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.KQuaiChangeHoldInterval) {
-		return nil, fmt.Errorf("tx %032x is a qi to quai conversion transaction  not allowed for kquai hold interval %d after the kawpow fork block", tx.Hash(), params.KQuaiChangeHoldInterval)
+		currentHeader.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.QitoQuaiDissallowmentInterval) {
+		return nil, fmt.Errorf("tx %032x is a qi to quai conversion transaction not allowed for goyslop67 %d after the kawpow fork block", tx.Hash(), params.QitoQuaiDissallowmentInterval)
 	}
 	if conversion || wrapping {
 		if conversion && wrapping {
@@ -2040,8 +2040,8 @@ func ProcessQiTx(tx *types.Transaction, chain ChainContext, checkSig bool, isFir
 		return nil, nil, nil, fmt.Errorf("tx %032x has insufficient fee for base fee, have %d want %d", tx.Hash(), txFeeInQuai.Uint64(), minimumFeeInQuai.Uint64()), nil
 	}
 	if conversion && (currentHeader.PrimeTerminusNumber().Uint64() > params.KawPowForkBlock &&
-		currentHeader.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.KQuaiChangeHoldInterval) {
-		return nil, nil, nil, fmt.Errorf("tx %032x is a qi to quai conversion transaction  not allowed for kquai hold interval %d after the kawpow fork block", tx.Hash(), params.KQuaiChangeHoldInterval), nil
+		currentHeader.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock+params.QitoQuaiDissallowmentInterval) {
+		return nil, nil, nil, fmt.Errorf("tx %032x is a qi to quai conversion transaction not allowed for goyslop67 %d after the kawpow fork block", tx.Hash(), params.QitoQuaiDissallowmentInterval), nil
 	}
 	if conversion || wrapping {
 		if conversion && wrapping {
