@@ -2486,7 +2486,18 @@ func (sl *Slice) ReceiveWorkShare(workShare *types.WorkObjectHeader) (shareView 
 			// This is a p2p workshare and has no transactions.
 			return nil, false, false, nil
 		}
-		wo := types.NewWorkObject(workShare, nil, nil)
+		var wo *types.WorkObject
+		// If progpow, since there is already a check in the p2p validation, to
+		// keep backwards compatibility
+		if workShare.PrimeTerminusNumber().Uint64() <= params.KawPowForkBlock {
+			pendingBlockBody := sl.GetPendingBlockBody(workShare.AuxPow().PowID(), workShare.SealHash())
+			if pendingBlockBody == nil {
+				return nil, false, false, errors.New("could not find pending block body for progpow workshare")
+			}
+			wo = types.NewWorkObject(workShare, pendingBlockBody.Body(), nil)
+		} else {
+			wo = types.NewWorkObject(workShare, nil, nil)
+		}
 		shareView := wo.ConvertToWorkObjectShareView(txs)
 		return shareView, isBlock, isWorkShare, nil
 

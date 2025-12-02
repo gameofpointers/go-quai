@@ -397,6 +397,9 @@ func (wo *WorkObject) KawpowDifficulty() *big.Int {
 }
 
 func (wo *WorkObject) Header() *Header {
+	if wo.Body() == nil {
+		return nil
+	}
 	return wo.Body().Header()
 }
 
@@ -1303,6 +1306,9 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 }
 
 func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
+	if wh == nil {
+		return nil
+	}
 	cpy := *wh
 	cpy.SetHeaderHash(wh.HeaderHash())
 	cpy.SetParentHash(wh.ParentHash())
@@ -1649,12 +1655,21 @@ func CopyWorkObjectBody(wb *WorkObjectBody) *WorkObjectBody {
 func (wb *WorkObjectBody) ProtoEncode(woType WorkObjectView) (*ProtoWorkObjectBody, error) {
 	switch woType {
 	case WorkShareTxObject:
+		var err error
+		var protoHeader *ProtoHeader
+		if wb.header != nil {
+			protoHeader, err = wb.header.ProtoEncode()
+			if err != nil {
+				return nil, err
+			}
+		}
 		// Only encode the txs field in the body
 		protoTransactions, err := wb.transactions.ProtoEncode()
 		if err != nil {
 			return nil, err
 		}
 		return &ProtoWorkObjectBody{
+			Header:       protoHeader,
 			Transactions: protoTransactions,
 		}, nil
 
@@ -1721,6 +1736,12 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 		}
 	case WorkShareTxObject:
 		wb.header = &Header{}
+		if data.GetHeader() != nil {
+			err := wb.header.ProtoDecode(data.GetHeader(), location)
+			if err != nil {
+				return err
+			}
+		}
 		wb.transactions = Transactions{}
 		err = wb.transactions.ProtoDecode(data.GetTransactions(), location)
 		if err != nil {
@@ -1832,6 +1853,6 @@ func (wo *WorkObject) ConvertToPEtxView() *WorkObject {
 
 func (wo *WorkObject) ConvertToWorkObjectShareView(txs Transactions) *WorkObjectShareView {
 	return &WorkObjectShareView{
-		WorkObject: wo.WithBody(nil, txs, nil, nil, nil, nil),
+		WorkObject: wo.WithBody(wo.Header(), txs, nil, nil, nil, nil),
 	}
 }
