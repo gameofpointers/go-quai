@@ -409,6 +409,11 @@ func (api *PublicFilterAPI) Accesses(ctx context.Context, addr common.Address) (
 	}
 
 	go func() {
+
+		headers := make(chan *types.WorkObject)
+		headersSub := api.events.SubscribeChainHeadEvent(headers)
+		unlocks := make(chan core.UnlocksEvent)
+		unlocksSub := api.events.SubscribeUnlocks(unlocks)
 		defer func() {
 			if r := recover(); r != nil {
 				api.backend.Logger().WithFields(log.Fields{
@@ -416,13 +421,11 @@ func (api *PublicFilterAPI) Accesses(ctx context.Context, addr common.Address) (
 					"stacktrace": string(debug.Stack()),
 				}).Error("Go-Quai Panicked")
 			}
+			headersSub.Unsubscribe()
+			unlocksSub.Unsubscribe()
 			api.activeSubscriptions -= 1
 		}()
 		api.activeSubscriptions += 1
-		headers := make(chan *types.WorkObject)
-		headersSub := api.events.SubscribeChainHeadEvent(headers)
-		unlocks := make(chan core.UnlocksEvent)
-		unlocksSub := api.events.SubscribeUnlocks(unlocks)
 		for {
 			select {
 			case h := <-headers:
@@ -434,7 +437,7 @@ func (api *PublicFilterAPI) Accesses(ctx context.Context, addr common.Address) (
 					// Check for external accesses
 					switch tx.Type() {
 					case types.QuaiTxType:
-						if tx.To() != nil && tx.To().Equal(addr) || tx.From(nodeLocation).Equal(addr) {
+						if tx.To() != nil && tx.To().Equal(addr) || tx.From(nodeLocation) != nil && tx.From(nodeLocation).Equal(addr) {
 							notifier.Notify(rpcSub.ID, hash)
 							break
 						}
@@ -472,12 +475,8 @@ func (api *PublicFilterAPI) Accesses(ctx context.Context, addr common.Address) (
 					}
 				}
 			case <-rpcSub.Err():
-				headersSub.Unsubscribe()
-				unlocksSub.Unsubscribe()
 				return
 			case <-notifier.Closed():
-				headersSub.Unsubscribe()
-				unlocksSub.Unsubscribe()
 				return
 			}
 		}
