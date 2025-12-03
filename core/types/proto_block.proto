@@ -117,6 +117,7 @@ message ProtoAuxTemplate {
 message ProtoPowShareDiffAndCount {
   optional bytes difficulty = 1;
   optional bytes count = 2;
+  optional bytes uncled = 3;
 }
 
 message ProtoWorkObjectHeader {

@@ -43,11 +43,11 @@ func testAuxPow() *types.AuxPow {
 }
 
 func testScryptPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return types.NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(20))
+	return types.NewPowShareDiffAndCount(big.NewInt(1000), big.NewInt(20), big.NewInt(21))
 }
 
 func testShaPowShareDiffAndCount() *types.PowShareDiffAndCount {
-	return types.NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(29))
+	return types.NewPowShareDiffAndCount(big.NewInt(2000), big.NewInt(29), big.NewInt(30))
 }
 
 func testWorkObjectHeader(headerHash common.Hash) *types.WorkObjectHeader {

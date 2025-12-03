@@ -686,9 +686,6 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
 			entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
 
-			var validShaShares, totalShaShares uint64
-			var validScryptShares, totalScryptShares uint64
-
 			for i := 0; i <= params.WorkSharesInclusionDepth; i++ {
 
 				var uncles []*types.WorkObjectHeader
@@ -721,26 +718,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 
 						if work.wo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 							if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
-								if uncle.AuxPow() != nil {
-									switch uncle.AuxPow().PowID() {
-									case types.SHA_BCH, types.SHA_BTC:
-										totalShaShares++
-									case types.Scrypt:
-										totalScryptShares++
-									}
-								}
 								continue
-							} else {
-								if uncle.AuxPow() != nil {
-									switch uncle.AuxPow().PowID() {
-									case types.SHA_BCH, types.SHA_BTC:
-										validShaShares++
-										totalShaShares++
-									case types.Scrypt:
-										validScryptShares++
-										totalScryptShares++
-									}
-								}
 							}
 						}
 						sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, uncle)
@@ -782,11 +760,17 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 					if share.AuxPow() != nil {
 						switch share.AuxPow().PowID() {
 						case types.SHA_BCH, types.SHA_BTC:
-							shareReward = new(big.Int).Mul(shareReward, big.NewInt(int64(totalShaShares)))
-							shareReward = new(big.Int).Div(shareReward, big.NewInt(int64(validShaShares)))
+							validCount := new(big.Int).Sub(work.wo.ShaDiffAndCount().Count(), work.wo.ShaDiffAndCount().Uncled())
+							if validCount.Cmp(common.Big0) > 0 {
+								shareReward = new(big.Int).Mul(shareReward, work.wo.ShaDiffAndCount().Count())
+								shareReward = new(big.Int).Div(shareReward, validCount)
+							}
 						case types.Scrypt:
-							shareReward = new(big.Int).Mul(shareReward, big.NewInt(int64(totalScryptShares)))
-							shareReward = new(big.Int).Div(shareReward, big.NewInt(int64(validScryptShares)))
+							validCount := new(big.Int).Sub(work.wo.ScryptDiffAndCount().Count(), work.wo.ScryptDiffAndCount().Uncled())
+							if validCount.Cmp(common.Big0) > 0 {
+								shareReward = new(big.Int).Mul(shareReward, work.wo.ScryptDiffAndCount().Count())
+								shareReward = new(big.Int).Div(shareReward, validCount)
+							}
 						}
 					}
 
@@ -2221,12 +2205,12 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	if nodeCtx == common.ZONE_CTX && newWo.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 		//Calculate the new diff and count values
-		newShaDiff, newShaCount := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.SHA_BTC)
-		newScryptDiff, newScryptCount := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.Scrypt)
+		newShaDiff, newShaCount, newShaUncled := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.SHA_BTC)
+		newScryptDiff, newScryptCount, newScryptUncled := w.hc.CalculatePowDiffAndCount(parent, newWo.WorkObjectHeader(), types.Scrypt)
 
 		// Set the new diff and count values
-		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount))
-		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount))
+		newWo.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(newShaDiff, newShaCount, newShaUncled))
+		newWo.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(newScryptDiff, newScryptCount, newScryptUncled))
 
 		newWo.WorkObjectHeader().SetKawpowDifficulty(w.hc.CalculateKawpowDifficulty(parent, newWo))
 

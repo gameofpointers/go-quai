@@ -386,11 +386,11 @@ func (hc *HeaderChain) VerifyUncles(block *types.WorkObject) error {
 				// calculation of workshare classification, so we need to verify
 				// that the shares are correct for the uncle
 				if uncle.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
-					_, realizedShaShares := hc.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
+					_, realizedShaShares, _ := hc.CalculatePowDiffAndCount(parent, uncle, types.SHA_BTC)
 					if uncle.ShaDiffAndCount().Count().Cmp(realizedShaShares) != 0 {
 						return fmt.Errorf("invalid sha share count : have %v, want %v", uncle.ShaDiffAndCount().Count(), realizedShaShares)
 					}
-					_, realizedScryptShares := hc.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
+					_, realizedScryptShares, _ := hc.CalculatePowDiffAndCount(parent, uncle, types.Scrypt)
 					if uncle.ScryptDiffAndCount().Count().Cmp(realizedScryptShares) != 0 {
 						return fmt.Errorf("invalid scrypt share count : have %v, want %v", uncle.ScryptDiffAndCount().Count(), realizedScryptShares)
 					}
@@ -709,8 +709,8 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 		if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 
 			//Calculate the new diff and count values
-			newShaDiff, newShaCount := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.SHA_BTC)
-			newScryptDiff, newScryptCount := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.Scrypt)
+			newShaDiff, newShaCount, newShaUncled := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.SHA_BTC)
+			newScryptDiff, newScryptCount, newScryptUncled := hc.CalculatePowDiffAndCount(parent, header.WorkObjectHeader(), types.Scrypt)
 
 			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty().Cmp(newShaDiff) != 0 {
 				return fmt.Errorf("invalid sha difficulty: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Difficulty(), newShaDiff)
@@ -718,17 +718,27 @@ func (hc *HeaderChain) verifyHeader(header, parent *types.WorkObject, uncle bool
 			if header.WorkObjectHeader().ShaDiffAndCount().Count().Cmp(newShaCount) != 0 {
 				return fmt.Errorf("invalid sha count: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Count(), newShaCount)
 			}
+			if header.WorkObjectHeader().ShaDiffAndCount().Uncled().Cmp(newShaUncled) != 0 {
+				return fmt.Errorf("invalid sha uncled: have %v, want %v", header.WorkObjectHeader().ShaDiffAndCount().Uncled(), newShaUncled)
+			}
 			if header.WorkObjectHeader().ScryptDiffAndCount().Difficulty().Cmp(newScryptDiff) != 0 {
 				return fmt.Errorf("invalid scrypt difficulty: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Difficulty(), newScryptDiff)
 			}
 			if header.WorkObjectHeader().ScryptDiffAndCount().Count().Cmp(newScryptCount) != 0 {
 				return fmt.Errorf("invalid scrypt count: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Count(), newScryptCount)
 			}
+			if header.WorkObjectHeader().ScryptDiffAndCount().Uncled().Cmp(newScryptUncled) != 0 {
+				return fmt.Errorf("invalid scrypt uncled: have %v, want %v", header.WorkObjectHeader().ScryptDiffAndCount().Uncled(), newScryptUncled)
+			}
 		} else {
-			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ShaDiffAndCount().Count() != nil {
+			if header.WorkObjectHeader().ShaDiffAndCount().Difficulty() != nil ||
+				header.WorkObjectHeader().ShaDiffAndCount().Count() != nil ||
+				header.WorkObjectHeader().ShaDiffAndCount().Uncled() != nil {
 				return fmt.Errorf("sha diff and count must be nil before kawpow fork block")
 			}
-			if header.WorkObjectHeader().ScryptDiffAndCount().Difficulty() != nil || header.WorkObjectHeader().ScryptDiffAndCount().Count() != nil {
+			if header.WorkObjectHeader().ScryptDiffAndCount().Difficulty() != nil ||
+				header.WorkObjectHeader().ScryptDiffAndCount().Count() != nil ||
+				header.WorkObjectHeader().ScryptDiffAndCount().Uncled() != nil {
 				return fmt.Errorf("scrypt diff and count must be nil before kawpow fork block")
 			}
 		}

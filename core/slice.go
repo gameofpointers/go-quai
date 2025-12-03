@@ -784,7 +784,7 @@ func (sl *Slice) Append(header *types.WorkObject, domTerminus common.Hash, domOr
 	}
 
 	_, shaDiff, scryptDiff := sl.hc.DifficultyByAlgo(block)
-	kawpowShares, shaShares, scryptShares := sl.hc.CountWorkSharesByAlgo(block)
+	kawpowShares, shaShares, _, scryptShares, _ := sl.hc.CountWorkSharesByAlgo(block)
 
 	shaCount := big.NewInt(1)
 	scryptCount := big.NewInt(1)

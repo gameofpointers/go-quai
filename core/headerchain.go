@@ -374,34 +374,36 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 }
 
 // CalculatePowDiffAndCount calculates the new PoW difficulty and average number of work shares
-func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (newDiff, newAverageShares *big.Int) {
+func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (newDiff, newAverageShares, newUncledShares *big.Int) {
 
 	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
 		switch powId {
 		case types.SHA_BTC, types.SHA_BCH:
-			return params.InitialShaDiff, params.TargetShaShares
+			return params.InitialShaDiff, params.TargetShaShares, big.NewInt(0)
 		case types.Scrypt:
-			return params.InitialScryptDiff, params.TargetShaShares
+			return params.InitialScryptDiff, params.TargetShaShares, big.NewInt(0)
 		default:
-			return big.NewInt(0), big.NewInt(0)
+			return big.NewInt(0), big.NewInt(0), big.NewInt(0)
 		}
 	}
 
 	// Get the sha and scrypt share counts from the tx pool
-	_, countSha, countScrypt := hc.CountWorkSharesByAlgo(parent)
+	_, countSha, uncledSha, countScrypt, uncledScrypt := hc.CountWorkSharesByAlgo(parent)
 
-	var numShares *big.Int
+	var numShares, uncledShares *big.Int
 	var shares *types.PowShareDiffAndCount
 
 	switch powId {
 	case types.SHA_BTC, types.SHA_BCH:
 		shares = parent.ShaDiffAndCount()
 		numShares = new(big.Int).Mul(big.NewInt(int64(countSha)), common.Big2e32)
+		uncledShares = new(big.Int).Mul(big.NewInt(int64(uncledSha)), common.Big2e32)
 	case types.Scrypt:
 		shares = parent.ScryptDiffAndCount()
 		numShares = new(big.Int).Mul(big.NewInt(int64(countScrypt)), common.Big2e32)
+		uncledShares = new(big.Int).Mul(big.NewInt(int64(uncledScrypt)), common.Big2e32)
 	default:
-		return big.NewInt(0), big.NewInt(0)
+		return big.NewInt(0), big.NewInt(0), big.NewInt(0)
 	}
 
 	// numShares is the EMA of the number of work shares over last N blocks * 2^32
@@ -413,7 +415,7 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	case types.Scrypt:
 		error = new(big.Int).Sub(numShares, parent.ScryptShareTarget())
 	default:
-		return big.NewInt(0), big.NewInt(0)
+		return big.NewInt(0), big.NewInt(0), big.NewInt(0)
 	}
 
 	// Calculate the new difficulty based on the error
@@ -436,6 +438,10 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	newAverageShares = newAverageShares.Add(newAverageShares, numShares)
 	newAverageShares = newAverageShares.Div(newAverageShares, params.WorkShareEmaBlocks)
 
+	newUncledShares = new(big.Int).Mul(shares.Uncled(), new(big.Int).Sub(params.WorkShareEmaBlocks, common.Big1))
+	newUncledShares = newUncledShares.Add(newUncledShares, uncledShares)
+	newUncledShares = newUncledShares.Div(newUncledShares, params.WorkShareEmaBlocks)
+
 	// Ensure the new difficulty is within bounds
 	var lowerBound *big.Int
 	switch powId {
@@ -444,22 +450,24 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	case types.Scrypt:
 		lowerBound = new(big.Int).Div(params.InitialScryptDiff, params.MinPowDivisor)
 	default:
-		return big.NewInt(0), big.NewInt(0)
+		return big.NewInt(0), big.NewInt(0), big.NewInt(0)
 	}
 
 	if newDiff.Cmp(lowerBound) < 0 {
 		newDiff = lowerBound
 	}
-	return newDiff, newAverageShares
+	return newDiff, newAverageShares, newUncledShares
 }
 
 // CountWorkSharesByAlgo counts the number of work shares by each algo in the given block
-func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount, shaCount, scryptCount int) {
+func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (int, int, int, int, int) {
 	// Need to calculate the long term average count for the number of shares
 	uncles := wo.Body().Uncles()
 	countKawPow := 0
 	countSha := 0
+	uncledShaCount := 0
 	countScrypt := 0
+	uncledScryptCount := 0
 	for _, uncle := range uncles {
 		if uncle.AuxPow() != nil {
 			switch uncle.AuxPow().PowID() {
@@ -467,14 +475,20 @@ func (hc *HeaderChain) CountWorkSharesByAlgo(wo *types.WorkObject) (kawpowCount,
 				countKawPow++
 			case types.SHA_BTC, types.SHA_BCH:
 				countSha++
+				if _, err := uncle.PrimaryCoinbase().InternalAddress(); err != nil {
+					uncledShaCount++
+				}
 			case types.Scrypt:
 				countScrypt++
+				if _, err := uncle.PrimaryCoinbase().InternalAddress(); err != nil {
+					uncledScryptCount++
+				}
 			}
 		} else {
 			countKawPow++ // Progpow doesnt have the auxpow field
 		}
 	}
-	return countKawPow, countSha, countScrypt
+	return countKawPow, countSha, uncledShaCount, countScrypt, uncledScryptCount
 }
 
 // DifficultyByAlgo(wo *types.WorkObject) returns the difficulty for each algo in the given block

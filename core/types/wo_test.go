@@ -57,6 +57,7 @@ func powDiffAndCountTestData() *PowShareDiffAndCount {
 	return NewPowShareDiffAndCount(
 		big.NewInt(123456789),
 		big.NewInt(42),
+		big.NewInt(43),
 	)
 }
 
@@ -811,7 +812,7 @@ func fuzzPowDiffAndCountAfterKawpowFork(f *testing.F, getVal func(*WorkObjectHea
 	}
 	f.Fuzz(func(t *testing.T, diff int64, count int64) {
 		localWo, hash := woTestDataWithAuxPow()
-		powDiff := NewPowShareDiffAndCount(big.NewInt(diff), big.NewInt(count))
+		powDiff := NewPowShareDiffAndCount(big.NewInt(diff), big.NewInt(count), big.NewInt(count))
 		if !getVal(localWo.woHeader).Cmp(powDiff) {
 			setVal(localWo.woHeader, powDiff)
 			require.Equal(t, localWo.Hash(), hash, "Hash shouldnt change without changing the auxpow\noriginal: %v, modified: %v", getVal(wo.woHeader), powDiff)

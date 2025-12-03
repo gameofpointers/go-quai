@@ -1131,9 +1131,6 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 		sharesAtTargetBlockDepth = append(sharesAtTargetBlockDepth, targetBlock.WorkObjectHeader())
 		entropyOfSharesAtTargetBlockDepth = append(entropyOfSharesAtTargetBlockDepth, zoneThresholdEntropy)
 
-		var validShaShares, totalShaShares uint64
-		var validScryptShares, totalScryptShares uint64
-
 		for i := 0; i <= params.WorkSharesInclusionDepth; i++ {
 
 			var uncles []*types.WorkObjectHeader
@@ -1165,26 +1162,7 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 
 					if block.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 						if _, err = uncle.PrimaryCoinbase().InternalAddress(); err != nil {
-							if uncle.AuxPow() != nil {
-								switch uncle.AuxPow().PowID() {
-								case types.SHA_BCH, types.SHA_BTC:
-									totalShaShares++
-								case types.Scrypt:
-									totalScryptShares++
-								}
-							}
 							continue
-						} else {
-							if uncle.AuxPow() != nil {
-								switch uncle.AuxPow().PowID() {
-								case types.SHA_BCH, types.SHA_BTC:
-									validShaShares++
-									totalShaShares++
-								case types.Scrypt:
-									validScryptShares++
-									totalScryptShares++
-								}
-							}
 						}
 					}
 
@@ -1226,11 +1204,17 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 				if share.AuxPow() != nil {
 					switch share.AuxPow().PowID() {
 					case types.SHA_BCH, types.SHA_BTC:
-						shareReward = new(big.Int).Mul(shareReward, big.NewInt(int64(totalShaShares)))
-						shareReward = new(big.Int).Div(shareReward, big.NewInt(int64(validShaShares)))
+						validCount := new(big.Int).Sub(block.ShaDiffAndCount().Count(), block.ShaDiffAndCount().Uncled())
+						if validCount.Cmp(common.Big0) > 0 {
+							shareReward = new(big.Int).Mul(shareReward, block.ShaDiffAndCount().Count())
+							shareReward = new(big.Int).Div(shareReward, validCount)
+						}
 					case types.Scrypt:
-						shareReward = new(big.Int).Mul(shareReward, big.NewInt(int64(totalScryptShares)))
-						shareReward = new(big.Int).Div(shareReward, big.NewInt(int64(validScryptShares)))
+						validCount := new(big.Int).Sub(block.ScryptDiffAndCount().Count(), block.ScryptDiffAndCount().Uncled())
+						if validCount.Cmp(common.Big0) > 0 {
+							shareReward = new(big.Int).Mul(shareReward, block.ScryptDiffAndCount().Count())
+							shareReward = new(big.Int).Div(shareReward, validCount)
+						}
 					}
 				}
 

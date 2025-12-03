@@ -80,12 +80,14 @@ const (
 type PowShareDiffAndCount struct {
 	difficulty *big.Int
 	count      *big.Int
+	uncled     *big.Int
 }
 
-func NewPowShareDiffAndCount(difficulty *big.Int, count *big.Int) *PowShareDiffAndCount {
+func NewPowShareDiffAndCount(difficulty *big.Int, count *big.Int, uncled *big.Int) *PowShareDiffAndCount {
 	return &PowShareDiffAndCount{
 		difficulty: difficulty,
 		count:      count,
+		uncled:     uncled,
 	}
 }
 
@@ -100,6 +102,9 @@ func (p *PowShareDiffAndCount) RPCMarshal() map[string]interface{} {
 	if p.count != nil {
 		result["count"] = (*hexutil.Big)(p.Count())
 	}
+	if p.uncled != nil {
+		result["uncled"] = (*hexutil.Big)(p.Uncled())
+	}
 	return result
 }
 
@@ -108,6 +113,7 @@ func (p *PowShareDiffAndCount) UnmarshalJSON(data []byte) error {
 	var dec struct {
 		Difficulty *hexutil.Big `json:"difficulty"`
 		Count      *hexutil.Big `json:"count"`
+		Uncled     *hexutil.Big `json:"uncled"`
 	}
 
 	if err := json.Unmarshal(data, &dec); err != nil {
@@ -119,6 +125,9 @@ func (p *PowShareDiffAndCount) UnmarshalJSON(data []byte) error {
 	}
 	if dec.Count != nil {
 		p.SetCount((*big.Int)(dec.Count))
+	}
+	if dec.Uncled != nil {
+		p.SetUncled((*big.Int)(dec.Uncled))
 	}
 	return nil
 }
@@ -133,7 +142,10 @@ func (p *PowShareDiffAndCount) Cmp(other *PowShareDiffAndCount) bool {
 	if p.count == nil || other.count == nil {
 		return false
 	}
-	return p.difficulty.Cmp(other.difficulty) == 0 && p.count.Cmp(other.count) == 0
+	if p.uncled == nil || other.uncled == nil {
+		return false
+	}
+	return p.difficulty.Cmp(other.difficulty) == 0 && p.count.Cmp(other.count) == 0 && p.uncled.Cmp(other.uncled) == 0
 }
 
 func (p *PowShareDiffAndCount) Clone() *PowShareDiffAndCount {
@@ -145,9 +157,14 @@ func (p *PowShareDiffAndCount) Clone() *PowShareDiffAndCount {
 	if p.count != nil {
 		count = new(big.Int).Set(p.count)
 	}
+	var uncled *big.Int
+	if p.uncled != nil {
+		uncled = new(big.Int).Set(p.uncled)
+	}
 	return &PowShareDiffAndCount{
 		difficulty: difficulty,
 		count:      count,
+		uncled:     uncled,
 	}
 }
 
@@ -159,6 +176,10 @@ func (p *PowShareDiffAndCount) Count() *big.Int {
 	return p.count
 }
 
+func (p *PowShareDiffAndCount) Uncled() *big.Int {
+	return p.uncled
+}
+
 func (p *PowShareDiffAndCount) SetDifficulty(difficulty *big.Int) {
 	p.difficulty = difficulty
 }
@@ -167,11 +188,15 @@ func (p *PowShareDiffAndCount) SetCount(count *big.Int) {
 	p.count = count
 }
 
+func (p *PowShareDiffAndCount) SetUncled(uncled *big.Int) {
+	p.uncled = uncled
+}
+
 func (p *PowShareDiffAndCount) ProtoEncode() *ProtoPowShareDiffAndCount {
 	if p == nil {
 		return nil
 	}
-	if p.difficulty == nil || p.count == nil {
+	if p.difficulty == nil || p.count == nil || p.uncled == nil {
 		return nil
 	}
 	protoShare := &ProtoPowShareDiffAndCount{}
@@ -187,6 +212,11 @@ func (p *PowShareDiffAndCount) ProtoEncode() *ProtoPowShareDiffAndCount {
 	} else {
 		protoShare.Count = p.count.Bytes()
 	}
+	if p.uncled.Sign() == 0 {
+		protoShare.Uncled = []byte{0}
+	} else {
+		protoShare.Uncled = p.uncled.Bytes()
+	}
 	return protoShare
 }
 
@@ -197,6 +227,7 @@ func (p *PowShareDiffAndCount) ProtoDecode(protoShare *ProtoPowShareDiffAndCount
 	if protoShare == nil {
 		p.difficulty = nil
 		p.count = nil
+		p.uncled = nil
 		return
 	}
 	if protoShare.GetDifficulty() != nil {
@@ -208,6 +239,11 @@ func (p *PowShareDiffAndCount) ProtoDecode(protoShare *ProtoPowShareDiffAndCount
 		p.count = new(big.Int).SetBytes(protoShare.GetCount())
 	} else {
 		p.count = nil
+	}
+	if protoShare.GetUncled() != nil {
+		p.uncled = new(big.Int).SetBytes(protoShare.GetUncled())
+	} else {
+		p.uncled = nil
 	}
 }
 
