@@ -303,9 +303,9 @@ var (
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
 	MuSig2PublicKeys = []string{
-		"033bc370eaac5156e829f671b7c5655135db359d58a3a5c3cdf37be5750597a97d", // Key 1
-		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
-		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
+		"033073c6c8f3d296c86e79443a45ff66b64c05d9e0fda0b593adffeaa57def3381", // Key 1
+		"03d6d355f016a19b1800f1c5e04f1ae1935e1a0b5803b85d349d978bbea7a2b982", // Key 2
+		"03a9eb89ddab4f63503e6cef12bfc97cdb749389ad31a221fcfb672b607f8adf0c", // Key 3
 	}
 
 	// MerkleNonce, MerkleSize is used for the auxpow2
