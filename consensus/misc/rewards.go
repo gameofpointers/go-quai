@@ -196,7 +196,7 @@ func KawPowEquivalentDifficulty(header *types.WorkObjectHeader, difficulty *big.
 	// Difficulty adjustment formula: Diff_adjusted = (Diff_original * (2^32 * 2^WorkSharesThresholdDiff)) / (2^32 * 2^WorkShareThresholdDiff - Min(scryptShares + shaShares, 2^32*2^WorkSharesThresholdDiff - 2^32))
 	expectedTotalShares := new(big.Int).Mul(big.NewInt(int64(params.ExpectedWorksharesPerBlock+1)), common.Big2e32)                       // Expected total shares in 2^32 units
 	totalMultiAlgoShares := math.BigMin(new(big.Int).Add(scryptShares, shaShares), new(big.Int).Sub(expectedTotalShares, common.Big2e32)) // Make sure we don't exceed expected shares
-	numerator := new(big.Int).Mul(header.Difficulty(), expectedTotalShares)
+	numerator := new(big.Int).Mul(difficulty, expectedTotalShares)
 	denominator := new(big.Int).Sub(expectedTotalShares, totalMultiAlgoShares)
 	adjustedDifficulty := new(big.Int).Div(numerator, denominator)
 	return adjustedDifficulty
