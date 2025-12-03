@@ -705,10 +705,11 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 						if work.wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 							_, err := w.hc.VerifySeal(uncle)
 							if err != nil {
-								uncleEntropy, err = w.hc.HeaderIntrinsicLogEntropy(uncle)
+								powHash, err := w.hc.ComputePowHash(uncle)
 								if err != nil {
 									return nil, err
 								}
+								uncleEntropy = common.IntrinsicLogEntropy(powHash)
 								totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 							} else {
 								// Add the target weight into the uncles

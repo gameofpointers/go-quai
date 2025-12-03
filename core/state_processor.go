@@ -1149,10 +1149,11 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 					if block.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 						_, err := p.hc.VerifySeal(uncle)
 						if err != nil {
-							uncleEntropy, err = p.hc.HeaderIntrinsicLogEntropy(uncle)
+							powHash, err := p.hc.ComputePowHash(uncle)
 							if err != nil {
-								return nil, nil, nil, nil, 0, 0, 0, nil, nil, errors.New("cannot compute intrinsic log entropy for the workshare")
+								return nil, nil, nil, nil, 0, 0, 0, nil, nil, err
 							}
+							uncleEntropy = common.IntrinsicLogEntropy(powHash)
 							totalEntropy = new(big.Int).Add(totalEntropy, uncleEntropy)
 						} else {
 							// Add the target weight into the uncles
