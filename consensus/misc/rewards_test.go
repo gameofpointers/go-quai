@@ -211,8 +211,8 @@ func TestKawpowEquivalentDifficulty(t *testing.T) {
 
 	for _, tc := range testCases {
 		header := types.EmptyWorkObject(common.ZONE_CTX)
-		header.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(shaDiff, tc.shaCount))
-		header.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(scryptDiff, tc.scryptCount))
+		header.WorkObjectHeader().SetShaDiffAndCount(types.NewPowShareDiffAndCount(shaDiff, tc.shaCount, tc.shaCount))
+		header.WorkObjectHeader().SetScryptDiffAndCount(types.NewPowShareDiffAndCount(scryptDiff, tc.scryptCount, tc.scryptCount))
 		header.WorkObjectHeader().SetDifficulty(tc.difficulty)
 
 		result := KawPowEquivalentDifficulty(header.WorkObjectHeader(), tc.difficulty)
