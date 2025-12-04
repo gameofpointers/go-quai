@@ -21,16 +21,17 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 // Genesis hashes to enforce below configs on.
 var (
 	// Progpow GenesisHashes
 	ProgpowColosseumGenesisHash  = common.HexToHash("0xac81c28f1a72591b87b5f16c9793cdc0e87c45c6d426d1a364c3b8f6386b5b8b")
-	ProgpowGardenGenesisHash     = common.HexToHash("0xd117b52d8d7c20d4b200bedd1c0358cc3b93df937cf2903e94c1e5a42fc49b18")
+	ProgpowGardenGenesisHash     = common.HexToHash("0x8a611a707f8da1129432cf5b97e6f1eccf902797124f26ea7b6a929b63fd8fde")
 	ProgpowOrchardGenesisHash    = common.HexToHash("0x3c9e1b5879118260b45ec05aebdd127808e830ecf5fc5ef9cb46405d339f8dff")
-	ProgpowLighthouseGenesisHash = common.HexToHash("0x130cb1771fef2ecfe5db987783da74f1de1131848a434f4118dd048515128b9f")
-	ProgpowLocalGenesisHash      = common.HexToHash("0x718f13b40bb30d77a53dbd2688a6beb253c169fc2bf9114bb7b16e126c21a170")
+	ProgpowLighthouseGenesisHash = common.HexToHash("0x83f1a345d1406d8d8b8e83b1d8e8369a3aa3070448d52cdffd30769a512b07c7")
+	ProgpowLocalGenesisHash      = common.HexToHash("0x7ea6d5711d07d9cd5382e13511343c09c5734c6cf5251156f1a63b2598ab3179")
 
 	// Blake3GenesisHashes
 	Blake3PowColosseumGenesisHash  = common.HexToHash("0xda598b9b93c0aa101a238033ebb6017ca0be4d58f14945f71b19e9e77e8d12bb")
@@ -115,9 +116,9 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllProgpowProtocolChanges = &ChainConfig{big.NewInt(1337), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}, false}
+	AllProgpowProtocolChanges = &ChainConfig{big.NewInt(1337), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}, false, false}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}, false}
+	TestChainConfig = &ChainConfig{big.NewInt(1), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}, false, false}
 	TestRules       = TestChainConfig.Rules(new(big.Int))
 )
 
@@ -135,6 +136,44 @@ type ChainConfig struct {
 	Location           common.Location
 	DefaultGenesisHash common.Hash
 	IndexAddressUtxos  bool
+	TelemetryEnabled   bool
+}
+
+// Mode defines the type and amount of PoW verification a kawpow engine makes.
+type Mode uint
+
+const (
+	ModeNormal Mode = iota
+	ModeShared
+	ModeTest
+	ModeFake
+	ModeFullFake
+)
+
+// PowConfig are the configuration parameters of pow.
+type PowConfig struct {
+	PowMode Mode
+
+	CacheDir       string
+	CachesInMem    int
+	CachesOnDisk   int
+	CachesLockMmap bool
+	DurationLimit  *big.Int
+	GasCeil        uint64
+	MinDifficulty  *big.Int
+	GenAllocs      []GenesisAccount
+
+	NodeLocation common.Location
+
+	WorkShareThreshold int
+
+	// When set, notifications sent by the remote sealer will
+	// be block header JSON objects instead of work package arrays.
+	NotifyFull bool
+
+	Log *log.Logger `toml:"-"`
+	// Number of threads to mine on if mining
+	NumThreads int
 }
 
 // SetLocation sets the location on the chain config

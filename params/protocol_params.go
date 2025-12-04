@@ -20,9 +20,18 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
 )
+
+// max returns the maximum of two uint64 values
+func max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
+}
 
 const (
 	GasLimitBoundDivisor    uint64 = 1024     // The bound divisor of the gas limit, used in update calculations.
@@ -169,7 +178,7 @@ var (
 	OrchardDurationLimit              = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LighthouseDurationLimit           = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(1) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	TimeToStartTx              uint64 = 15 * BlocksPerDay
+	TimeToStartTx              uint64 = 100
 	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 5 second block time
 	BlocksPerWeek              uint64 = 7 * BlocksPerDay
 	BlocksPerMonth             uint64 = 30 * BlocksPerDay
@@ -180,14 +189,15 @@ var (
 	MinQuaiConversionAmount           = new(big.Int).Mul(big.NewInt(10000000000), big.NewInt(GWei)) // 0.000000001 Quai
 	MaxWorkShareCount                 = 16
 	WorkSharesThresholdDiff           = 3 // Number of bits lower than the target that the default consensus engine uses
+	ExpectedWorksharesPerBlock        = 8 // The expected number of work shares per block
 	WorkShareP2PThresholdDiff         = 7 // Default value in bits lower than the target
 	WorkSharesInclusionDepth          = 3 // Number of blocks upto which the work shares can be referenced and this is protocol enforced
 	MaxLockupByte                     = 3 // Max lockup byte allowed in the transactions for coinbase
 	LockupByteToBlockDepth            = [4]uint64{
-		ConversionLockPeriod, // 2 weeks
-		3 * BlocksPerMonth,   // 3 months
-		6 * BlocksPerMonth,   // 6 months
-		BlocksPerYear,        // 12 months
+		ConversionLockPeriod, // 100
+		200,                  // 200
+		300,                  // 300
+		400,                  // 400
 	}
 	// The first value represents the multiplier that represents interest rate
 	// for the first year, the second value represents the terminal rate these
@@ -201,13 +211,13 @@ var (
 	ExchangeRate                                = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	MaxTimeDiffBetweenBlocks             int64  = 100                            // Max time difference between the blocks to 100 secs
 	OneOverAlpha                                = big.NewInt(1000)               // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = 262000                         // This is in order of prime blocks
+	ControllerKickInBlock                uint64 = 2                              // This is in order of prime blocks
 	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek              // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
 	BaseFeeMultiplier                           = big.NewInt(50)
 
-	ConversionLockPeriod uint64 = 2 * BlocksPerWeek
+	ConversionLockPeriod uint64 = 100
 	CoinbaseEpochBlocks  uint64 = 50000
 
 	// Controller related constants
@@ -246,6 +256,68 @@ var (
 	MaxGrindIncreaseForkBlock = big.NewInt(1865000)
 
 	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
+)
+
+var (
+	KawPowForkBlock            uint64 = 3                // Block at which KawPow activates
+	KawPowTransitionPeriod     uint64 = BlocksPerDay / 4 // Progpow grace period after kawpow upgrade, 2 week
+	TotalPowEngines            uint64 = 2                // Total number of PoW engines supported (Progpow, Kawpow)
+	AuxTemplateLivenessTime    uint64 = 15
+	AuxTemplateStaleTime       uint64 = uint64(10 * time.Minute)
+	ShareLivenessTime          uint32 = 18             // The time in seconds that a share is considered live for the purposes of inclusion in the block reward calculation
+	ShareDiffRelativeThreshold        = big.NewInt(90) // 90% of the current header diff
+	AlphaInverse                      = big.NewInt(1)
+
+	ShaBlockTime    = big.NewInt(600) // btc/bch block time 10 mins in secs
+	ScryptBlockTime = big.NewInt(60)  // Doge block time 1 min in secs
+
+	// PoW share difficulty parameters
+	InitialShaDiffMultiple    = big.NewInt(167000)
+	InitialScryptDiffMultiple = big.NewInt(12)
+
+	MinPowDivisor           = big.NewInt(2) // Minimum multiple of the target difficulty that a share must meet to be valid
+	PowDiffAdjustmentFactor = big.NewInt(300000)
+
+	// Target number of shares per algo times 2^32
+	TargetShaShares = big.NewInt(12884901888)
+	MaxShaShares    = big.NewInt(17179869184) // 2x the target
+
+	// Maximum number of shares that can be included in a block for each algo.
+	// This is to prevent a single block from being filled with shares from one
+	// specific algo
+	MaxShaSharesCount    = 8
+	MaxScryptSharesCount = 8
+
+	// Maximum amount of hashrate allowed on subsidy chain
+	MaxSubsidyNumerator   = big.NewInt(3)
+	MaxSubsidyDenominator = big.NewInt(4)
+
+	InitialKawpowDiff       = big.NewInt(21500000000000) // Ravencoin mainnet has 4.3Th/s
+	RavenQuaiBlockTimeRatio = big.NewInt(12)             // 60s/5s = 12
+
+	RavencoinDiffPercentage  = big.NewInt(10000) // 100% in basis points
+	RavencoinDiffCutoffEnd   = big.NewInt(9000)  // 90%
+	RavencoinDiffCutoffStart = big.NewInt(7500)  // 75%
+	RavencoinDiffCutoffRange = big.NewInt(1500)
+
+	// The number of blocks to use in the exponential moving average
+	WorkShareEmaBlocks = big.NewInt(1000) // About 1 day worth of blocks
+
+	// MuSig2 2-of-3 public keys for AuxTemplate signing
+	// Add this to go-quai/params/protocol_params.go
+	MuSig2PublicKeys = []string{
+		"033bc370eaac5156e829f671b7c5655135db359d58a3a5c3cdf37be5750597a97d", // Key 1
+		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
+		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
+	}
+
+	// MerkleNonce, MerkleSize is used for the auxpow2
+	MerkleNonce uint32 = 0
+	MerkleSize  uint32 = 2
+
+	UnlivelySharePenalty      = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to being stale
+	ProgpowPenalty            = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to share being progpow after the fork
+	ShareRewardPenaltyDivisor = big.NewInt(100)
 )
 
 const (

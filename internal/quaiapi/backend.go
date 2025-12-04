@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/bloombits"
@@ -82,8 +83,12 @@ type Backend interface {
 	PendingBlock() *types.WorkObject
 	RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int)
 	NewGenesisPendingHeader(pendingHeader *types.WorkObject, domTerminus common.Hash, hash common.Hash) error
-	GetPendingHeader() (*types.WorkObject, error)
-	GetPendingBlockBody(workShare *types.WorkObjectHeader) *types.WorkObject
+	GetPendingHeader(powID types.PowID, coinbase common.Address) (*types.WorkObject, error)
+	GetPendingBlockBody(powId types.PowID, sealHash common.Hash) *types.WorkObject
+	AddPendingAuxPow(powId types.PowID, sealHash common.Hash, auxpow *types.AuxPow)
+	SubmitBlock(raw hexutil.Bytes, powId types.PowID) (common.Hash, uint64, types.WorkShareValidity, error)
+	ReceiveMinedHeader(woHeader *types.WorkObject) error
+	ReceiveWorkShare(workShare *types.WorkObjectHeader) error
 	GetTxsFromBroadcastSet(hash common.Hash) (types.Transactions, error)
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)
 	GetSubManifest(slice common.Location, blockHash common.Hash) (types.BlockManifest, error)
@@ -100,6 +105,8 @@ type Backend interface {
 	SubscribeExpansionEvent(ch chan<- core.ExpansionEvent) event.Subscription
 	WriteGenesisBlock(block *types.WorkObject, location common.Location)
 	SendWorkShare(workShare *types.WorkObjectHeader) error
+	SendAuxPowTemplate(auxTemplate *types.AuxTemplate) error
+	GetBestAuxTemplate(powId types.PowID) *types.AuxTemplate
 	CheckIfValidWorkShare(workShare *types.WorkObjectHeader) types.WorkShareValidity
 	SetDomInterface(domInterface core.CoreBackend)
 	BroadcastWorkShare(workShare *types.WorkObjectShareView, location common.Location) error
@@ -113,12 +120,22 @@ type Backend interface {
 	AddToCalcOrderCache(hash common.Hash, order int, intrinsicS *big.Int)
 	GetPrimeBlock(blockHash common.Hash) *types.WorkObject
 	GetKQuaiAndUpdateBit(blockHash common.Hash) (*big.Int, uint8, error)
-	consensus.ChainHeaderReader
-	TxMiningEnabled() bool
 	GetWorkShareThreshold() int
 	GetMinerEndpoints() []string
 	GetWorkShareP2PThreshold() int
 	SetWorkShareP2PThreshold(threshold int)
+	GetWorkshareLRUDump(limit int) map[string]interface{}
+	UncleWorkShareClassification(workshare *types.WorkObjectHeader) types.WorkShareValidity
+	CheckWorkThreshold(header *types.WorkObjectHeader, threshold int) bool
+	VerifySeal(header *types.WorkObjectHeader) (common.Hash, error)
+	ComputePowHash(header *types.WorkObjectHeader) (common.Hash, error)
+	GetBlockByHash(hash common.Hash) *types.WorkObject
+	Database() ethdb.Database
+	CalcBaseFee(wo *types.WorkObject) *big.Int
+	Config() *params.ChainConfig
+	GetTerminiByHash(hash common.Hash) *types.Termini
+	GetHeaderByHash(hash common.Hash) *types.WorkObject
+	IsGenesisHash(hash common.Hash) bool
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool
@@ -151,9 +168,13 @@ type Backend interface {
 	SubscribePendingLogsEvent(ch chan<- []*types.Log) event.Subscription
 	SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription
 	SubscribePendingHeaderEvent(ch chan<- *types.WorkObject) event.Subscription
+	SubscribeNewWorkshareEvent(ch chan<- core.NewWorkshareEvent) event.Subscription
+	SendNewWorkshareEvent(workshare *types.WorkObject)
 
 	ChainConfig() *params.ChainConfig
-	Engine() consensus.Engine
+	Engine(header *types.WorkObjectHeader) consensus.Engine
+
+	RpcVersion() string
 
 	// Logger
 	Logger() *log.Logger
@@ -161,6 +182,7 @@ type Backend interface {
 	// P2P apis
 	BroadcastBlock(block *types.WorkObject, location common.Location) error
 	BroadcastHeader(header *types.WorkObject, location common.Location) error
+	BroadcastAuxTemplate(auxTemplate *types.AuxTemplate, location common.Location) error
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {
