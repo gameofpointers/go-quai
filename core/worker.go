@@ -51,7 +51,7 @@ const (
 	// c_chainSideChanSize is the size of the channel listening to uncle events
 	chainSideChanSize = 10
 
-	c_uncleCacheSize = 100
+	c_uncleCacheSize = 1000
 
 	c_auxpowCacheKeySize = 33
 )
@@ -2277,8 +2277,20 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		commitUncles := func(kawpowCache, shaCache, scryptCache *lru.Cache[common.Hash, types.WorkObjectHeader]) {
 			var uncles []*types.WorkObjectHeader
 			kawpowKeys := kawpowCache.Keys()
+			// reverse the kawpowkeys
+			for i, j := 0, len(kawpowKeys)-1; i < j; i, j = i+1, j-1 {
+				kawpowKeys[i], kawpowKeys[j] = kawpowKeys[j], kawpowKeys[i]
+			}
 			shaKeys := shaCache.Keys()
+			// reverse the shakeys
+			for i, j := 0, len(shaKeys)-1; i < j; i, j = i+1, j-1 {
+				shaKeys[i], shaKeys[j] = shaKeys[j], shaKeys[i]
+			}
 			scryptKeys := scryptCache.Keys()
+			// reverse the scryptkeys
+			for i, j := 0, len(scryptKeys)-1; i < j; i, j = i+1, j-1 {
+				scryptKeys[i], scryptKeys[j] = scryptKeys[j], scryptKeys[i]
+			}
 
 			// Select uncles in a round robin fashion from the three caches
 			maxLen := len(kawpowKeys)
