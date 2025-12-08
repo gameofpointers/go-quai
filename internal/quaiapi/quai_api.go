@@ -1321,6 +1321,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		"merkleroot":                  hex.EncodeToString(common.Hash(merkleRoot).Reverse().Bytes()),
 		"quairoot":                    sealHashString,
 		"quaiheight":                  wo.WorkObjectHeader().NumberU64(),
+		"quaidifficulty":              wo.WorkObjectHeader().Difficulty(),
 	}, nil
 }
 
