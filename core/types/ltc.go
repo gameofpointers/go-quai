@@ -19,6 +19,11 @@ func NewLitecoinHeaderWrapper(header *ltcdwire.BlockHeader) *LitecoinHeaderWrapp
 	return &LitecoinHeaderWrapper{BlockHeader: header}
 }
 
+func (ltc *LitecoinHeaderWrapper) BlockHash() common.Hash {
+	blockHash := ltc.BlockHeader.BlockHash()
+	return common.BytesToHash(blockHash[:]).Reverse()
+}
+
 func (ltc *LitecoinHeaderWrapper) PowHash() common.Hash {
 	blockHash := ltc.BlockHeader.PowHash()
 	return common.BytesToHash(blockHash[:]).Reverse()

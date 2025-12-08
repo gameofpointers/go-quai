@@ -27,6 +27,11 @@ func NewBitcoinCashBlockHeader(version int32, prevBlockHash [32]byte, merkleRoot
 	return &BitcoinCashHeaderWrapper{BlockHeader: header}
 }
 
+func (bch *BitcoinCashHeaderWrapper) BlockHash() common.Hash {
+	blockHash := bch.BlockHeader.BlockHash()
+	return common.BytesToHash(blockHash[:]).Reverse()
+}
+
 func (bch *BitcoinCashHeaderWrapper) PowHash() common.Hash {
 	blockHash := bch.BlockHeader.BlockHash()
 	return common.BytesToHash(blockHash[:]).Reverse()
