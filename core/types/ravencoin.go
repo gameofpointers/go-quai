@@ -219,6 +219,17 @@ func (h *RavencoinBlockHeader) Size() int {
 	return baseSize + 44 // 76 + 44 = 120 bytes
 }
 
+func (h *RavencoinBlockHeader) BlockHash() common.Hash {
+	// Standard block hash is the double SHA256 of the full header
+	data := h.EncodeBinaryRavencoinHeader()
+
+	first := sha256.Sum256(data)
+	second := sha256.Sum256(first[:])
+
+	// Return the block hash in little-endian format
+	return common.Hash(second).Reverse()
+}
+
 func (h *RavencoinBlockHeader) PowHash() common.Hash {
 	// PowHash for the kawpow cannot be calculated from the standard header alone
 	return common.Hash{}

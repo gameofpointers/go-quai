@@ -241,6 +241,7 @@ type AuxPowHeader struct {
 type AuxHeaderData interface {
 	Serialize(w io.Writer) error
 	Deserialize(r io.Reader) error
+	BlockHash() common.Hash
 	PowHash() common.Hash
 	Copy() AuxHeaderData
 
@@ -278,6 +279,13 @@ func NewBlockHeader(powid PowID, version int32, prevBlockHash [32]byte, merkleRo
 		return nil
 	}
 	return ah
+}
+
+func (ah *AuxPowHeader) BlockHash() common.Hash {
+	if ah.inner == nil {
+		return common.Hash{}
+	}
+	return ah.inner.BlockHash()
 }
 
 func (ah *AuxPowHeader) PowHash() common.Hash {

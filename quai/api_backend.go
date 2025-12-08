@@ -556,6 +556,10 @@ func (b *QuaiAPIBackend) AddPendingAuxPow(powId types.PowID, sealHash common.Has
 	b.quai.core.AddPendingAuxPow(powId, sealHash, auxpow)
 }
 
+func (b *QuaiAPIBackend) GetQuaiHeaderForDonorHash(donorHash common.Hash) *types.WorkObjectHeader {
+	return b.quai.core.GetQuaiHeaderForDonorHash(donorHash)
+}
+
 func (b *QuaiAPIBackend) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
 	wo, err := b.quai.core.SubmitBlock(raw, powId)
 	if err != nil {

@@ -2182,3 +2182,11 @@ func (s *PublicBlockChainQuaiAPI) HashesPerQits(ctx context.Context, qiAmount he
 
 	return (*hexutil.Big)(totalHashes), nil
 }
+
+func (s *PublicBlockChainQuaiAPI) GetQuaiHeaderForDonorHash(ctx context.Context, donorHash common.Hash) (map[string]interface{}, error) {
+	header := s.b.GetQuaiHeaderForDonorHash(donorHash)
+	if header == nil {
+		return nil, errors.New("no quai header found for donor hash")
+	}
+	return header.RPCMarshalWorkObjectHeader("v2"), nil
+}
