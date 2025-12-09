@@ -762,12 +762,24 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 						case types.SHA_BCH, types.SHA_BTC:
 							validCount := new(big.Int).Sub(work.wo.ShaDiffAndCount().Count(), work.wo.ShaDiffAndCount().Uncled())
 							if validCount.Cmp(common.Big0) > 0 {
+								if work.wo.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+									if work.wo.ShaDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+										validCount.Cmp(params.MinValidCount) < 0 {
+										validCount = new(big.Int).Set(params.MinValidCount)
+									}
+								}
 								shareReward = new(big.Int).Mul(shareReward, work.wo.ShaDiffAndCount().Count())
 								shareReward = new(big.Int).Div(shareReward, validCount)
 							}
 						case types.Scrypt:
 							validCount := new(big.Int).Sub(work.wo.ScryptDiffAndCount().Count(), work.wo.ScryptDiffAndCount().Uncled())
 							if validCount.Cmp(common.Big0) > 0 {
+								if work.wo.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+									if work.wo.ScryptDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+										validCount.Cmp(params.MinValidCount) < 0 {
+										validCount = new(big.Int).Set(params.MinValidCount)
+									}
+								}
 								shareReward = new(big.Int).Mul(shareReward, work.wo.ScryptDiffAndCount().Count())
 								shareReward = new(big.Int).Div(shareReward, validCount)
 							}
