@@ -274,8 +274,9 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiffMultiple    = big.NewInt(167000)
 	InitialScryptDiffMultiple = big.NewInt(12)
+	ShaDiffLowerBound         = big.NewInt(2e15)
+	ScryptDiffLowerBound      = big.NewInt(1e11)
 
-	MinPowDivisor           = big.NewInt(2) // Minimum multiple of the target difficulty that a share must meet to be valid
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
 	// Target number of shares per algo times 2^32
@@ -318,6 +319,8 @@ var (
 	UnlivelySharePenalty      = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to being stale
 	ProgpowPenalty            = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to share being progpow after the fork
 	ShareRewardPenaltyDivisor = big.NewInt(100)
+
+	KQuaiResetAfterKawPowForkBlock uint64 = 934560
 )
 
 const (
