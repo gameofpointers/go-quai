@@ -450,6 +450,23 @@ func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header
 	newUncledShares = newUncledShares.Add(newUncledShares, uncledShares)
 	newUncledShares = newUncledShares.Div(newUncledShares, params.WorkShareEmaBlocks)
 
+	if header.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+		// Ensure the new difficulty is within bounds
+		var lowerBound *big.Int
+		switch powId {
+		case types.SHA_BTC, types.SHA_BCH:
+			lowerBound = new(big.Int).Set(params.ShaDiffLowerBound)
+		case types.Scrypt:
+			lowerBound = new(big.Int).Set(params.ScryptDiffLowerBound)
+		default:
+			return big.NewInt(0), big.NewInt(0), big.NewInt(0)
+		}
+
+		if newDiff.Cmp(lowerBound) < 0 {
+			newDiff = lowerBound
+		}
+	}
+
 	return newDiff, newAverageShares, newUncledShares
 }
 
