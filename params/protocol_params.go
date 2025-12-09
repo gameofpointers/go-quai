@@ -281,6 +281,8 @@ var (
 	TargetShaShares = big.NewInt(12884901888)
 	MaxShaShares    = big.NewInt(17179869184) // 2x the target
 
+	MinValidCount = big.NewInt(128849018) // 1% of the target
+
 	// Maximum number of shares that can be included in a block for each algo.
 	// This is to prevent a single block from being filled with shares from one
 	// specific algo

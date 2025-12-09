@@ -1206,12 +1206,24 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 					case types.SHA_BCH, types.SHA_BTC:
 						validCount := new(big.Int).Sub(block.ShaDiffAndCount().Count(), block.ShaDiffAndCount().Uncled())
 						if validCount.Cmp(common.Big0) > 0 {
+							if block.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+								if block.ShaDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+									validCount.Cmp(params.MinValidCount) < 0 {
+									validCount = new(big.Int).Set(params.MinValidCount)
+								}
+							}
 							shareReward = new(big.Int).Mul(shareReward, block.ShaDiffAndCount().Count())
 							shareReward = new(big.Int).Div(shareReward, validCount)
 						}
 					case types.Scrypt:
 						validCount := new(big.Int).Sub(block.ScryptDiffAndCount().Count(), block.ScryptDiffAndCount().Uncled())
 						if validCount.Cmp(common.Big0) > 0 {
+							if block.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+								if block.ScryptDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+									validCount.Cmp(params.MinValidCount) < 0 {
+									validCount = new(big.Int).Set(params.MinValidCount)
+								}
+							}
 							shareReward = new(big.Int).Mul(shareReward, block.ScryptDiffAndCount().Count())
 							shareReward = new(big.Int).Div(shareReward, validCount)
 						}
