@@ -318,7 +318,10 @@ var (
 	ProgpowPenalty            = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to share being progpow after the fork
 	ShareRewardPenaltyDivisor = big.NewInt(100)
 
-	KQuaiResetAfterKawPowForkBlock uint64 = 934560
+	KQuaiResetAfterKawPowForkBlock        uint64 = 934560
+	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(100), ExchangeRate)
+	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
+	MinDifficulty                         uint64 = 250000000              // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (
