@@ -89,8 +89,8 @@ func (ec *Client) Close() {
 }
 
 // SubscribePendingHeader subscribes to notifications about the current pending block on the node.
-func (ec *Client) SubscribePendingHeader(ctx context.Context, powId types.PowID, ch chan<- []byte) (quai.Subscription, error) {
-	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader", powId)
+func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- []byte) (quai.Subscription, error) {
+	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
 }
 
 // SubscribeNewWorkshares subscribes to notifications about new workshares received via P2P.
@@ -138,9 +138,9 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number string) *types.Head
 //// Miner APIS
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context, powId types.PowID) (*types.WorkObject, error) {
+func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, error) {
 	var raw hexutil.Bytes
-	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader", powId)
+	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader")
 	if err != nil {
 		return nil, err
 	}

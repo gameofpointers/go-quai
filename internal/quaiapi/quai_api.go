@@ -1572,12 +1572,12 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 	return s.b.ReceiveWorkShare(workShare)
 }
 
-func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context, powId types.PowID) (hexutil.Bytes, error) {
+func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil.Bytes, error) {
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
 
-	pendingHeader, err := s.b.GetPendingHeader(powId, common.Address{}) // 0 is default progpow
+	pendingHeader, err := s.b.GetPendingHeader(types.Progpow, common.Address{}) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {

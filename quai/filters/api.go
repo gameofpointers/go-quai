@@ -1000,19 +1000,13 @@ func decodeTopic(s string) (common.Hash, error) {
 }
 
 // PendingHeader sends a notification each time a new pending header is created.
-func (api *PublicFilterAPI) PendingHeader(ctx context.Context, powId types.PowID) (*rpc.Subscription, error) {
+func (api *PublicFilterAPI) PendingHeader(ctx context.Context) (*rpc.Subscription, error) {
 	notifier, supported := rpc.NotifierFromContext(ctx)
 	if !supported {
 		return &rpc.Subscription{}, rpc.ErrNotificationsUnsupported
 	}
 
 	rpcSub := notifier.CreateSubscription()
-
-	switch powId {
-	case types.Progpow, types.Kawpow, types.SHA_BCH, types.SHA_BTC, types.Scrypt:
-	default:
-		return &rpc.Subscription{}, fmt.Errorf("unsupported powId %d for pending header subscription", powId)
-	}
 
 	go func() {
 		defer func() {
@@ -1042,36 +1036,8 @@ func (api *PublicFilterAPI) PendingHeader(ctx context.Context, powId types.PowID
 					// Marshal the header data
 					// Only keep the Header in the body
 					pendingHeaderForMining := b.WithBody(b.Header(), nil, nil, nil, nil, nil)
+					pendingHeaderForMining.WorkObjectHeader().SetAuxPow(nil)
 
-					if powId == types.Progpow {
-						pendingHeaderForMining.WorkObjectHeader().SetAuxPow(nil)
-					} else {
-						auxTemplate := api.backend.GetBestAuxTemplate(powId)
-						// If we have a KAWPOW template, we need to create a proper Ravencoin header
-						switch powId {
-						case types.Kawpow, types.SHA_BTC, types.SHA_BCH, types.Scrypt:
-							// If we have an auxpow template, we need to create a proper Ravencoin header
-							if api.backend.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
-
-								coinbaseTransaction := types.NewAuxPowCoinbaseTx(powId, auxTemplate.Height(), auxTemplate.CoinbaseOut(), pendingHeaderForMining.SealHash(), auxTemplate.SignatureTime())
-								merkleRoot := types.CalculateMerkleRoot(powId, coinbaseTransaction, auxTemplate.MerkleBranch())
-
-								// Create a properly configured Ravencoin header for KAWPOW mining
-								auxHeader := types.NewBlockHeader(powId, int32(auxTemplate.Version()), auxTemplate.PrevHash(), merkleRoot, auxTemplate.SignatureTime(), auxTemplate.Bits(), 0, auxTemplate.Height())
-								// Dont have the actual hash of the block yet
-								auxPow := types.NewAuxPow(powId, auxHeader, auxTemplate.AuxPow2(), auxTemplate.Sigs(), auxTemplate.MerkleBranch(), coinbaseTransaction)
-
-								// Update the auxpow in the best pending header
-								pendingHeaderForMining.WorkObjectHeader().SetAuxPow(auxPow)
-
-								api.backend.AddPendingAuxPow(powId, pendingHeaderForMining.SealHash(), auxPow)
-							} else {
-								return
-							}
-						default:
-							return
-						}
-					}
 					// Marshal the response.
 					protoWo, err := pendingHeaderForMining.ProtoEncode(types.PEtxObject)
 					if err != nil {
