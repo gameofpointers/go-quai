@@ -2153,6 +2153,29 @@ func (s *PublicBlockChainQuaiAPI) GetQuaiHeaderForDonorHash(ctx context.Context,
 	return header.RPCMarshalWorkObjectHeader("v2"), nil
 }
 
+func (s *PublicBlockChainQuaiAPI) GetSubsidyChainHeight(ctx context.Context) (map[string]interface{}, error) {
+	if !s.b.NodeLocation().Equal(common.Location{0, 0}) {
+		return nil, errors.New("cannot call GetSubsidyChainHeight in any other chain than cyprus-1")
+	}
+	fields := make(map[string]interface{})
+	at := s.b.GetBestAuxTemplate(types.Kawpow)
+	if at != nil {
+		fields["ravencoin"] = hexutil.Uint64(at.Height())
+	}
+	at = s.b.GetBestAuxTemplate(types.SHA_BCH)
+	if at != nil {
+		fields["bch"] = hexutil.Uint64(at.Height())
+	}
+	at = s.b.GetBestAuxTemplate(types.Scrypt)
+	if at != nil {
+		fields["ltc"] = hexutil.Uint64(at.Height())
+	}
+	if len(fields) == 0 {
+		return nil, errors.New("no subsidy chain height found")
+	}
+	return fields, nil
+}
+
 // GetMiningInfo returns the current mining difficulty per algorithm and the reward per workshare.
 // This is useful for miners to understand the current mining parameters.
 func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string]interface{}, error) {
