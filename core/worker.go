@@ -624,7 +624,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			return nil, fmt.Errorf("parent order not set")
 		}
 
-		if (w.GetPrimaryCoinbase() == common.Address{}) {
+		if (w.GetPrimaryCoinbase().Equal(common.Address{})) {
 			return nil, fmt.Errorf("primary coinbase is not set")
 		}
 

@@ -1106,7 +1106,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 
 				// If the coinbase is set, update the pending header with the new coinbase
-				if coinbase != (common.Address{}) {
+				if !coinbase.Equal(common.Address{}) {
 					phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
 				}
 
