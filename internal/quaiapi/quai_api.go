@@ -1145,7 +1145,7 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 	}
 
 	var coinbase common.Address
-	if request != nil && request.Coinbase != (common.MixedcaseAddress{}) {
+	if request != nil && !request.Coinbase.Address().Equal(common.Address{}) {
 		coinbase = common.Bytes20ToAddress(request.Coinbase.Address().Bytes20(), s.b.NodeLocation())
 
 		_, err := coinbase.InternalAddress()

@@ -1084,7 +1084,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 	// set the auxpow to nil if its progpow
 	if powId == types.Progpow {
 		// Set the coinbase for the progpow header
-		if coinbase != (common.Address{}) {
+		if !coinbase.Equal(common.Address{}) {
 			phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
 			sl.miner.worker.AddPendingWorkObjectBody(phCopy)
 		}
@@ -1099,7 +1099,7 @@ func (sl *Slice) GetPendingHeader(powId types.PowID, coinbase common.Address) (*
 			if sl.NodeCtx() == common.ZONE_CTX && auxTemplate != nil {
 
 				// If the coinbase is set, update the pending header with the new coinbase
-				if coinbase != (common.Address{}) {
+				if !coinbase.Equal(common.Address{}) {
 					phCopy.WorkObjectHeader().SetPrimaryCoinbase(coinbase)
 				}
 
