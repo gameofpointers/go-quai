@@ -178,7 +178,7 @@ var (
 	OrchardDurationLimit              = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LighthouseDurationLimit           = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(1) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	TimeToStartTx              uint64 = 100
+	TimeToStartTx              uint64 = 15 * BlocksPerDay
 	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 5 second block time
 	BlocksPerWeek              uint64 = 7 * BlocksPerDay
 	BlocksPerMonth             uint64 = 30 * BlocksPerDay
@@ -194,10 +194,10 @@ var (
 	WorkSharesInclusionDepth          = 3 // Number of blocks upto which the work shares can be referenced and this is protocol enforced
 	MaxLockupByte                     = 3 // Max lockup byte allowed in the transactions for coinbase
 	LockupByteToBlockDepth            = [4]uint64{
-		ConversionLockPeriod, // 100
-		200,                  // 200
-		300,                  // 300
-		400,                  // 400
+		ConversionLockPeriod, // 2 weeks
+		3 * BlocksPerMonth,   // 3 months
+		6 * BlocksPerMonth,   // 6 months
+		BlocksPerYear,        // 12 months
 	}
 	// The first value represents the multiplier that represents interest rate
 	// for the first year, the second value represents the terminal rate these
@@ -211,13 +211,13 @@ var (
 	ExchangeRate                                = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	MaxTimeDiffBetweenBlocks             int64  = 100                            // Max time difference between the blocks to 100 secs
 	OneOverAlpha                                = big.NewInt(1000)               // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = 2                              // This is in order of prime blocks
+	ControllerKickInBlock                uint64 = 262000                         // This is in order of prime blocks
 	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek              // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
 	BaseFeeMultiplier                           = big.NewInt(50)
 
-	ConversionLockPeriod uint64 = 100
+	ConversionLockPeriod uint64 = 2 * BlocksPerWeek
 	CoinbaseEpochBlocks  uint64 = 50000
 
 	// Controller related constants
@@ -259,9 +259,9 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 3                // Block at which KawPow activates
-	KawPowTransitionPeriod     uint64 = BlocksPerDay / 4 // Progpow grace period after kawpow upgrade, 2 week
-	TotalPowEngines            uint64 = 2                // Total number of PoW engines supported (Progpow, Kawpow)
+	KawPowForkBlock            uint64 = 1171500            // Block at which KawPow activates
+	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
+	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
 	AuxTemplateStaleTime       uint64 = uint64(10 * time.Minute)
 	ShareLivenessTime          uint32 = 18             // The time in seconds that a share is considered live for the purposes of inclusion in the block reward calculation
@@ -274,8 +274,8 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiffMultiple    = big.NewInt(167000)
 	InitialScryptDiffMultiple = big.NewInt(12)
-	ShaDiffLowerBound         = big.NewInt(2e15)
-	ScryptDiffLowerBound      = big.NewInt(1e11)
+	ShaDiffLowerBound         = big.NewInt(7e15)
+	ScryptDiffLowerBound      = big.NewInt(7e11)
 
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
@@ -304,14 +304,14 @@ var (
 	RavencoinDiffCutoffRange = big.NewInt(1500)
 
 	// The number of blocks to use in the exponential moving average
-	WorkShareEmaBlocks = big.NewInt(1000) // About 1 day worth of blocks
+	WorkShareEmaBlocks = big.NewInt(1000)
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
 	MuSig2PublicKeys = []string{
-		"033bc370eaac5156e829f671b7c5655135db359d58a3a5c3cdf37be5750597a97d", // Key 1
-		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
-		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
+		"02cae78e4905da54dc93d6009119d56a2ef91b11e129c8fa41342310ec3a9b499c",
+		"03374cbfcea6cb8172b2fdc09e9f7ec0cc2ff10aaa2192fb19fa04d9391b0a75c2",
+		"03abfe95f7d487a44cac59c9d62fe63e9e01dc3e06dc9fe96b7038d73d99a62fa6",
 	}
 
 	// MerkleNonce, MerkleSize is used for the auxpow2
@@ -323,9 +323,9 @@ var (
 	ShareRewardPenaltyDivisor = big.NewInt(100)
 
 	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
-	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(100), ExchangeRate)
+	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
 	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
-	MinDifficulty                         uint64 = 250000000              // Minimum difficulty after kawpow fork for the reward calculation
+	KQuaiDifficultyDivisor                uint64 = 300000000000           // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (

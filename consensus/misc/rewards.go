@@ -163,7 +163,7 @@ func CalculateQuaiReward(header *types.WorkObjectHeader, difficulty *big.Int, ex
 	}
 	logDiff := common.LogBig(difficulty)
 	if header.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
-		logDiff = new(big.Int).Sub(logDiff, common.LogBig(new(big.Int).SetUint64(params.MinDifficulty)))
+		logDiff = new(big.Int).Sub(logDiff, common.LogBig(new(big.Int).SetUint64(params.KQuaiDifficultyDivisor)))
 	}
 
 	numerator := new(big.Int).Mul(exchangeRate, logDiff)
