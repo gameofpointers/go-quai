@@ -2155,7 +2155,8 @@ func (s *PublicBlockChainQuaiAPI) GetQuaiHeaderForDonorHash(ctx context.Context,
 
 // GetMiningInfo returns the current mining difficulty per algorithm and the reward per workshare.
 // This is useful for miners to understand the current mining parameters.
-func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string]interface{}, error) {
+// If decimal is true, big integer values are returned as decimal strings instead of hex.
+func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context, decimal *bool) (map[string]interface{}, error) {
 	if s.b.NodeLocation().Context() != common.ZONE_CTX {
 		return nil, errors.New("getMiningInfo can only be called in zone chain")
 	}
@@ -2170,6 +2171,14 @@ func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string
 		return nil, errors.New("getMiningInfo is only available after the KawPow fork")
 	}
 
+	// Helper to format big.Int as decimal string or hex based on decimal flag
+	formatBigInt := func(n *big.Int) interface{} {
+		if decimal != nil && *decimal {
+			return n.String()
+		}
+		return (*hexutil.Big)(n)
+	}
+
 	fields := make(map[string]interface{})
 
 	// Get difficulties per algorithm
@@ -2177,9 +2186,9 @@ func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string
 	shaDiff := currentHeader.WorkObjectHeader().ShaDiffAndCount().Difficulty()
 	scryptDiff := currentHeader.WorkObjectHeader().ScryptDiffAndCount().Difficulty()
 
-	fields["kawpowDifficulty"] = (*hexutil.Big)(kawpowDiff)
-	fields["shaDifficulty"] = (*hexutil.Big)(shaDiff)
-	fields["scryptDifficulty"] = (*hexutil.Big)(scryptDiff)
+	fields["kawpowDifficulty"] = formatBigInt(kawpowDiff)
+	fields["shaDifficulty"] = formatBigInt(shaDiff)
+	fields["scryptDifficulty"] = formatBigInt(scryptDiff)
 
 	// Get exchange rate from prime terminus for reward calculation
 	primeTerminus := s.b.GetBlockByHash(currentHeader.PrimeTerminusHash())
@@ -2222,19 +2231,19 @@ func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string
 	}
 
 	fields["avgBlockTime"] = math.Round(avgBlockTime*1000) / 1000 // Round to 3 decimal places
-	fields["avgTxFees"] = (*hexutil.Big)(currentHeader.AvgTxFees())
+	fields["avgTxFees"] = formatBigInt(currentHeader.AvgTxFees())
 	fields["blocksAnalyzed"] = blockCount
 
 	// Calculate estimated workshare reward including average fees
 	// Workshare reward = (baseReward + avgTxFees) / (ExpectedWorksharesPerBlock + 1)
 	estimatedBlockReward := new(big.Int).Set(baseBlockReward)
-	estimatedBlockReward = new(big.Int).Add(estimatedBlockReward, currentHeader.AvgTxFees())
+	estimatedBlockReward = new(big.Int).Add(estimatedBlockReward, new(big.Int).Mul(currentHeader.AvgTxFees(), common.Big2))
 
 	workshareReward := new(big.Int).Div(estimatedBlockReward, big.NewInt(int64(params.ExpectedWorksharesPerBlock+1)))
 
-	fields["baseBlockReward"] = (*hexutil.Big)(baseBlockReward)
-	fields["estimatedBlockReward"] = (*hexutil.Big)(estimatedBlockReward)
-	fields["workshareReward"] = (*hexutil.Big)(workshareReward)
+	fields["baseBlockReward"] = formatBigInt(baseBlockReward)
+	fields["estimatedBlockReward"] = formatBigInt(estimatedBlockReward)
+	fields["workshareReward"] = formatBigInt(workshareReward)
 
 	// Calculate average share timing for each algorithm
 	// SHA and Scrypt: Count is the EMA of shares per block in 2^32 units
@@ -2306,13 +2315,17 @@ func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context) (map[string
 	}
 
 	// Include current block number and hash for reference
-	fields["blockNumber"] = hexutil.Uint64(currentHeader.NumberU64(common.ZONE_CTX))
+	if decimal != nil && *decimal {
+		fields["blockNumber"] = currentHeader.NumberU64(common.ZONE_CTX)
+	} else {
+		fields["blockNumber"] = hexutil.Uint64(currentHeader.NumberU64(common.ZONE_CTX))
+	}
 	fields["blockHash"] = currentHeader.Hash()
 
 	// Get quaiSupplyTotal from the database for the current block
 	_, _, totalSupplyQuai, _, _, _, err := rawdb.ReadSupplyAnalyticsForBlock(s.b.Database(), currentHeader.Hash())
 	if err == nil && totalSupplyQuai != nil {
-		fields["quaiSupplyTotal"] = (*hexutil.Big)(totalSupplyQuai)
+		fields["quaiSupplyTotal"] = formatBigInt(totalSupplyQuai)
 	}
 
 	return fields, nil
