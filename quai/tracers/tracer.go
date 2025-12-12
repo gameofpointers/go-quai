@@ -469,7 +469,7 @@ func New(code string, ctx *Context, logger *log.Logger, nodeLocation common.Loca
 	tracer.vm.PushGlobalGoFunction("isPrecompiled", func(ctx *duktape.Context) int {
 		addr := common.BytesToAddress(popSlice(ctx), nodeLocation)
 		for _, p := range tracer.activePrecompiles {
-			if p == addr {
+			if p.Equal(addr) {
 				ctx.PushBoolean(true)
 				return 1
 			}
