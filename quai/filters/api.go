@@ -1036,6 +1036,7 @@ func (api *PublicFilterAPI) PendingHeader(ctx context.Context, powId types.PowID
 								"error":      r,
 								"stacktrace": string(debug.Stack()),
 							}).Error("Go-Quai Panicked")
+							headerSub.Unsubscribe()
 						}
 					}()
 
