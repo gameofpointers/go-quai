@@ -2377,6 +2377,36 @@ func (s *PublicBlockChainQuaiAPI) GetMiningInfo(ctx context.Context, decimal *bo
 		}
 	}
 
+	// Hash rate = difficulty / average share time (hashes per second)
+	// Returns string to avoid float64 overflow with petahash-scale values
+	calcHashRate := func(diff *big.Int, avgTime float64) string {
+		if diff == nil || avgTime <= 0 {
+			return "0"
+		}
+		diffFloat := new(big.Float).SetInt(diff)
+		timeFloat := new(big.Float).SetFloat64(avgTime)
+		hashRate := new(big.Float).Quo(diffFloat, timeFloat)
+		// Format as integer string (truncate decimals)
+		intPart, _ := hashRate.Int(nil)
+		return intPart.String()
+	}
+
+	if avgTime, ok := fields["avgKawpowShareTime"].(float64); ok {
+		fields["kawpowHashRate"] = calcHashRate(kawpowDiff, avgTime)
+	} else {
+		fields["kawpowHashRate"] = "0"
+	}
+	if avgTime, ok := fields["avgShaShareTime"].(float64); ok {
+		fields["shaHashRate"] = calcHashRate(shaDiff, avgTime)
+	} else {
+		fields["shaHashRate"] = "0"
+	}
+	if avgTime, ok := fields["avgScryptShareTime"].(float64); ok {
+		fields["scryptHashRate"] = calcHashRate(scryptDiff, avgTime)
+	} else {
+		fields["scryptHashRate"] = "0"
+	}
+
 	// Include current block number and hash for reference
 	if decimal != nil && *decimal {
 		fields["blockNumber"] = currentHeader.NumberU64(common.ZONE_CTX)
