@@ -143,6 +143,9 @@ func (bc *BodyDb) WriteBlock(block *types.WorkObject, nodeCtx int) {
 	// add the block to the cache as well
 	bc.blockCache.Add(block.Hash(), *block)
 	rawdb.WriteWorkObject(bc.db, block.Hash(), block, types.BlockObject, nodeCtx)
+	if bc.chainConfig.IndexAddressUtxos {
+		rawdb.WriteWorkShareForDonorHash(bc.db, bc.engine[types.Kawpow], block.Hash(), block, types.BlockObject, nodeCtx)
+	}
 }
 
 // HasBlock checks if a block is fully present in the database or not.

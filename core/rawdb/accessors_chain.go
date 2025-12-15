@@ -24,6 +24,7 @@ import (
 	"sort"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/crypto/multiset"
 	"github.com/dominant-strategies/go-quai/ethdb"
@@ -327,6 +328,112 @@ func DeleteTermini(db ethdb.KeyValueWriter, hash common.Hash) {
 
 	if err := db.Delete(key); err != nil {
 		db.Logger().WithField("err", err).Fatal("Failed to delete termini ")
+	}
+}
+
+func ReadWorkShareForDonorHash(db ethdb.Reader, kawpowEngine consensus.Engine, donorHash common.Hash) *types.WorkObjectHeader {
+	key := donorHashKey(donorHash)
+	blockHashBytes, _ := db.Get(key)
+	if len(blockHashBytes) == 0 {
+		return nil
+	}
+
+	blockHash := common.BytesToHash(blockHashBytes)
+
+	blockNumber := ReadHeaderNumber(db, blockHash)
+	if blockNumber == nil {
+		return nil
+	}
+	if *blockNumber == 0 {
+		return nil
+	}
+
+	block := ReadWorkObject(db, *blockNumber, blockHash, types.BlockObject)
+	if block == nil {
+		return nil
+	}
+
+	// If the block itself is the donor, return it
+	if block.AuxPow() != nil {
+		blockHash := block.AuxPow().Header().BlockHash()
+		if block.AuxPow().PowID() == types.Kawpow {
+			// Kawpow uses pow hash as the block hash identifier in explorer and api
+			var err error
+			blockHash, err = kawpowEngine.ComputePowHash(block.WorkObjectHeader())
+			if err != nil {
+				db.Logger().WithField("err", err).Warn("Failed to compute pow hash")
+				return nil
+			}
+		}
+		if blockHash == donorHash {
+			return block.WorkObjectHeader()
+		}
+	}
+
+	// Otherwise check the uncles for a match
+	for _, uncle := range block.Body().Uncles() {
+		if uncle.AuxPow() != nil {
+			uncleHash := uncle.AuxPow().Header().BlockHash()
+			if uncle.AuxPow().PowID() == types.Kawpow {
+				// Kawpow uses pow hash as the block hash identifier in explorer and api
+				var err error
+				uncleHash, err = kawpowEngine.ComputePowHash(uncle)
+				if err != nil {
+					db.Logger().WithField("err", err).Warn("Failed to compute pow hash")
+					return nil
+				}
+			}
+			if uncleHash == donorHash {
+				return uncle
+			}
+		}
+	}
+
+	db.Logger().WithField("donor hash", donorHash).Error("Found donor hash stored, but didnt match any uncle or block")
+	return nil
+}
+
+func WriteWorkShareForDonorHash(db ethdb.KeyValueWriter, kawpowEngine consensus.Engine, hash common.Hash, workObject *types.WorkObject, woType types.WorkObjectView, nodeCtx int) {
+	if nodeCtx != common.ZONE_CTX {
+		return
+	}
+	// check the block first
+	if workObject.AuxPow() != nil {
+		auxHeaderHash := workObject.AuxPow().Header().BlockHash()
+		if workObject.AuxPow().PowID() == types.Kawpow {
+			// Kawpow uses pow hash as the block hash identifier in explorer and api
+			var err error
+			auxHeaderHash, err = kawpowEngine.ComputePowHash(workObject.WorkObjectHeader())
+			if err != nil {
+				db.Logger().WithField("err", err).Warn("Failed to compute pow hash")
+				return
+			}
+		}
+		key := donorHashKey(auxHeaderHash)
+		// store the work object header hash against the donor block hash
+		if err := db.Put(key, hash.Bytes()); err != nil {
+			db.Logger().WithField("err", err).Fatal("Failed to store work object header")
+		}
+	}
+
+	for _, uncle := range workObject.Body().Uncles() {
+		if uncle.AuxPow() != nil {
+			auxHeaderHash := uncle.AuxPow().Header().BlockHash()
+			if uncle.AuxPow().PowID() == types.Kawpow {
+				// Kawpow uses pow hash as the block hash identifier in explorer and api
+				var err error
+				auxHeaderHash, err = kawpowEngine.ComputePowHash(uncle)
+				if err != nil {
+					db.Logger().WithField("err", err).Warn("Failed to compute pow hash")
+					return
+				}
+			}
+			key := donorHashKey(auxHeaderHash)
+			// store the work object header hash against the donor block hash
+			if err := db.Put(key, hash.Bytes()); err != nil {
+				db.Logger().WithField("err", err).Fatal("Failed to store work object header")
+			}
+		}
 	}
 }
 

@@ -1266,6 +1266,10 @@ func (c *Core) GetBlockByNumber(number uint64) *types.WorkObject {
 	return c.sl.hc.GetBlockByNumber(number)
 }
 
+func (c *Core) GetQuaiHeaderForDonorHash(donorHash common.Hash) *types.WorkObjectHeader {
+	return rawdb.ReadWorkShareForDonorHash(c.Database(), c.GetEngineForPowID(types.Kawpow), donorHash)
+}
+
 // GetBlocksFromHash returns the block corresponding to hash and up to n-1 ancestors.
 // [deprecated by eth/62]
 func (c *Core) GetBlocksFromHash(hash common.Hash, n int) []*types.WorkObject {

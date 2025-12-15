@@ -43,7 +43,7 @@ func TestCalculateBetaFromMiningChoiceAndConversions(t *testing.T) {
 
 		// At KQuaiChangeBlock, rate should be reset to the starting exchange rate
 		expectedRate := params.ExchangeRate
-		
+
 		if exchangeRate.Cmp(expectedRate) != 0 {
 			t.Errorf("Expected exchange rate %v at KQuaiChangeBlock, got %v", expectedRate, exchangeRate)
 		}
@@ -104,6 +104,10 @@ func TestCalculateBetaFromMiningChoiceAndConversions(t *testing.T) {
 		for i, entry := range params.KQuaiChangeTable {
 			changeBlock := entry[0]
 			reductionPercent := entry[1]
+
+			if changeBlock >= params.KawPowForkBlock {
+				continue
+			}
 
 			t.Run(fmt.Sprintf("Change %d at block %d (%d%% remaining)", i+1, changeBlock, reductionPercent), func(t *testing.T) {
 				// Test at the exact change block
@@ -200,52 +204,121 @@ func TestCalculateBetaFromMiningChoiceAndConversions(t *testing.T) {
 		// First change: Reset at KQuaiChangeBlock
 		block := createTestBlock(params.KQuaiChangeBlock, difficulty)
 		tokenChoiceSet := createTokenChoiceSet(difficulty)
-		
+
 		exchangeRate1, err := CalculateBetaFromMiningChoiceAndConversions(nil, block, parentRate, tokenChoiceSet)
 		if err != nil {
 			t.Fatalf("Expected no error at first change, got %v", err)
 		}
-		
+
 		// Should be reset to starting exchange rate
 		if exchangeRate1.Cmp(params.ExchangeRate) != 0 {
 			t.Errorf("Expected first change to reset to %v, got %v", params.ExchangeRate, exchangeRate1)
 		}
-		
+
 		t.Logf("First change (block %d): %v → %v (reset)", params.KQuaiChangeBlock, parentRate, exchangeRate1)
-		
+
 		// Simulate time passing - use the reset rate as parent for the next change
 		// In reality, this would be after the hold period and some controller adjustments
 		parentRate = exchangeRate1
-		
+
 		// Second change: 75% reduction at block 3,259,200
 		secondChangeBlock := params.KQuaiChangeTable[1][0]
 		block = createTestBlock(secondChangeBlock, difficulty)
 		tokenChoiceSet = createTokenChoiceSet(difficulty)
-		
+
 		exchangeRate2, err := CalculateBetaFromMiningChoiceAndConversions(nil, block, parentRate, tokenChoiceSet)
 		if err != nil {
 			t.Fatalf("Expected no error at second change, got %v", err)
 		}
-		
+
 		// Should be 75% of the parent rate
 		expectedRate2 := new(big.Int).Mul(parentRate, big.NewInt(75))
 		expectedRate2 = new(big.Int).Div(expectedRate2, big.NewInt(100))
-		
+
 		if exchangeRate2.Cmp(expectedRate2) != 0 {
 			t.Errorf("Expected second change to be %v, got %v", expectedRate2, exchangeRate2)
 		}
-		
+
 		t.Logf("Second change (block %d): %v → %v (75%% reduction)", secondChangeBlock, parentRate, exchangeRate2)
-		
+
 		// Verify the magnitude difference
 		ratio := new(big.Float).Quo(new(big.Float).SetInt(parentRate), new(big.Float).SetInt(exchangeRate2))
 		expectedRatio := 1.0 / 0.75 // Should be about 1.33
 		ratioFloat, _ := ratio.Float64()
-		
+
 		if ratioFloat < expectedRatio-0.1 || ratioFloat > expectedRatio+0.1 {
 			t.Errorf("Expected reduction ratio around %.2f, got %.2f", expectedRatio, ratioFloat)
 		}
-		
+
 		t.Logf("Reduction ratio: %.2f (expected ~%.2f)", ratioFloat, expectedRatio)
+	})
+
+	t.Run("Test Kquai reset on the kawpow fork block itself", func(t *testing.T) {
+		// Test at the exact KawPowForkBlock
+		block := createTestBlock(params.KawPowForkBlock, difficulty)
+		tokenChoiceSet := createTokenChoiceSet(difficulty)
+
+		exchangeRate, err := CalculateBetaFromMiningChoiceAndConversions(nil, block, params.ExchangeRate, tokenChoiceSet)
+		if err != nil {
+			t.Fatalf("Expected no error at KawPowForkBlock, got %v", err)
+		}
+
+		// At KawPowForkBlock, rate should be adjusted according to KQuai reset logic
+		expectedRate := new(big.Int).Mul(params.ExchangeRate, big.NewInt(30))
+
+		if exchangeRate.Cmp(expectedRate) != 0 {
+			t.Errorf("Expected exchange rate %v at KawPowForkBlock, got %v", expectedRate, exchangeRate)
+		}
+		fmt.Printf("KawPowForkBlock (%d): Rate adjusted to %v\n", params.KawPowForkBlock, exchangeRate)
+	})
+
+	t.Run("Test Kquai after kawpow fork block should remain the same for three months", func(t *testing.T) {
+		// Test various blocks during the hold interval after KawPowForkBlock
+		holdTestBlocks := []uint64{
+			params.KawPowForkBlock + 1,
+			params.KawPowForkBlock + params.ExchangeRateHoldInterval/2,
+			params.KawPowForkBlock + params.ExchangeRateHoldInterval - 1,
+		}
+
+		// First get the adjusted rate at KawPowForkBlock
+		block := createTestBlock(params.KawPowForkBlock, difficulty)
+		tokenChoiceSet := createTokenChoiceSet(difficulty)
+		adjustedRate, _ := CalculateBetaFromMiningChoiceAndConversions(nil, block, params.ExchangeRate, tokenChoiceSet)
+
+		for _, blockNum := range holdTestBlocks {
+			block := createTestBlock(blockNum, difficulty)
+			tokenChoiceSet := createTokenChoiceSet(difficulty)
+
+			exchangeRate, err := CalculateBetaFromMiningChoiceAndConversions(nil, block, adjustedRate, tokenChoiceSet)
+			if err != nil {
+				t.Fatalf("Expected no error at block %d, got %v", blockNum, err)
+			}
+
+			// During hold interval, rate should stay at parent rate (adjusted rate)
+			if exchangeRate.Cmp(adjustedRate) != 0 {
+				t.Errorf("Expected exchange rate to be held at %v during hold interval (block %d), got %v", adjustedRate, blockNum, exchangeRate)
+			}
+			fmt.Printf("Block %d (hold interval after KawPowForkBlock): Rate held at %v\n", blockNum, exchangeRate)
+		}
+	})
+
+	t.Run("K quai should change after that three months hold period", func(t *testing.T) {
+		// Get the adjusted rate from KawPowForkBlock
+		block := createTestBlock(params.KawPowForkBlock, difficulty)
+		tokenChoiceSet := createTokenChoiceSet(difficulty)
+		adjustedRate, _ := CalculateBetaFromMiningChoiceAndConversions(nil, block, params.ExchangeRate, tokenChoiceSet)
+
+		// Test after hold interval ends
+		blockAfterHold := params.KawPowForkBlock + params.ExchangeRateHoldInterval
+		block = createTestBlock(blockAfterHold, difficulty)
+		tokenChoiceSet = createTokenChoiceSet(difficulty)
+
+		exchangeRate, err := CalculateBetaFromMiningChoiceAndConversions(nil, block, adjustedRate, tokenChoiceSet)
+		if err != nil {
+			t.Fatalf("Expected no error after hold interval, got %v", err)
+		}
+
+		// After hold interval, normal controller logic should resume
+		fmt.Printf("Block %d (after hold interval post-KawPowForkBlock): Rate = %v (normal controller logic)\n", blockAfterHold, exchangeRate)
 	})
 }

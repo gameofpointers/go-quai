@@ -51,7 +51,7 @@ const (
 	// c_chainSideChanSize is the size of the channel listening to uncle events
 	chainSideChanSize = 10
 
-	c_uncleCacheSize = 100
+	c_uncleCacheSize = 1000
 
 	c_auxpowCacheKeySize = 33
 )
@@ -624,7 +624,7 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 			return nil, fmt.Errorf("parent order not set")
 		}
 
-		if (w.GetPrimaryCoinbase() == common.Address{}) {
+		if (w.GetPrimaryCoinbase().Equal(common.Address{})) {
 			return nil, fmt.Errorf("primary coinbase is not set")
 		}
 
@@ -762,12 +762,24 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 						case types.SHA_BCH, types.SHA_BTC:
 							validCount := new(big.Int).Sub(work.wo.ShaDiffAndCount().Count(), work.wo.ShaDiffAndCount().Uncled())
 							if validCount.Cmp(common.Big0) > 0 {
+								if work.wo.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+									if work.wo.ShaDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+										validCount.Cmp(params.MinValidCount) < 0 {
+										validCount = new(big.Int).Set(params.MinValidCount)
+									}
+								}
 								shareReward = new(big.Int).Mul(shareReward, work.wo.ShaDiffAndCount().Count())
 								shareReward = new(big.Int).Div(shareReward, validCount)
 							}
 						case types.Scrypt:
 							validCount := new(big.Int).Sub(work.wo.ScryptDiffAndCount().Count(), work.wo.ScryptDiffAndCount().Uncled())
 							if validCount.Cmp(common.Big0) > 0 {
+								if work.wo.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+									if work.wo.ScryptDiffAndCount().Uncled().Cmp(common.Big0) != 0 &&
+										validCount.Cmp(params.MinValidCount) < 0 {
+										validCount = new(big.Int).Set(params.MinValidCount)
+									}
+								}
 								shareReward = new(big.Int).Mul(shareReward, work.wo.ScryptDiffAndCount().Count())
 								shareReward = new(big.Int).Div(shareReward, validCount)
 							}
@@ -2277,8 +2289,20 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		commitUncles := func(kawpowCache, shaCache, scryptCache *lru.Cache[common.Hash, types.WorkObjectHeader]) {
 			var uncles []*types.WorkObjectHeader
 			kawpowKeys := kawpowCache.Keys()
+			// reverse the kawpowkeys
+			for i, j := 0, len(kawpowKeys)-1; i < j; i, j = i+1, j-1 {
+				kawpowKeys[i], kawpowKeys[j] = kawpowKeys[j], kawpowKeys[i]
+			}
 			shaKeys := shaCache.Keys()
+			// reverse the shakeys
+			for i, j := 0, len(shaKeys)-1; i < j; i, j = i+1, j-1 {
+				shaKeys[i], shaKeys[j] = shaKeys[j], shaKeys[i]
+			}
 			scryptKeys := scryptCache.Keys()
+			// reverse the scryptkeys
+			for i, j := 0, len(scryptKeys)-1; i < j; i, j = i+1, j-1 {
+				scryptKeys[i], scryptKeys[j] = scryptKeys[j], scryptKeys[i]
+			}
 
 			// Select uncles in a round robin fashion from the three caches
 			maxLen := len(kawpowKeys)

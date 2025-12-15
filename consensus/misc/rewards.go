@@ -161,7 +161,12 @@ func CalculateQuaiReward(header *types.WorkObjectHeader, difficulty *big.Int, ex
 	if header.PrimeTerminusNumber().Uint64() >= params.KawPowForkBlock {
 		difficulty = KawPowEquivalentDifficulty(header, difficulty)
 	}
-	numerator := new(big.Int).Mul(exchangeRate, common.LogBig(difficulty))
+	logDiff := common.LogBig(difficulty)
+	if header.PrimeTerminusNumber().Uint64() >= params.KQuaiResetAfterKawPowForkBlock {
+		logDiff = new(big.Int).Sub(logDiff, common.LogBig(new(big.Int).SetUint64(params.KQuaiDifficultyDivisor)))
+	}
+
+	numerator := new(big.Int).Mul(exchangeRate, logDiff)
 	reward := new(big.Int).Quo(numerator, common.Big2e64)
 	if reward.Cmp(common.Big0) == 0 {
 		reward = big.NewInt(1)

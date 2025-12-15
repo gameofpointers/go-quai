@@ -178,7 +178,7 @@ var (
 	OrchardDurationLimit              = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LighthouseDurationLimit           = big.NewInt(5) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(1) // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
-	TimeToStartTx              uint64 = 100
+	TimeToStartTx              uint64 = 15 * BlocksPerDay
 	BlocksPerDay               uint64 = new(big.Int).Div(big.NewInt(86400), DurationLimit).Uint64() // BlocksPerDay is the number of blocks per day assuming 5 second block time
 	BlocksPerWeek              uint64 = 7 * BlocksPerDay
 	BlocksPerMonth             uint64 = 30 * BlocksPerDay
@@ -194,10 +194,10 @@ var (
 	WorkSharesInclusionDepth          = 3 // Number of blocks upto which the work shares can be referenced and this is protocol enforced
 	MaxLockupByte                     = 3 // Max lockup byte allowed in the transactions for coinbase
 	LockupByteToBlockDepth            = [4]uint64{
-		ConversionLockPeriod, // 100
-		200,                  // 200
-		300,                  // 300
-		400,                  // 400
+		ConversionLockPeriod, // 2 weeks
+		3 * BlocksPerMonth,   // 3 months
+		6 * BlocksPerMonth,   // 6 months
+		BlocksPerYear,        // 12 months
 	}
 	// The first value represents the multiplier that represents interest rate
 	// for the first year, the second value represents the terminal rate these
@@ -217,7 +217,7 @@ var (
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
 	BaseFeeMultiplier                           = big.NewInt(50)
 
-	ConversionLockPeriod uint64 = 100
+	ConversionLockPeriod uint64 = 2 * BlocksPerWeek
 	CoinbaseEpochBlocks  uint64 = 50000
 
 	// Controller related constants
@@ -259,9 +259,9 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 3                // Block at which KawPow activates
-	KawPowTransitionPeriod     uint64 = BlocksPerDay / 4 // Progpow grace period after kawpow upgrade, 2 week
-	TotalPowEngines            uint64 = 2                // Total number of PoW engines supported (Progpow, Kawpow)
+	KawPowForkBlock            uint64 = 10                 // Block at which KawPow activates
+	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
+	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
 	AuxTemplateStaleTime       uint64 = uint64(10 * time.Minute)
 	ShareLivenessTime          uint32 = 18             // The time in seconds that a share is considered live for the purposes of inclusion in the block reward calculation
@@ -274,13 +274,16 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiffMultiple    = big.NewInt(167000)
 	InitialScryptDiffMultiple = big.NewInt(12)
+	ShaDiffLowerBound         = big.NewInt(3e12)
+	ScryptDiffLowerBound      = big.NewInt(8e9)
 
-	MinPowDivisor           = big.NewInt(2) // Minimum multiple of the target difficulty that a share must meet to be valid
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
 	// Target number of shares per algo times 2^32
 	TargetShaShares = big.NewInt(12884901888)
 	MaxShaShares    = big.NewInt(17179869184) // 2x the target
+
+	MinValidCount = big.NewInt(128849018) // 1% of the target
 
 	// Maximum number of shares that can be included in a block for each algo.
 	// This is to prevent a single block from being filled with shares from one
@@ -301,7 +304,7 @@ var (
 	RavencoinDiffCutoffRange = big.NewInt(1500)
 
 	// The number of blocks to use in the exponential moving average
-	WorkShareEmaBlocks = big.NewInt(1000) // About 1 day worth of blocks
+	WorkShareEmaBlocks = big.NewInt(1000)
 
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
@@ -318,10 +321,15 @@ var (
 	UnlivelySharePenalty      = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to being stale
 	ProgpowPenalty            = big.NewInt(70) // Amount of share reward left after applying the penalty for shares that are not included in the block reward calculation due to share being progpow after the fork
 	ShareRewardPenaltyDivisor = big.NewInt(100)
+
+	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
+	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
+	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
+	KQuaiDifficultyDivisor                uint64 = 10000000               // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (
-	TokenChoiceSetSize uint64 = 4000 // This should be same as the MinerDifficultyWindow
+	TokenChoiceSetSize uint64 = 4 // This should be same as the MinerDifficultyWindow
 )
 
 func CalculateLockupByteRewardsMultiple(lockupByte uint8, blockNumber uint64) (*big.Int, error) {

@@ -18,6 +18,11 @@ func NewBitcoinHeaderWrapper(header *btcdwire.BlockHeader) *BitcoinHeaderWrapper
 	return &BitcoinHeaderWrapper{BlockHeader: header}
 }
 
+func (bth *BitcoinHeaderWrapper) BlockHash() common.Hash {
+	blockHash := bth.BlockHeader.BlockHash()
+	return common.BytesToHash(blockHash[:]).Reverse()
+}
+
 func (bth *BitcoinHeaderWrapper) PowHash() common.Hash {
 	blockHash := bth.BlockHeader.BlockHash()
 	return common.BytesToHash(blockHash[:]).Reverse()

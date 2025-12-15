@@ -136,6 +136,7 @@ type Backend interface {
 	GetTerminiByHash(hash common.Hash) *types.Termini
 	GetHeaderByHash(hash common.Hash) *types.WorkObject
 	IsGenesisHash(hash common.Hash) bool
+	GetQuaiHeaderForDonorHash(donorHash common.Hash) *types.WorkObjectHeader
 
 	BadHashExistsInChain() bool
 	IsBlockHashABadHash(hash common.Hash) bool
