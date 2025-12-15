@@ -331,7 +331,14 @@ func (api *PublicFilterAPI) NewWorkshares(ctx context.Context) (*rpc.Subscriptio
 					}
 				}
 
-				notifier.Notify(rpcSub.ID, w.RPCMarshalWorkObject(api.backend.RpcVersion()))
+				notifier.Notify(rpcSub.ID, map[string]interface{}{
+					"hash":       w.Hash().Hex(),
+					"parentHash": w.ParentHash(common.ZONE_CTX).Hex(),
+					"number":     hexutil.Uint64(w.NumberU64(common.ZONE_CTX)),
+					"type":       "workshare",
+					"timestamp":  hexutil.Uint64(w.WorkObjectHeader().Time()),
+				})
+
 			case <-rpcSub.Err():
 				worksharesSub.Unsubscribe()
 				return
