@@ -628,12 +628,9 @@ var StratumFlags = []Flag{
 	StratumSHAAddrFlag,
 	StratumScryptAddrFlag,
 	StratumKawpowAddrFlag,
-<<<<<<< HEAD
 	StratumVarDiffFlag,
-=======
 	StratumAPIAddrFlag,
 	StratumNameFlag,
->>>>>>> update stats, improve api, and update readme
 }
 
 var (
@@ -657,7 +654,6 @@ var (
 		Value: "0.0.0.0:3333",
 		Usage: "listen address for Kawpow stratum endpoint",
 	}
-<<<<<<< HEAD
 	StratumVarDiffFlag = Flag{
 		Name:  c_NodeFlagPrefix + "stratum-vardiff",
 		Value: true,
@@ -665,20 +661,7 @@ var (
 	}
 )
 
-// ****************************************
-// **          DASHBOARD FLAGS           **
-// ****************************************
-var DashboardFlags = []Flag{
-	DashboardEnabledFlag,
-	DashboardAddrFlag,
-}
-
 var (
-	DashboardEnabledFlag = Flag{
-		Name:  c_NodeFlagPrefix + "dashboard-enabled",
-		Value: false,
-		Usage: "enable the web dashboard for node monitoring",
-=======
 	StratumKawPoWAddrFlag = Flag{
 		Name:  c_NodeFlagPrefix + "stratum-kawpow-addr",
 		Value: "0.0.0.0:3335",
@@ -688,7 +671,6 @@ var (
 		Name:  c_NodeFlagPrefix + "stratum-api-addr",
 		Value: "0.0.0.0:3336",
 		Usage: "listen address for stratum pool HTTP API (serves stats to dashboard)",
->>>>>>> update stats, improve api, and update readme
 	}
 	StratumNameFlag = Flag{
 		Name:  c_NodeFlagPrefix + "stratum-name",

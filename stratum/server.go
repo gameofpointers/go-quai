@@ -1604,7 +1604,7 @@ func (s *Server) submitAsWorkShare(sess *session, ex2hex, ntimeHex, nonceHex, ve
 			achievedDiffFloat, _ := new(big.Float).SetInt(achievedDiff).Float64()
 			s.stats.ShareSubmittedWithDiff(sess.user, sess.workerName, algoName, *sess.minerDifficulty, achievedDiffFloat, workshareDiffFloat, true, false)
 
-			return nil // Accept share but don't submit to node
+			return false, nil // Accept share but don't submit to node
 		}
 	} else {
 		// No liveness difficulty set - use workshare target directly
@@ -1664,10 +1664,10 @@ func (s *Server) submitAsWorkShare(sess *session, ex2hex, ntimeHex, nonceHex, ve
 	// Second check: does it also meet workshare target? If so, submit to network
 	if powHashBigInt.Cmp(workShareTarget) <= 0 {
 		s.logger.WithFields(log.Fields{"powID": pending.AuxPow().PowID(), "achievedDiff": achievedDiff.String(), "hashBytes": hex.EncodeToString(hashBytes)}).Info("workshare received - submitting to network")
-		return s.backend.ReceiveMinedHeader(pending)
+		return true, s.backend.ReceiveMinedHeader(pending)
 	}
 
-	return nil
+	return true, nil
 }
 
 // submitKawpowShare handles kawpow share submissions
