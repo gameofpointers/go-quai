@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/gorilla/websocket"
 )
@@ -118,6 +119,13 @@ func (a *API) getExtendedOverview() PoolOverview {
 	// Add node name for multi-node aggregation
 	overview.NodeName = a.nodeName
 
+	// Add current block height from backend
+	if a.backend != nil {
+		if block := a.backend.CurrentBlock(); block != nil {
+			overview.BlockHeight = block.NumberU64(common.ZONE_CTX) // Zone 0
+		}
+	}
+
 	return overview
 }
 
@@ -134,13 +142,13 @@ func (a *API) handlePoolBlocks(w http.ResponseWriter, r *http.Request) {
 
 // ShareHistoryResponse contains share history with difficulty info for solo mining
 type ShareHistoryResponse struct {
-	Shares           []ShareRecord `json:"shares"`
-	WorkshareDiff    float64       `json:"workshareDiff"`    // Current workshare difficulty
-	AverageLuck      float64       `json:"averageLuck"`      // Average luck % across all shares
-	BestShareLuck    float64       `json:"bestShareLuck"`    // Best share luck %
-	TotalShares      int           `json:"totalShares"`
-	BlocksFound      int           `json:"blocksFound"`      // Shares that met workshare diff
-	ExpectedShares   float64       `json:"expectedShares"`   // Expected shares to find a block
+	Shares         []ShareRecord `json:"shares"`
+	WorkshareDiff  float64       `json:"workshareDiff"` // Current workshare difficulty
+	AverageLuck    float64       `json:"averageLuck"`   // Average luck % across all shares
+	BestShareLuck  float64       `json:"bestShareLuck"` // Best share luck %
+	TotalShares    int           `json:"totalShares"`
+	BlocksFound    int           `json:"blocksFound"`    // Shares that met workshare diff
+	ExpectedShares float64       `json:"expectedShares"` // Expected shares to find a block
 }
 
 // handlePoolShares returns share history with difficulty info for solo mining luck tracking
@@ -329,13 +337,13 @@ type PoolStatsResponse struct {
 	MinPayout  float64 `json:"minPayout"`
 
 	// Current stats
-	Hashrate       float64 `json:"hashrate"`
-	HashrateStr    string  `json:"hashrateStr"`
-	Workers        int     `json:"workers"`
-	Miners         int     `json:"miners"`
-	BlocksFound    int     `json:"blocksFound"`
-	BlocksPending  int     `json:"blocksPending"`
-	BlocksConfirmed int    `json:"blocksConfirmed"`
+	Hashrate        float64 `json:"hashrate"`
+	HashrateStr     string  `json:"hashrateStr"`
+	Workers         int     `json:"workers"`
+	Miners          int     `json:"miners"`
+	BlocksFound     int     `json:"blocksFound"`
+	BlocksPending   int     `json:"blocksPending"`
+	BlocksConfirmed int     `json:"blocksConfirmed"`
 
 	// Network stats
 	NetworkHashrate    float64 `json:"networkHashrate"`
@@ -475,12 +483,12 @@ type BlockEntry struct {
 
 // BlocksResponse is the response format for /api/blocks
 type BlocksResponse struct {
-	Matured         []BlockEntry `json:"matured"`
-	MaturedTotal    int          `json:"maturedTotal"`
-	Immature        []BlockEntry `json:"immature"`
-	ImmatureTotal   int          `json:"immatureTotal"`
-	Candidates      []BlockEntry `json:"candidates"`
-	CandidatesTotal int          `json:"candidatesTotal"`
+	Matured         []BlockEntry       `json:"matured"`
+	MaturedTotal    int                `json:"maturedTotal"`
+	Immature        []BlockEntry       `json:"immature"`
+	ImmatureTotal   int                `json:"immatureTotal"`
+	Candidates      []BlockEntry       `json:"candidates"`
+	CandidatesTotal int                `json:"candidatesTotal"`
 	Luck            map[string]float64 `json:"luck"`
 }
 
@@ -509,7 +517,7 @@ func (a *API) handleBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate simple luck (blocks found / expected based on shares)
 	luck := make(map[string]float64)
-	luck["64"] = 100.0  // Placeholder
+	luck["64"] = 100.0 // Placeholder
 	luck["128"] = 100.0
 	luck["256"] = 100.0
 

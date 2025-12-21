@@ -380,6 +380,7 @@ type PoolOverview struct {
 	StartedAt         time.Time `json:"startedAt"`
 	NetworkHashrate   float64   `json:"networkHashrate,omitempty"`
 	NetworkDifficulty float64   `json:"networkDifficulty,omitempty"`
+	BlockHeight       uint64    `json:"blockHeight,omitempty"` // Current block height
 
 	// Per-algorithm stats
 	SHA    AlgorithmStats `json:"sha"`
