@@ -267,7 +267,7 @@ func (s *Server) checkTemplateChanged(algorithm string) (bool, bool) {
 	newState := &templateState{
 		sealHash:   header.SealHash(),
 		parentHash: common.BytesToHash(auxParentHash[:]),
-		height:     uint64(auxPow.Header().Height()), // AuxPow height (donor chain block number)
+		height:     header.NumberU64(),
 		quaiHeight: int64(pending.NumberU64(common.ZONE_CTX)),
 	}
 
