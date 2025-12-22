@@ -1602,7 +1602,11 @@ func (s *Server) submitAsWorkShare(sess *session, ex2hex, ntimeHex, nonceHex, ve
 			}
 			workshareDiffFloat, _ := new(big.Float).SetInt(new(big.Int).Div(common.Big2e256, workShareTarget)).Float64()
 			achievedDiffFloat, _ := new(big.Float).SetInt(achievedDiff).Float64()
-			s.stats.ShareSubmittedWithDiff(sess.user, sess.workerName, algoName, *sess.minerDifficulty, achievedDiffFloat, workshareDiffFloat, true, false)
+			minerDiff := float64(1)
+			if sess.minerDifficulty != nil {
+				minerDiff = *sess.minerDifficulty
+			}
+			s.stats.ShareSubmittedWithDiff(sess.user, sess.workerName, algoName, minerDiff, achievedDiffFloat, workshareDiffFloat, true, false)
 
 			return false, nil // Accept share but don't submit to node
 		}
