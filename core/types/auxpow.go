@@ -798,14 +798,6 @@ func AuxPowTxHash(PowID PowID, tx []byte) common.Hash {
 	return common.Hash{}
 }
 
-func reverseBytesCopy(b []byte) []byte {
-	out := make([]byte, len(b))
-	for i := range b {
-		out[i] = b[len(b)-1-i]
-	}
-	return out
-}
-
 func ExtractCoinb1AndCoinb2FromAuxPowTx(txBytes []byte) ([]byte, []byte, error) {
 	// Helpers to parse CompactSize varints and script pushes
 	readVarInt := func(b []byte) (val uint64, size int, err error) {
