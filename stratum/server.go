@@ -29,20 +29,8 @@ import (
 
 const (
 	seenSharesSize = 1024 // Size of LRU cache for seen shares per session
+	jobsCacheSize  = 32
 )
-
-// randReader uses time-based fallback if crypto/rand isn't imported; here we just read from net.Conn deadlines which is not desirable.
-// Implement a simple wrapper over math/rand seeded by time if needed. For our use (4 bytes), this is sufficient.
-type randReader struct{}
-
-func (randReader) Read(p []byte) (int, error) {
-	now := time.Now().UnixNano()
-	for i := range p {
-		now = (now*1103515245 + 12345) & 0x7fffffff
-		p[i] = byte(now & 0xff)
-	}
-	return len(p), nil
-}
 
 // StratumConfig holds configuration for the stratum server
 type StratumConfig struct {
@@ -82,10 +70,6 @@ type Server struct {
 	sessionsSHA    map[*session]struct{}
 	sessionsScrypt map[*session]struct{}
 	sessionsKawpow map[*session]struct{}
-	// simple counters for debugging submission quality
-	submits      uint64
-	passPowCount uint64
-	passRelCount uint64
 }
 
 // NewServer creates a new stratum server with the given configuration.
@@ -646,11 +630,10 @@ type session struct {
 	versionRolling bool
 	versionMask    uint32
 	// job tracking
-	mu         sync.Mutex // protects job, jobs, jobSeq, jobHistory, difficulty
-	jobs       map[string]*job
-	kawJobs    map[string]*kawpowJob // kawpow job tracking
-	jobSeq     uint64
-	jobHistory []string // FIFO of recent job IDs for simple expiry
+	mu      sync.Mutex // protects job, jobs, jobSeq, jobHistory, difficulty
+	jobs    *lru.Cache[string, *job]
+	kawJobs *lru.Cache[string, *kawpowJob] // kawpow job tracking
+	jobSeq  uint64
 	// share de-duplication (per-connection LRU)
 	seenShares *lru.Cache[string, struct{}]
 	// cleanup
@@ -710,14 +693,16 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 	enc := json.NewEncoder(c)
 
 	seenShares, _ := lru.New[string, struct{}](seenSharesSize)
+	jobsCache, _ := lru.New[string, *job](jobsCacheSize)
+	kawJobsCache, _ := lru.New[string, *kawpowJob](jobsCacheSize)
 
 	sess := &session{
 		conn:         c,
 		enc:          enc,
 		dec:          dec,
 		chain:        algorithm, // Set algorithm from the port they connected to
-		jobs:         make(map[string]*job),
-		kawJobs:      make(map[string]*kawpowJob),
+		jobs:         jobsCache,
+		kawJobs:      kawJobsCache,
 		seenShares:   seenShares,
 		done:         make(chan struct{}),
 		jobFrequency: defaultJobFrequency, // Default 5 seconds, can be overridden via username
@@ -926,10 +911,10 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 				mixHashHex, _ := req.Params[4].(string)
 
 				sess.mu.Lock()
-				kawJob, ok := sess.kawJobs[jobID]
+				kawJob, ok := sess.kawJobs.Peek(jobID)
 				sess.mu.Unlock()
 				if !ok {
-					s.logger.WithFields(log.Fields{"jobID": jobID, "known": len(sess.kawJobs)}).Error("unknown kawpow jobID")
+					s.logger.WithFields(log.Fields{"jobID": jobID, "known": sess.kawJobs.Len()}).Error("unknown kawpow jobID")
 					s.stats.ShareSubmitted(sess.user, sess.workerName, sess.difficulty, false, true) // stale share
 					_ = sess.sendJSON(stratumResp{ID: req.ID, Result: false, Error: "nojob"})
 					continue
@@ -942,9 +927,7 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 				} else {
 					s.stats.ShareSubmitted(sess.user, sess.workerName, sess.difficulty, true, false) // valid share
 					s.logger.WithFields(log.Fields{"addr": sess.user, "nonce": nonceHex, "mixHash": mixHashHex}).Info("kawpow submit accepted")
-					sess.mu.Lock()
-					delete(sess.kawJobs, jobID)
-					sess.mu.Unlock()
+					sess.kawJobs.Remove(jobID)
 					_ = sess.sendJSON(stratumResp{ID: req.ID, Result: true, Error: nil})
 					// Send fresh job
 					go func() {
@@ -977,7 +960,7 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 			}
 
 			sess.mu.Lock()
-			j, ok := sess.jobs[jobID]
+			j, ok := sess.jobs.Peek(jobID)
 			sess.mu.Unlock()
 			if !ok {
 				sess.sendJSON(stratumResp{
@@ -991,11 +974,11 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 
 			// Look up the submitted job by ID to avoid stale/current mismatches
 			sess.mu.Lock()
-			if j2, ok2 := sess.jobs[jobID]; ok2 {
+			if j2, ok2 := sess.jobs.Peek(jobID); ok2 {
 				sess.job = j2
 				sess.mu.Unlock()
 			} else {
-				known := len(sess.jobs)
+				known := sess.jobs.Len()
 				sess.mu.Unlock()
 				s.logger.WithFields(log.Fields{"jobID": jobID, "known": known}).Error("unknown or stale jobID")
 				s.stats.ShareSubmitted(sess.user, sess.workerName, sess.difficulty, false, true) // stale share
@@ -1012,7 +995,7 @@ func (s *Server) handleConn(c net.Conn, algorithm string) {
 				s.logger.WithFields(log.Fields{"addr": sess.user, "chain": sess.chain, "nonce": nonceHex}).Info("submit accepted")
 				// Mark this job ID as consumed to prevent duplicate submissions
 				sess.mu.Lock()
-				delete(sess.jobs, jobID)
+				sess.jobs.Remove(jobID)
 				sess.mu.Unlock()
 				_ = sess.sendJSON(stratumResp{ID: req.ID, Result: true, Error: nil})
 				// Send a fresh job after successful workshare to keep miner on latest work
@@ -1061,17 +1044,8 @@ func (s *Server) sendJobAndNotify(sess *session, clean bool) error {
 	sess.mu.Lock()
 	j.id = s.newJobID(sess)
 	sess.job = j
-	if sess.jobs == nil {
-		sess.jobs = make(map[string]*job)
-	}
-	sess.jobs[j.id] = j
+	sess.jobs.Add(j.id, j)
 	// Maintain job history to allow stale shares; keep 32 jobs for solo mining
-	sess.jobHistory = append(sess.jobHistory, j.id)
-	if len(sess.jobHistory) > 32 {
-		old := sess.jobHistory[0]
-		sess.jobHistory = sess.jobHistory[1:]
-		delete(sess.jobs, old)
-	}
 	sess.mu.Unlock()
 	s.logger.WithFields(log.Fields{"jobID": j.id, "chain": sess.chain}).Info("notify job")
 
@@ -1253,15 +1227,8 @@ func (s *Server) sendKawpowJob(sess *session, clean bool) error {
 		pending:    types.CopyWorkObject(pending),
 	}
 	sess.kawJob = kawJob
-	sess.kawJobs[jobID] = kawJob
+	sess.kawJobs.Add(jobID, kawJob)
 
-	// Maintain job history to allow stale shares; keep 32 jobs for solo mining
-	sess.jobHistory = append(sess.jobHistory, jobID)
-	if len(sess.jobHistory) > 32 {
-		old := sess.jobHistory[0]
-		sess.jobHistory = sess.jobHistory[1:]
-		delete(sess.kawJobs, old)
-	}
 	sess.mu.Unlock()
 
 	s.logger.WithFields(log.Fields{"jobID": jobID, "height": height, "epoch": epoch}).Info("notify kawpow job")
