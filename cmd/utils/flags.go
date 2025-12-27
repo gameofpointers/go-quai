@@ -72,6 +72,7 @@ var GlobalFlags = []Flag{
 
 var NodeFlags = []Flag{
 	IPAddrFlag,
+	ExternalIPFlag,
 	P2PPortFlag,
 	BootPeersFlag,
 	StaticPeersFlag,
@@ -238,6 +239,12 @@ var (
 		Abbreviation: "i",
 		Value:        "0.0.0.0",
 		Usage:        "ip address to listen on" + generateEnvDoc(c_NodeFlagPrefix+"ipaddr"),
+	}
+
+	ExternalIPFlag = Flag{
+		Name:  c_NodeFlagPrefix + "external-ip",
+		Value: "",
+		Usage: "external IP address to announce to peers (useful when behind NAT without UPnP, or when port is manually forwarded)" + generateEnvDoc(c_NodeFlagPrefix+"external-ip"),
 	}
 
 	P2PPortFlag = Flag{

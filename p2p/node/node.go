@@ -95,6 +95,7 @@ type P2PNode struct {
 func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 	ipAddr := viper.GetString(utils.IPAddrFlag.Name)
 	port := viper.GetString(utils.P2PPortFlag.Name)
+	externalIP := viper.GetString(utils.ExternalIPFlag.Name)
 
 	// Static peers are explicit dial targets (multiaddrs including /p2p/<peerID>).
 	// They are distinct from bootpeers (which are mainly used for DHT bootstrap
@@ -133,6 +134,9 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 
 	log.Global.Info("listen addr tcp ", fmt.Sprintf("/ip4/%s/udp/%s/tcp", ipAddr, port))
 	log.Global.Info("listen addrs quic ", fmt.Sprintf("/ip4/%s/udp/%s/quic", ipAddr, port))
+	if externalIP != "" {
+		log.Global.Infof("announcing external address: /ip4/%s/tcp/%s", externalIP, port)
+	}
 	// Create the libp2p host
 
 	peerKey := getNodeKey()
@@ -151,6 +155,22 @@ func NewNode(ctx context.Context, quitCh chan struct{}) (*P2PNode, error) {
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/%s/tcp/%s", ipAddr, port),
 		),
+
+		// If external IP is specified, announce it to peers (useful for NAT/port forwarding)
+		func() libp2p.Option {
+			if externalIP != "" {
+				return libp2p.AddrsFactory(func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+					extAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%s", externalIP, port))
+					if err != nil {
+						log.Global.Warnf("failed to parse external IP address: %s", err)
+						return addrs
+					}
+					// Prepend the external address so it's announced first
+					return append([]multiaddr.Multiaddr{extAddr}, addrs...)
+				})
+			}
+			return nil
+		}(),
 
 		// support all transports
 		libp2p.DefaultTransports,
