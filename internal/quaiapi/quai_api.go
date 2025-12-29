@@ -1162,8 +1162,24 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 	return s.marshalAuxPowTemplate(pendingHeader, request)
 }
 
-// marshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
+// marshalAuxPowTemplate is a method wrapper that calls the standalone MarshalAuxPowTemplate function
 func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, request *BlockTemplateRequest) (map[string]interface{}, error) {
+	powID := wo.AuxPow().PowID()
+	var extraNonce1, extraNonce2, extraData string
+	if request != nil {
+		extraNonce1 = request.ExtraNonce1
+		extraNonce2 = request.ExtraNonce2
+		extraData = request.ExtraData
+	}
+	return MarshalAuxPowTemplate(wo, powID, extraNonce1, extraNonce2, extraData)
+}
+
+// MarshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response.
+// This is an exported standalone function so it can be used by both the RPC API and subscriptions.
+// The powID parameter determines which algorithm's target to calculate.
+// The extraNonce1, extraNonce2, and extraData parameters are optional hex strings for customizing the coinbase.
+func MarshalAuxPowTemplate(wo *types.WorkObject, powID types.PowID, extraNonce1Hex, extraNonce2Hex, extraDataStr string) (map[string]interface{}, error) {
+
 	auxPow := wo.AuxPow()
 	if auxPow == nil {
 		return nil, errors.New("no AuxPow in pending header")
@@ -1205,14 +1221,11 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		return nil, errors.New("empty coinbase tx bytes in AuxPow")
 	}
 
-	var updatedTxBytes []byte
-
 	// extranonce1, extranonce2, and extradata are optional fields
 	var extraNonce1 [4]byte
 	var extraNonce2 [8]byte
-	var extraData [30]byte
-	if request != nil && len(request.ExtraNonce1) > 0 {
-		extraNonce1Bytes, err := hex.DecodeString(request.ExtraNonce1)
+	if len(extraNonce1Hex) > 0 {
+		extraNonce1Bytes, err := hex.DecodeString(extraNonce1Hex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid extranonce1: %w", err)
 		}
@@ -1221,8 +1234,8 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		}
 		copy(extraNonce1[:], extraNonce1Bytes)
 	}
-	if request != nil && len(request.ExtraNonce2) > 0 {
-		extraNonce2Bytes, err := hex.DecodeString(request.ExtraNonce2)
+	if len(extraNonce2Hex) > 0 {
+		extraNonce2Bytes, err := hex.DecodeString(extraNonce2Hex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid extranonce2: %w", err)
 		}
@@ -1231,18 +1244,17 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		}
 		copy(extraNonce2[:], extraNonce2Bytes)
 	}
-	if request != nil && len(request.ExtraData) > 0 {
-		extraDataBytes := []byte(request.ExtraData)
+	if len(extraDataStr) > 0 {
+		extraDataBytes := []byte(extraDataStr)
 		if len(extraDataBytes) > 30 {
 			return nil, fmt.Errorf("input extraData length exceeds 30 bytes")
 		}
-		copy(extraData[:], extraDataBytes)
 		// update the first 30 bytes of the coinb2
-		copy(coinb2[:30], extraData[:])
+		copy(coinb2[:30], extraDataBytes)
 	}
 
 	// Build the updated transaction bytes by concatenating coinb1, extraNonce1, extraNonce2, and coinb2
-	updatedTxBytes = append(coinb1, extraNonce1[:]...)
+	updatedTxBytes := append(coinb1, extraNonce1[:]...)
 	updatedTxBytes = append(updatedTxBytes, extraNonce2[:]...)
 	updatedTxBytes = append(updatedTxBytes, coinb2...)
 
@@ -1273,12 +1285,10 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 	// Convert bits to hex without 0x prefix
 	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())
 
-	powId := auxPow.PowID()
-
 	var targetHex string
 	// Get target hex from Quai difficulty (not AuxPow bits)
 	// based on the powid need to use the correct target calculation
-	switch powId {
+	switch powID {
 	case types.SHA_BCH, types.SHA_BTC:
 		// Bitcoin-style target calculation
 		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
@@ -1294,10 +1304,12 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		targetHex = targetHex[2:]
 	}
 
-	// set the pendingheader time to empty
+	// Set the pendingheader time to empty
+	// This ensures the sealHash is stable and doesn't change every second
 	woCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
 	woCopy.SetTime(0)
-	sealHashString := hex.EncodeToString(wo.SealHash().Bytes()[:6])
+
+	sealHashString := hex.EncodeToString(woCopy.SealHash().Bytes()[:6])
 
 	return map[string]interface{}{
 		"version":           auxHeader.Version(),
