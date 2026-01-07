@@ -12,9 +12,16 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
+	"github.com/dominant-strategies/go-quai/core"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/rpc"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	miningPoolStatsLookupDepth = 1000
 )
 
 // API serves HTTP endpoints for the pool dashboard
@@ -50,6 +57,11 @@ func (a *API) Start() error {
 	mux.HandleFunc("/api/miners", a.handleMiners)
 	mux.HandleFunc("/api/blocks", a.handleBlocks)
 	mux.HandleFunc("/api/payments", a.handlePayments)
+
+	// API for mining pool stats
+	mux.HandleFunc("/api/stats/sha/blocks", a.handleShaBlocksForPoolStats)
+	mux.HandleFunc("/api/stats/kawpow/blocks", a.handleKawpowBlocksForPoolStats)
+	mux.HandleFunc("/api/stats/scrypt/blocks", a.handleScryptBlocksForPoolStats)
 
 	// Pool-wide endpoints (dashboard)
 	mux.HandleFunc("/api/pool/stats", a.handlePoolStats)
@@ -478,7 +490,7 @@ type BlockEntry struct {
 	Height     uint64 `json:"height"`
 	Hash       string `json:"hash"`
 	Miner      string `json:"miner"`
-	Worker     string `json:"worker"`
+	Worker     string `json:"worker,omitempty"`
 	Difficulty string `json:"difficulty"`
 	Reward     string `json:"reward"`
 	Timestamp  int64  `json:"timestamp"`
@@ -494,6 +506,142 @@ type BlocksResponse struct {
 	Candidates      []BlockEntry       `json:"candidates"`
 	CandidatesTotal int                `json:"candidatesTotal"`
 	Luck            map[string]float64 `json:"luck"`
+}
+
+// BlockStatsResponse is the response format for algorithm-specific block stats
+type BlockStatsResponse struct {
+	Data []BlockEntry `json:"data"`
+}
+
+func (a *API) handleKawpowBlocksForPoolStats(w http.ResponseWriter, r *http.Request) {
+	a.getBlocksForAlgo(w, r, "kawpow")
+}
+
+func (a *API) handleShaBlocksForPoolStats(w http.ResponseWriter, r *http.Request) {
+	a.getBlocksForAlgo(w, r, "sha")
+}
+
+func (a *API) handleScryptBlocksForPoolStats(w http.ResponseWriter, r *http.Request) {
+	a.getBlocksForAlgo(w, r, "scrypt")
+}
+
+func (a *API) getBlocksForAlgo(w http.ResponseWriter, r *http.Request, algo string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	currentBlock := a.backend.CurrentBlock()
+	if currentBlock == nil {
+		writeJSON(w, BlockStatsResponse{Data: []BlockEntry{}})
+		return
+	}
+
+	// only works after the fork
+	if currentBlock.NumberU64(common.ZONE_CTX)-miningPoolStatsLookupDepth < params.KawPowForkBlock {
+		writeJSON(w, BlockStatsResponse{Data: []BlockEntry{}})
+		return
+	}
+
+	var blocks []BlockEntry
+	startHeight := currentBlock.NumberU64(common.ZONE_CTX)
+	endHeight := uint64(0)
+	if startHeight > miningPoolStatsLookupDepth {
+		endHeight = startHeight - miningPoolStatsLookupDepth
+	}
+
+	count := 0
+	for i := startHeight; i > endHeight; i-- {
+		if count >= 100 {
+			break
+		}
+		block, err := a.backend.BlockByNumber(context.Background(), rpc.BlockNumber(i))
+		if err != nil || block == nil {
+			continue
+		}
+
+		header := block.WorkObjectHeader()
+		isMatch := false
+		var difficulty *big.Int
+
+		switch algo {
+		case "kawpow":
+			if header.IsKawPowBlock() {
+				isMatch = true
+				difficulty = core.CalculateKawpowShareDiff(header)
+			}
+		}
+
+		if isMatch && CheckIfCoinbaseExtraDataMatchesPoolTag(header) {
+			// Calculate reward
+			reward := a.calculateBlockReward()
+			blocks = append(blocks, BlockEntry{
+				Difficulty: difficulty.String(),
+				Hash:       header.Hash().Hex(),
+				Height:     header.NumberU64(),
+				Miner:      header.PrimaryCoinbase().Hex(),
+				Reward:     reward,
+				Timestamp:  int64(header.Time()),
+				Confirmed:  true,
+			})
+			count++
+		}
+
+		for _, uncle := range block.Uncles() {
+			header := uncle
+			isMatch := false
+			var difficulty *big.Int
+
+			switch algo {
+			case "kawpow":
+				if header.IsKawPowBlock() {
+					isMatch = true
+					difficulty = core.CalculateKawpowShareDiff(header)
+				}
+			case "scrypt":
+				if header.AuxPow() != nil && header.AuxPow().PowID() == types.Scrypt {
+					isMatch = true
+					difficulty = header.ScryptDiffAndCount().Difficulty()
+				}
+			case "sha":
+				if header.AuxPow() != nil && (header.AuxPow().PowID() == types.SHA_BTC || header.AuxPow().PowID() == types.SHA_BCH) {
+					isMatch = true
+					difficulty = header.ShaDiffAndCount().Difficulty()
+				}
+			}
+
+			if isMatch && CheckIfCoinbaseExtraDataMatchesPoolTag(header) {
+				// Calculate reward
+				reward := a.calculateBlockReward()
+				blocks = append(blocks, BlockEntry{
+					Difficulty: difficulty.String(),
+					Hash:       header.Hash().Hex(),
+					Height:     header.NumberU64(),
+					Miner:      header.PrimaryCoinbase().Hex(),
+					Reward:     reward,
+					Timestamp:  int64(header.Time()),
+					Confirmed:  true,
+				})
+				count++
+			}
+		}
+	}
+
+	writeJSON(w, BlockStatsResponse{Data: blocks})
+}
+
+func CheckIfCoinbaseExtraDataMatchesPoolTag(header *types.WorkObjectHeader) bool {
+	if header.AuxPow() == nil {
+		return false
+	}
+	_, coinb2, err := types.ExtractCoinb1AndCoinb2FromAuxPowTx(header.AuxPow().Transaction())
+	if err != nil {
+		return false
+	}
+	if len(coinb2) < 30 {
+		return false
+	}
+	return strings.Contains(string(coinb2[:30]), string(poolExtraData))
 }
 
 // handleBlocks returns block history
