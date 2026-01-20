@@ -51,10 +51,14 @@ type Node struct {
 	rpcAPIs       []rpc.API   // List of APIs currently provided by the node
 	http          *httpServer //
 	ws            *httpServer //
-	inprocHandler *rpc.Server // In-process RPC request handler to process the API requests
+	health        *HealthServer // Health check server
+	inprocHandler *rpc.Server   // In-process RPC request handler to process the API requests
 	location      []byte
 
 	databases map[*closeTrackingDB]struct{} // All open databases
+
+	// getBlockNum is a function to get the current block number, set by the backend
+	getBlockNum func() uint64
 }
 
 const (
@@ -217,8 +221,24 @@ func (n *Node) openEndpoints() error {
 	err := n.startRPC()
 	if err != nil {
 		n.stopRPC()
+		return err
 	}
-	return err
+
+	// start health check server if enabled
+	if n.config.HealthEnabled {
+		getBlockNum := n.getBlockNum
+		if getBlockNum == nil {
+			// Default to returning 0 if no getter is set
+			getBlockNum = func() uint64 { return 0 }
+		}
+		n.health = NewHealthServer(n.config, n.logger, getBlockNum)
+		if err := n.health.Start(); err != nil {
+			n.logger.WithField("err", err).Error("Failed to start health server")
+			// Don't fail startup if health server fails, just log it
+		}
+	}
+
+	return nil
 }
 
 // containsLifecycle checks if 'lfs' contains 'l'.
@@ -336,6 +356,9 @@ func (n *Node) stopRPC() {
 	n.http.stop()
 	n.ws.stop()
 	n.stopInProc()
+	if n.health != nil {
+		n.health.Stop()
+	}
 }
 
 // startInProc registers all RPC APIs on the inproc server.
@@ -418,6 +441,14 @@ func (n *Node) RPCHandler() (*rpc.Server, error) {
 // Config returns the configuration of node.
 func (n *Node) Config() *Config {
 	return n.config
+}
+
+// SetBlockNumberGetter sets the function used by the health server to get
+// the current block number. This should be called by the backend during setup.
+func (n *Node) SetBlockNumberGetter(getter func() uint64) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	n.getBlockNum = getter
 }
 
 // DataDir retrieves the current datadir used by the protocol stack.
