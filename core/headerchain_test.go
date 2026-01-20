@@ -209,6 +209,30 @@ func TestCalculateShareTarget(t *testing.T) {
 			currentShareTarget: maxShaShares,  // Start at max
 			expectedTarget:     maxShaShares,
 		},
+		{
+			name:               "At halfway point to the update",
+			primeTerminusNum:   params.InclusionDepthChangeBlock + params.InclusionDepthUpdatePeriod/2,
+			difficulty:         big.NewInt(100),
+			kawpowDifficulty:   big.NewInt(0), // Zero kawpow diff -> max difference -> increase
+			currentShareTarget: maxShaShares,  // Start at max
+			expectedTarget:     new(big.Int).Add(targetShaShares, new(big.Int).Div(new(big.Int).Sub(maxShaShares, targetShaShares), big.NewInt(2))),
+		},
+		{
+			name:               "After the update period",
+			primeTerminusNum:   params.InclusionDepthChangeBlock + params.InclusionDepthUpdatePeriod + 1,
+			difficulty:         big.NewInt(100),
+			kawpowDifficulty:   big.NewInt(0), // Zero kawpow diff -> max difference -> increase
+			currentShareTarget: maxShaShares,  // Start at max
+			expectedTarget:     maxShaShares,
+		},
+		{
+			name:               "Long time after the update period",
+			primeTerminusNum:   params.InclusionDepthChangeBlock + params.InclusionDepthUpdatePeriod + 1000000,
+			difficulty:         big.NewInt(100),
+			kawpowDifficulty:   big.NewInt(0), // Zero kawpow diff -> max difference -> increase
+			currentShareTarget: maxShaShares,  // Start at max
+			expectedTarget:     maxShaShares,
+		},
 	}
 
 	for _, tc := range testCases {

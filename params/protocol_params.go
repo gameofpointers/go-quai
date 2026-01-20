@@ -259,6 +259,7 @@ var (
 
 	InclusionDepthChangeBlock   uint64 = 1330000 // Prime Block at which WorkSharesInclusionDepth increases from 3 to 4
 	NewWorkSharesInclusionDepth        = 4
+	InclusionDepthUpdatePeriod  uint64 = 10000 // Number of Prime blocks between each inclusion depth update check
 )
 
 var (
