@@ -273,15 +273,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 
 	quai.APIBackend = &QuaiAPIBackend{stack.Config().ExtRPCEnabled(), quai}
 
-	// Set the block number getter for the health server
-	stack.SetBlockNumberGetter(func() uint64 {
-		header := quai.core.CurrentHeader()
-		if header == nil {
-			return 0
-		}
-		return header.NumberU64(config.NodeLocation.Context())
-	})
-
 	// Register the backend on the node
 	stack.RegisterAPIs(quai.APIs())
 	stack.RegisterLifecycle(quai)

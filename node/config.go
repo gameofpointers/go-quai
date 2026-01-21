@@ -146,6 +146,12 @@ type Config struct {
 	// private APIs to untrusted users is a major security risk.
 	WSExposeAll bool `toml:",omitempty"`
 
+	// StratumEnabled adds stratum info on the health check endpoint
+	StratumEnabled bool `toml:",omitempty"`
+
+	// StratumUrl is used for checking the stratum health
+	StratumUrl string `toml:",omitempty"`
+
 	// HealthEnabled enables the health check HTTP endpoint.
 	HealthEnabled bool `toml:",omitempty"`
 

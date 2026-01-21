@@ -1070,6 +1070,10 @@ func setWS(cfg *node.Config, nodeLocation common.Location) {
 }
 
 func setHealth(cfg *node.Config) {
+	cfg.StratumEnabled = viper.GetBool(StratumEnabledFlag.Name)
+	// StratumUrl is used to see if the stratum is running fine
+	cfg.StratumUrl = viper.GetString(StratumSHAAddrFlag.Name)
+
 	cfg.HealthEnabled = viper.GetBool(HealthEnabledFlag.Name)
 
 	if viper.IsSet(HealthPortFlag.Name) {

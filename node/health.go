@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	"github.com/dominant-strategies/go-quai/log"
 )
 
@@ -25,7 +27,8 @@ type HealthServer struct {
 	server      *http.Server
 	listener    net.Listener
 	logger      *log.Logger
-	getBlockNum func() uint64 // Function to get current block number
+	stratumUrl  string
+	zoneBackend quaiapi.Backend
 }
 
 // jsonRPCRequest represents a JSON-RPC request
@@ -51,11 +54,11 @@ type jsonRPCError struct {
 }
 
 // NewHealthServer creates a new health server
-func NewHealthServer(config *Config, logger *log.Logger, getBlockNum func() uint64) *HealthServer {
+func NewHealthServer(config *Config, logger *log.Logger, zoneBackend quaiapi.Backend) *HealthServer {
 	return &HealthServer{
 		config:      config,
 		logger:      logger,
-		getBlockNum: getBlockNum,
+		zoneBackend: zoneBackend,
 	}
 }
 
@@ -100,7 +103,7 @@ func (h *HealthServer) Stop() error {
 
 // checkStratumHealth checks if the stratum server is accepting connections
 func (h *HealthServer) checkStratumHealth() (bool, error) {
-	conn, err := net.DialTimeout("tcp", "127.0.0.1:3333", 2*time.Second)
+	conn, err := net.DialTimeout("tcp", h.config.StratumUrl, 2*time.Second)
 	if err != nil {
 		return false, err
 	}
@@ -110,25 +113,29 @@ func (h *HealthServer) checkStratumHealth() (bool, error) {
 
 // handleHealth handles health check requests
 func (h *HealthServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	// Check stratum server health first
-	stratumHealthy, stratumErr := h.checkStratumHealth()
-	if !stratumHealthy {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		errMsg := "stratum server not responding"
-		if stratumErr != nil {
-			errMsg = fmt.Sprintf("stratum server error: %v", stratumErr)
+
+	stratumHealthy := false
+	if h.config.StratumEnabled {
+		// Check stratum server health first
+		var stratumErr error
+		stratumHealthy, stratumErr = h.checkStratumHealth()
+		if !stratumHealthy {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			errMsg := "stratum server not responding"
+			if stratumErr != nil {
+				errMsg = fmt.Sprintf("stratum server error: %v", stratumErr)
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"healthy":        false,
+				"stratumHealthy": false,
+				"error":          errMsg,
+			})
+			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"healthy":        false,
-			"stratumHealthy": false,
-			"error":          errMsg,
-		})
-		return
 	}
 
-	// Get current local block number
-	localBlockNum := h.getBlockNum()
+	localBlockNum := h.zoneBackend.CurrentBlock().NumberU64(common.ZONE_CTX)
 
 	// Get reference block numbers from configured URLs
 	referenceURLs := h.config.HealthReferenceURLs
@@ -192,7 +199,8 @@ func (h *HealthServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"healthy":              healthy,
-		"stratumHealthy":       true,
+		"stratumEnabled":       h.config.StratumEnabled,
+		"stratumHealthy":       stratumHealthy,
 		"localBlockNum":        localBlockNum,
 		"referenceBlockNum":    maxReferenceBlockNum,
 		"blocksBehind":         blocksBehind,

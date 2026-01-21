@@ -32,6 +32,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/event"
+	"github.com/dominant-strategies/go-quai/internal/quaiapi"
 	log "github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/rpc"
 )
@@ -47,18 +48,17 @@ type Node struct {
 	state         int               // Tracks state of node lifecycle
 
 	lock          sync.Mutex
-	lifecycles    []Lifecycle // All registered backends, services, and auxiliary services that have a lifecycle
-	rpcAPIs       []rpc.API   // List of APIs currently provided by the node
-	http          *httpServer //
-	ws            *httpServer //
+	lifecycles    []Lifecycle   // All registered backends, services, and auxiliary services that have a lifecycle
+	rpcAPIs       []rpc.API     // List of APIs currently provided by the node
+	http          *httpServer   //
+	ws            *httpServer   //
 	health        *HealthServer // Health check server
 	inprocHandler *rpc.Server   // In-process RPC request handler to process the API requests
 	location      []byte
 
 	databases map[*closeTrackingDB]struct{} // All open databases
 
-	// getBlockNum is a function to get the current block number, set by the backend
-	getBlockNum func() uint64
+	zoneBackend quaiapi.Backend
 }
 
 const (
@@ -225,13 +225,8 @@ func (n *Node) openEndpoints() error {
 	}
 
 	// start health check server if enabled
-	if n.config.HealthEnabled {
-		getBlockNum := n.getBlockNum
-		if getBlockNum == nil {
-			// Default to returning 0 if no getter is set
-			getBlockNum = func() uint64 { return 0 }
-		}
-		n.health = NewHealthServer(n.config, n.logger, getBlockNum)
+	if n.config.HealthEnabled && n.config.NodeLocation.Context() == common.ZONE_CTX {
+		n.health = NewHealthServer(n.config, n.logger, n.zoneBackend)
 		if err := n.health.Start(); err != nil {
 			n.logger.WithField("err", err).Error("Failed to start health server")
 			// Don't fail startup if health server fails, just log it
@@ -443,12 +438,11 @@ func (n *Node) Config() *Config {
 	return n.config
 }
 
-// SetBlockNumberGetter sets the function used by the health server to get
-// the current block number. This should be called by the backend during setup.
-func (n *Node) SetBlockNumberGetter(getter func() uint64) {
+// SetZoneBackend sets the zone backend that can be used to get the block number
+func (n *Node) SetZoneBackend(backend quaiapi.Backend) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
-	n.getBlockNum = getter
+	n.zoneBackend = backend
 }
 
 // DataDir retrieves the current datadir used by the protocol stack.
