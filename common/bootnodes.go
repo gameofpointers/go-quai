@@ -8,7 +8,7 @@ var (
 			"/ip4/34.145.104.213/tcp/4002/p2p/12D3KooWMHTexdSq1zQ2Sn4L8zddEa8PWK8TGM56ZHszRuoUPoq1",
 		},
 		"garden": {
-			"/ip4/34.133.55.239/tcp/4002/p2p/12D3KooWPk7xbWnnsR73QZK8h2zabyp4iqZjyMHwrsBoRuWSXRfu",
+			"/ip4/130.250.44.4/tcp/4010/p2p/12D3KooWGxkoXQPNo7wVtmNi5xrnJ3ZbwYrR5bKcMsxFWk45ewAP",
 		},
 		"orchard": {
 			"/ip4/35.196.106.212/tcp/4002/p2p/12D3KooWK755v2ynqqgvrEeTQe38E1i556jDwX9JcduotE1bfvjU",
