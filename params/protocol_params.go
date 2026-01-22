@@ -257,15 +257,15 @@ var (
 
 	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
 
-	InclusionDepthChangeBlock   uint64 = 1171500 // Block at which WorkSharesInclusionDepth increases from 3 to 4
+	InclusionDepthChangeBlock   uint64 = 15 // Block at which WorkSharesInclusionDepth increases from 3 to 4
 	NewWorkSharesInclusionDepth        = 4
-	InclusionDepthUpdatePeriod  uint64 = 10000 // Number of blocks between each inclusion depth update check
+	InclusionDepthUpdatePeriod  uint64 = 100 // Number of blocks between each inclusion depth update check
 	NewShareLivenessTimeForSha  uint32 = 30
 	NoPenaltyTimeThreshold      uint32 = 3
 )
 
 var (
-	KawPowForkBlock            uint64 = 1171500            // Block at which KawPow activates
+	KawPowForkBlock            uint64 = 10                 // Block at which KawPow activates
 	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
 	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
@@ -280,8 +280,8 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiffMultiple    = big.NewInt(167000)
 	InitialScryptDiffMultiple = big.NewInt(12)
-	ShaDiffLowerBound         = big.NewInt(7e15)
-	ScryptDiffLowerBound      = big.NewInt(7e11)
+	ShaDiffLowerBound         = big.NewInt(2e12)
+	ScryptDiffLowerBound      = big.NewInt(2e9)
 
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
@@ -331,7 +331,7 @@ var (
 	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
 	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
 	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
-	KQuaiDifficultyDivisor                uint64 = 300000000000           // Minimum difficulty after kawpow fork for the reward calculation
+	KQuaiDifficultyDivisor                uint64 = 30000                  // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (
