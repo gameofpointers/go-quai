@@ -447,7 +447,18 @@ func (w *worker) close() {
 func (w *worker) GetBestAuxTemplate(powID types.PowID) *types.AuxTemplate {
 	w.auxpowMu.RLock()
 	defer w.auxpowMu.RUnlock()
-	return w.auxpowCache[powID]
+	if template, ok := w.auxpowCache[powID]; ok {
+		return template
+	}
+	switch powID {
+	case types.Kawpow:
+		return types.DefaultKawpowAuxTemplate()
+	case types.SHA_BCH:
+		return types.DefaultShaBchAuxTemplate()
+	case types.Scrypt:
+		return types.DefaultScryptAuxTemplate()
+	}
+	return nil
 }
 
 func (w *worker) LoadPendingBlockBody() {
