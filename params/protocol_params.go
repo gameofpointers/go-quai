@@ -255,9 +255,9 @@ var (
 
 	MaxAllowableEntropyDist uint64 = 40 // Maximum multiple of zone intrinsic S distance allowed from the current Entropy
 
-	InclusionDepthChangeBlock   uint64 = 1330000 // Block at which WorkSharesInclusionDepth increases from 3 to 4
+	InclusionDepthChangeBlock   uint64 = 1093705 // Block at which WorkSharesInclusionDepth increases from 3 to 4
 	NewWorkSharesInclusionDepth        = 4
-	InclusionDepthUpdatePeriod  uint64 = 10000 // Number of blocks between each inclusion depth update check
+	InclusionDepthUpdatePeriod  uint64 = 100 // Number of blocks between each inclusion depth update check
 	NewShareLivenessTimeForSha  uint32 = 30
 	NoPenaltyTimeThreshold      uint32 = 3
 )
