@@ -1250,6 +1250,9 @@ func (p *StateProcessor) Process(block *types.WorkObject, batch ethdb.Batch) (ty
 							shareReward = new(big.Int).Div(shareReward, params.ShareRewardPenaltyDivisor)
 						}
 					} else {
+						if err != nil {
+							p.logger.Warn("Error extracting signature time from share", err, share.Hash())
+						}
 						shareReward = p.hc.CalculateTimeDiscountedShareReward(share, shareReward, signatureTime)
 					}
 				}

@@ -817,6 +817,9 @@ func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*typ
 								shareReward = new(big.Int).Div(shareReward, params.ShareRewardPenaltyDivisor)
 							}
 						} else {
+							if err != nil {
+								w.logger.Warn("Error extracting signature time from share", err, share.Hash())
+							}
 							shareReward = w.hc.CalculateTimeDiscountedShareReward(share, shareReward, signatureTime)
 						}
 					}
