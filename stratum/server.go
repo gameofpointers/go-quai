@@ -307,9 +307,11 @@ func (s *Server) unregisterSession(sess *session) {
 	case "kawpow":
 		delete(s.sessionsKawpow, sess)
 	}
-	// Record worker disconnection metrics
-	RecordWorkerDisconnected(sess.chain)
-	RecordWorkerOnline(sess.user, sess.workerName, sess.chain, false)
+	// Record worker disconnection metrics (only if session was registered)
+	if sess.authorized {
+		RecordWorkerDisconnected(sess.chain)
+		RecordWorkerOnline(sess.user, sess.workerName, sess.chain, false)
+	}
 }
 
 func (s *Server) Start() error {
@@ -2419,6 +2421,7 @@ func (s *Server) submitAsWorkShare(sess *session, curJob *job, ex2hex, ntimeHex,
 	)
 	// Record workshare found for Prometheus metrics
 	RecordWorkshareFound(algoName)
+	RecordWorkerWorkshare(sess.user, sess.workerName, algoName)
 	// Record the share with difficulty info for solo mining luck tracking
 	s.stats.ShareSubmittedWithDiff(sess.user, sess.workerName, algoName, sess.totalShares, sess.invalidShares, sess.staleShares, effectiveDiff, achievedStratumDiff, workshareStratumDiff, true, false)
 	return true, nil
@@ -2692,6 +2695,7 @@ func (s *Server) submitKawpowShare(sess *session, kawJob *kawpowJob, nonceHex, _
 		)
 		// Record workshare found for Prometheus metrics
 		RecordWorkshareFound("kawpow")
+		RecordWorkerWorkshare(sess.user, sess.workerName, "kawpow")
 		sess.mu.Lock()
 		sess.totalShares++
 		sess.mu.Unlock()

@@ -18,9 +18,10 @@ var (
 	stratumConnectionsTotal prometheus.Counter
 
 	// Per-worker metrics (higher cardinality - use with caution)
-	stratumWorkerHashrate *prometheus.GaugeVec
-	stratumWorkerShares   *prometheus.CounterVec
-	stratumWorkerOnline   *prometheus.GaugeVec
+	stratumWorkerHashrate    *prometheus.GaugeVec
+	stratumWorkerShares      *prometheus.CounterVec
+	stratumWorkerWorkshares  *prometheus.CounterVec
+	stratumWorkerOnline      *prometheus.GaugeVec
 )
 
 func init() {
@@ -96,6 +97,14 @@ func init() {
 		[]string{"address", "worker", "algorithm", "status"},
 	)
 
+	stratumWorkerWorkshares = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "stratum_worker_workshares_total",
+			Help: "Per-worker workshare count",
+		},
+		[]string{"address", "worker", "algorithm"},
+	)
+
 	stratumWorkerOnline = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "stratum_worker_online",
@@ -115,6 +124,7 @@ func init() {
 		stratumConnectionsTotal,
 		stratumWorkerHashrate,
 		stratumWorkerShares,
+		stratumWorkerWorkshares,
 		stratumWorkerOnline,
 	)
 }
@@ -220,6 +230,14 @@ func RecordWorkerShare(address, worker, algorithm, status string) {
 		return
 	}
 	stratumWorkerShares.WithLabelValues(address, worker, algorithm, status).Inc()
+}
+
+// RecordWorkerWorkshare records a workshare found by a specific worker
+func RecordWorkerWorkshare(address, worker, algorithm string) {
+	if !metrics_config.MetricsEnabled() {
+		return
+	}
+	stratumWorkerWorkshares.WithLabelValues(address, worker, algorithm).Inc()
 }
 
 // DeleteWorkerMetrics removes metrics for a disconnected worker

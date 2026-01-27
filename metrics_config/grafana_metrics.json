@@ -2958,7 +2958,7 @@
       "id": 107,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "sum"],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2990,7 +2990,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Top 10 workers by hashrate",
+      "description": "Top 100 workers by hashrate with shares and workshares",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3000,6 +3000,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -3012,8 +3015,7 @@
                 "value": null
               }
             ]
-          },
-          "unit": "Hs"
+          }
         },
         "overrides": [
           {
@@ -3031,12 +3033,24 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Value"
+              "options": "Worker Name"
             },
             "properties": [
               {
-                "id": "displayName",
-                "value": "Hashrate"
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hashrate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "Hs"
               },
               {
                 "id": "custom.cellOptions",
@@ -3046,24 +3060,42 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Shares"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Workshares"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 88
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 96
       },
       "id": 108,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
         "showHeader": true,
         "sortBy": [
           {
@@ -3080,32 +3112,77 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "topk(10, stratum_worker_hashrate)",
-          "format": "table",
+          "expr": "topk(100, stratum_worker_hashrate)",
+          "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (address, worker, algorithm) (stratum_worker_shares_total)",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "stratum_worker_workshares_total",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "C"
         }
       ],
-      "title": "Top 10 Workers by Hashrate",
+      "title": "Top 100 Workers by Hashrate",
       "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "keepLabels": ["address", "worker", "algorithm"],
+            "valueLabel": "__name__"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true
+              "Time": true
             },
+            "includeByName": {},
             "indexByName": {
               "address": 0,
               "worker": 1,
               "algorithm": 2,
-              "Value": 3
+              "stratum_worker_hashrate": 3,
+              "stratum_worker_shares_total": 4,
+              "stratum_worker_workshares_total": 5
             },
-            "renameByName": {}
+            "renameByName": {
+              "address": "Address",
+              "worker": "Worker Name",
+              "algorithm": "Algorithm",
+              "stratum_worker_hashrate": "Hashrate",
+              "stratum_worker_shares_total": "Shares",
+              "stratum_worker_workshares_total": "Workshares",
+              "Value": "Shares"
+            }
           }
         }
       ],
