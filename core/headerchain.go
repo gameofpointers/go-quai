@@ -389,19 +389,11 @@ func (hc *HeaderChain) CalculateShareTarget(parent, header *types.WorkObject) (n
 func (hc *HeaderChain) CalculatePowDiffAndCount(parent *types.WorkObject, header *types.WorkObjectHeader, powId types.PowID) (newDiff, newAverageShares, newUncledShares *big.Int) {
 
 	if header.PrimeTerminusNumber().Uint64() == params.KawPowForkBlock {
-		quaiDiff := parent.Difficulty()
-		quaiHashRate := new(big.Int).Div(quaiDiff, params.DurationLimit)
 		switch powId {
 		case types.SHA_BTC, types.SHA_BCH:
-			shaHashRate := new(big.Int).Mul(quaiHashRate, params.InitialShaDiffMultiple)
-			shaDiff := new(big.Int).Mul(shaHashRate, params.ShaBlockTime)
-			shaDiff = new(big.Int).Div(shaDiff, common.Big3) // Targeting 3 shares per block
-			return shaDiff, params.TargetShaShares, big.NewInt(0)
+			return params.ShaDiffLowerBound, params.TargetShaShares, big.NewInt(0)
 		case types.Scrypt:
-			scryptHashRate := new(big.Int).Mul(quaiHashRate, params.InitialScryptDiffMultiple)
-			scryptDiff := new(big.Int).Mul(scryptHashRate, params.ScryptBlockTime)
-			scryptDiff = new(big.Int).Div(scryptDiff, common.Big3) // Targeting 3 shares per block
-			return scryptDiff, params.TargetShaShares, big.NewInt(0)
+			return params.ScryptDiffLowerBound, params.TargetShaShares, big.NewInt(0)
 		default:
 			return big.NewInt(0), big.NewInt(0), big.NewInt(0)
 		}

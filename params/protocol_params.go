@@ -211,7 +211,7 @@ var (
 	ExchangeRate                                = big.NewInt(221077819000000000) // This is the initial exchange rate in Qi per Quai in Its/Qit.
 	MaxTimeDiffBetweenBlocks             int64  = 100                            // Max time difference between the blocks to 100 secs
 	OneOverAlpha                                = big.NewInt(1000)               // The alpha value for the quai to qi conversion
-	ControllerKickInBlock                uint64 = 262000                         // This is in order of prime blocks
+	ControllerKickInBlock                uint64 = 2                              // This is in order of prime blocks
 	CoinbaseLockupPrecompileKickInHeight        = 5 * BlocksPerWeek              // The height at which the coinbase lockup precompile is enabled
 	MinBaseFeeInQits                            = big.NewInt(5)
 	OneOverBaseFeeControllerAlpha               = big.NewInt(100)
@@ -265,7 +265,7 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 1171500            // Block at which KawPow activates
+	KawPowForkBlock            uint64 = 10                 // Block at which KawPow activates
 	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
 	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
@@ -280,8 +280,8 @@ var (
 	// PoW share difficulty parameters
 	InitialShaDiffMultiple    = big.NewInt(167000)
 	InitialScryptDiffMultiple = big.NewInt(12)
-	ShaDiffLowerBound         = big.NewInt(7e15)
-	ScryptDiffLowerBound      = big.NewInt(7e11)
+	ShaDiffLowerBound         = big.NewInt(3e12)
+	ScryptDiffLowerBound      = big.NewInt(8e9)
 
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
@@ -315,9 +315,9 @@ var (
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
 	MuSig2PublicKeys = []string{
-		"02cae78e4905da54dc93d6009119d56a2ef91b11e129c8fa41342310ec3a9b499c",
-		"03374cbfcea6cb8172b2fdc09e9f7ec0cc2ff10aaa2192fb19fa04d9391b0a75c2",
-		"03abfe95f7d487a44cac59c9d62fe63e9e01dc3e06dc9fe96b7038d73d99a62fa6",
+		"033bc370eaac5156e829f671b7c5655135db359d58a3a5c3cdf37be5750597a97d", // Key 1
+		"033218834b05059d8520261b3c8926313bf3f635c55d7df33a112907046b1b006e", // Key 2
+		"02e194b39ca3057754894c237320a2f1d186f7ad66a4b3b6f80c9ee7c78a624f50", // Key 3
 	}
 
 	// MerkleNonce, MerkleSize is used for the auxpow2
@@ -331,11 +331,11 @@ var (
 	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
 	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
 	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
-	KQuaiDifficultyDivisor                uint64 = 300000000000           // Minimum difficulty after kawpow fork for the reward calculation
+	KQuaiDifficultyDivisor                uint64 = 10000000               // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (
-	TokenChoiceSetSize uint64 = 4000 // This should be same as the MinerDifficultyWindow
+	TokenChoiceSetSize uint64 = 4 // This should be same as the MinerDifficultyWindow
 )
 
 func CalculateLockupByteRewardsMultiple(lockupByte uint8, blockNumber uint64) (*big.Int, error) {
