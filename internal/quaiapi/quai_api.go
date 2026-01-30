@@ -1345,6 +1345,7 @@ func MarshalAuxPowTemplate(wo *types.WorkObject, powID types.PowID, extraNonce1H
 		"merkleroot":                  hex.EncodeToString(common.Hash(merkleRoot).Reverse().Bytes()),
 		"quairoot":                    sealHashString,
 		"quaiheight":                  wo.WorkObjectHeader().NumberU64(),
+		"quaiparenthash":              hex.EncodeToString(wo.WorkObjectHeader().ParentHash().Bytes()),
 		"quaidifficulty":              wo.WorkObjectHeader().Difficulty(),
 	}, nil
 }
