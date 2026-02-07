@@ -138,9 +138,22 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number string) *types.Head
 //// Miner APIS
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, error) {
+// powId and coinbase are optional — pass nil to use defaults (Progpow, empty address).
+func (ec *Client) GetPendingHeader(ctx context.Context, powId *types.PowID, coinbase *common.Address) (*types.WorkObject, error) {
+	// Build optional RPC params
+	var powIdParam *uint
+	if powId != nil {
+		v := uint(*powId)
+		powIdParam = &v
+	}
+	var coinbaseParam *string
+	if coinbase != nil {
+		s := coinbase.Hex()
+		coinbaseParam = &s
+	}
+
 	var raw hexutil.Bytes
-	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader")
+	err := ec.c.CallContext(ctx, &raw, "quai_getPendingHeader", powIdParam, coinbaseParam)
 	if err != nil {
 		return nil, err
 	}
@@ -184,16 +197,23 @@ func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.WorkObje
 	return ec.c.CallContext(ctx, nil, "quai_receiveMinedHeader", hexutil.Bytes(data))
 }
 
-func (ec *Client) ReceiveWorkShare(ctx context.Context, header *types.WorkObjectHeader) error {
+// ReceiveWorkShare submits a workshare to the node and returns status info.
+// Returns a map with "status" (0=sub, 1=valid, 2=block), "hash", and "number".
+func (ec *Client) ReceiveWorkShare(ctx context.Context, header *types.WorkObjectHeader) (map[string]interface{}, error) {
 	protoWs, err := header.ProtoEncode()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	data, err := proto.Marshal(protoWs)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return ec.c.CallContext(ctx, nil, "quai_receiveRawWorkShare", hexutil.Bytes(data))
+	var result map[string]interface{}
+	err = ec.c.CallContext(ctx, &result, "quai_receiveRawWorkShare", hexutil.Bytes(data))
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // Filters
