@@ -3,12 +3,13 @@ package state
 import (
 	"math/big"
 
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 )
 
 // Will go through the balance schedule and add each one to the account's balance in state.
-func (state *StateDB) AddLockedBalances(blockNum *big.Int, genesisAccounts []params.GenesisAccount, log *log.Logger) error {
+func (state *StateDB) AddLockedBalances(blockNum *big.Int, genesisAccounts []params.GenesisAccount, forfeitureAddresses map[common.Address]bool, log *log.Logger) error {
 	uintBlockNum := blockNum.Uint64()
 	// Check if this block is a monthly unlock.
 	if uintBlockNum%params.BlocksPerMonth == 0 || uintBlockNum == 1 {
@@ -18,6 +19,10 @@ func (state *StateDB) AddLockedBalances(blockNum *big.Int, genesisAccounts []par
 		// Rotate through the accounts and apply the unlocks valid for this month.
 		accountsAdded := 0
 		for _, account := range genesisAccounts {
+			// Skip forfeiture addresses
+			if forfeitureAddresses[account.Address] {
+				continue
+			}
 			accountAddr, err := account.Address.InternalAddress()
 			if err != nil {
 				return err

@@ -161,7 +161,8 @@ type PowConfig struct {
 	DurationLimit  *big.Int
 	GasCeil        uint64
 	MinDifficulty  *big.Int
-	GenAllocs      []GenesisAccount
+	GenAllocs            []GenesisAccount
+	ForfeitureAddresses  map[common.Address]bool
 
 	NodeLocation common.Location
 
