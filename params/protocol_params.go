@@ -265,7 +265,7 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 1171500            // Block at which KawPow activates
+	KawPowForkBlock            uint64 = 0                  // Block at which KawPow activates
 	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
 	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
@@ -278,10 +278,10 @@ var (
 	ScryptBlockTime = big.NewInt(60)  // Doge block time 1 min in secs
 
 	// PoW share difficulty parameters
-	InitialShaDiffMultiple    = big.NewInt(167000)
-	InitialScryptDiffMultiple = big.NewInt(12)
-	ShaDiffLowerBound         = big.NewInt(7e15)
-	ScryptDiffLowerBound      = big.NewInt(7e11)
+	InitialShaDiffMultiple    = big.NewInt(100)
+	InitialScryptDiffMultiple = big.NewInt(10)
+	ShaDiffLowerBound         = big.NewInt(1e6)
+	ScryptDiffLowerBound      = big.NewInt(1e4)
 
 	PowDiffAdjustmentFactor = big.NewInt(300000)
 
@@ -331,7 +331,7 @@ var (
 	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
 	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
 	ExchangeRateHoldInterval              uint64 = 3 * BlocksPerMonth / 4 // 3 months in prime block terms
-	KQuaiDifficultyDivisor                uint64 = 300000000000           // Minimum difficulty after kawpow fork for the reward calculation
+	KQuaiDifficultyDivisor                uint64 = 10                     // Minimum difficulty after kawpow fork for the reward calculation
 )
 
 const (
