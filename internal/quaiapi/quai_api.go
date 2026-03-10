@@ -1559,21 +1559,27 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw he
 }
 
 // Receives a WorkObjectHeader in the form of bytes, decodes it, then calls ReceiveWorkShare.
-func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw hexutil.Bytes) error {
+func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
 	nodeCtx := s.b.NodeCtx()
 	if nodeCtx != common.ZONE_CTX {
-		return errors.New("work shares cannot be broadcasted in non-zone chain")
+		return nil, errors.New("work shares cannot be broadcasted in non-zone chain")
 	}
 	protoWorkShare := &types.ProtoWorkObjectHeader{}
 	err := proto.Unmarshal(raw, protoWorkShare)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	workShareHeader := &types.WorkObjectHeader{}
 	err = workShareHeader.ProtoDecode(protoWorkShare, s.b.NodeLocation())
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	// Classify the workshare
+	validity := s.b.UncleWorkShareClassification(workShareHeader)
+	if validity == types.Invalid {
+		return nil, errors.New("invalid proof of work")
 	}
 
 	if nodeCtx == common.ZONE_CTX && s.b.ChainConfig().TelemetryEnabled {
@@ -1581,7 +1587,23 @@ func (s *PublicBlockChainQuaiAPI) ReceiveRawWorkShare(ctx context.Context, raw h
 		telemetry.RecordMinedHeader(workShareHeader)
 	}
 
-	return s.ReceiveWorkShare(ctx, workShareHeader)
+	err = s.b.ReceiveWorkShare(workShareHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	fields := make(map[string]interface{})
+	fields["number"] = hexutil.Uint64(workShareHeader.NumberU64())
+	fields["hash"] = workShareHeader.Hash().Hex()
+	switch validity {
+	case types.Sub:
+		fields["status"] = hexutil.Uint64(0)
+	case types.Valid:
+		fields["status"] = hexutil.Uint64(1)
+	case types.Block:
+		fields["status"] = hexutil.Uint64(2)
+	}
+	return fields, nil
 }
 
 func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShare *types.WorkObjectHeader) error {
@@ -1589,12 +1611,22 @@ func (s *PublicBlockChainQuaiAPI) ReceiveWorkShare(ctx context.Context, workShar
 	return s.b.ReceiveWorkShare(workShare)
 }
 
-func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil.Bytes, error) {
+func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context, powIdPtr *uint, coinbaseStr *string) (hexutil.Bytes, error) {
 	if !s.b.ProcessingState() {
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
 
-	pendingHeader, err := s.b.GetPendingHeader(types.Progpow, common.Address{}) // 0 is default progpow
+	powId := types.Progpow
+	if powIdPtr != nil {
+		powId = types.PowID(*powIdPtr)
+	}
+
+	var coinbase common.Address
+	if coinbaseStr != nil && *coinbaseStr != "" {
+		coinbase = common.HexToAddress(*coinbaseStr, s.b.NodeLocation())
+	}
+
+	pendingHeader, err := s.b.GetPendingHeader(powId, coinbase)
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {
