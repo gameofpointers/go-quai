@@ -9,6 +9,40 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 )
 
+func TestBlockTemplatePowID(t *testing.T) {
+	tests := []struct {
+		name  string
+		rules []string
+		want  types.PowID
+	}{
+		{name: "default", want: types.Kawpow},
+		{name: "legacy sha remains bch", rules: []string{"sha"}, want: types.SHA_BCH},
+		{name: "explicit bch", rules: []string{"sha_bch"}, want: types.SHA_BCH},
+		{name: "explicit btc", rules: []string{"sha_btc"}, want: types.SHA_BTC},
+		{name: "bitcoin alias", rules: []string{"bitcoin"}, want: types.SHA_BTC},
+		{name: "case insensitive", rules: []string{"BTC"}, want: types.SHA_BTC},
+		{name: "scrypt", rules: []string{"scrypt"}, want: types.Scrypt},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := blockTemplatePowID(tt.rules)
+			if err != nil {
+				t.Fatalf("blockTemplatePowID returned error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expected %s, got %s", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestBlockTemplatePowIDRejectsUnknownRule(t *testing.T) {
+	if _, err := blockTemplatePowID([]string{"unknown"}); err == nil {
+		t.Fatal("expected unsupported rule error")
+	}
+}
+
 type testNetBackend struct {
 	total    uint
 	incoming uint

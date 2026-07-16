@@ -1154,31 +1154,20 @@ type BlockTemplateRequest struct {
 // GetBlockTemplate retrieves a new block template to mine
 // Supports Bitcoin-compatible getblocktemplate API with PoW algorithm selection via "rules" parameter
 func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request *BlockTemplateRequest) (map[string]interface{}, error) {
-	// Default to KAWPOW if no request or rules specified
-	powId := types.Kawpow
-
-	// Parse rules to determine PoW algorithm
-	if request != nil && len(request.Rules) > 0 {
-		for _, rule := range request.Rules {
-			ruleLower := strings.ToLower(rule)
-			switch ruleLower {
-			case "kawpow":
-				powId = types.Kawpow
-			case "sha", "sha256d":
-				powId = types.SHA_BCH
-			case "scrypt":
-				powId = types.Scrypt
-			default:
-				return nil, fmt.Errorf("unsupported rule: %s", rule)
-			}
-		}
+	var rules []string
+	if request != nil {
+		rules = request.Rules
+	}
+	powId, err := blockTemplatePowID(rules)
+	if err != nil {
+		return nil, err
 	}
 
 	var coinbase common.Address
 	if request != nil && !request.Coinbase.Address().Equal(common.Address{}) {
 		coinbase = common.Bytes20ToAddress(request.Coinbase.Address().Bytes20(), s.b.NodeLocation())
 
-		_, err := coinbase.InternalAddress()
+		_, err = coinbase.InternalAddress()
 		if err != nil {
 			return nil, fmt.Errorf("out of scope or invalid coinbase address: %w", err)
 		}
@@ -1190,6 +1179,27 @@ func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request 
 		return nil, err
 	}
 	return s.marshalAuxPowTemplate(pendingHeader, request)
+}
+
+func blockTemplatePowID(rules []string) (types.PowID, error) {
+	// Default to KAWPOW if no rules are specified.
+	powID := types.Kawpow
+	for _, rule := range rules {
+		switch strings.ToLower(rule) {
+		case "kawpow":
+			powID = types.Kawpow
+		case "btc", "bitcoin", "sha_btc", "sha-btc":
+			powID = types.SHA_BTC
+		case "sha", "sha256d", "bch", "bitcoin-cash", "sha_bch", "sha-bch":
+			// Keep the historical generic SHA names mapped to BCH.
+			powID = types.SHA_BCH
+		case "scrypt":
+			powID = types.Scrypt
+		default:
+			return types.Progpow, fmt.Errorf("unsupported rule: %s", rule)
+		}
+	}
+	return powID, nil
 }
 
 // marshalAuxPowTemplate is a method wrapper that calls the standalone MarshalAuxPowTemplate function
@@ -1417,7 +1427,21 @@ func (s *PublicBlockChainQuaiAPI) SubmitKawpowBlock(ctx context.Context, raw hex
 }
 
 func (s *PublicBlockChainQuaiAPI) SubmitShaBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
-	hash, number, validity, err := s.b.SubmitBlock(raw, types.SHA_BCH)
+	return s.submitShaBlock(raw, types.SHA_BCH)
+}
+
+// SubmitShaBchBlock is the explicit BCH alias for the legacy SubmitShaBlock endpoint.
+func (s *PublicBlockChainQuaiAPI) SubmitShaBchBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
+	return s.submitShaBlock(raw, types.SHA_BCH)
+}
+
+// SubmitShaBtcBlock submits SHA256d work built from a SHA_BTC template.
+func (s *PublicBlockChainQuaiAPI) SubmitShaBtcBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
+	return s.submitShaBlock(raw, types.SHA_BTC)
+}
+
+func (s *PublicBlockChainQuaiAPI) submitShaBlock(raw hexutil.Bytes, powID types.PowID) (map[string]interface{}, error) {
+	hash, number, validity, err := s.b.SubmitBlock(raw, powID)
 	if err != nil {
 		return nil, err
 	}
