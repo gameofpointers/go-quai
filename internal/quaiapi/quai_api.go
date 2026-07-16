@@ -1143,7 +1143,7 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 
 // BlockTemplateRequest represents a getblocktemplate request
 type BlockTemplateRequest struct {
-	Rules          []string                `json:"rules,omitempty"`          // "kawpow", "sha", "scrypt"
+	Rules          []string                `json:"rules,omitempty"`          // "kawpow", "sha", "sha_btc", "sha_bch", "scrypt"
 	ExtraNonce1    string                  `json:"extranonce1,omitempty"`    // 4 byte hex string
 	ExtraNonce2    string                  `json:"extranonce2,omitempty"`    // 8 byte hex string
 	ExtraNonce2Len int                     `json:"extranonce2len,omitempty"` // extra nonce2 length in bytes
@@ -2286,6 +2286,10 @@ func (s *PublicBlockChainQuaiAPI) GetSubsidyChainHeight(ctx context.Context) (ma
 	at = s.b.GetBestAuxTemplate(types.SHA_BCH)
 	if at != nil {
 		fields["bch"] = hexutil.Uint64(at.Height())
+	}
+	at = s.b.GetBestAuxTemplate(types.SHA_BTC)
+	if at != nil {
+		fields["btc"] = hexutil.Uint64(at.Height())
 	}
 	at = s.b.GetBestAuxTemplate(types.Scrypt)
 	if at != nil {

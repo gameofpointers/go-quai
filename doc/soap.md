@@ -30,9 +30,15 @@ work once per second to keep producing fresh shares and get paid.
 }
 ```
 
-`powType` (supplied inside `rules`) selects the target algorithm. Supported values:
-`"kawpow"`, `"sha"`, `"scrypt"`. If multiple values are supplied, the template is built
-for the first supported entry.
+`powType` (supplied inside `rules`) selects the target algorithm. Supported values are
+`"kawpow"`, `"sha_btc"`, `"sha_bch"`, `"sha"`, and `"scrypt"`. The aliases `"btc"`
+and `"bitcoin"` select SHA-BTC. The legacy values `"sha"` and `"sha256d"` continue to
+select SHA-BCH for compatibility with existing pools.
+
+SHA-BTC mining becomes available after the node receives a valid signed `SHA_BTC`
+donor-chain template. Unlike BCH, go-quai does not embed a fallback BTC template:
+the template signature commits to the donor-chain `PowID`, so a BCH template cannot
+be safely relabeled as BTC.
 
 `extranonce1`, `extranonce2`, and `extradata` are optional request fields that let a pool
 ask go-quai to pre-populate the returned coinbase transaction. When supplied:
@@ -168,7 +174,9 @@ block (header + transactions) as a hex string prefixed with `0x`.
 | Algorithm | Method | Notes |
 | --- | --- | --- |
 | KawPow | `quai_submitKawpowBlock` | Default submission path for KawPow work. |
-| SHA | `quai_submitShaBlock` | Use when the template was requested with `powType = "sha"`. |
+| SHA-BTC | `quai_submitShaBtcBlock` | Use with templates requested through `sha_btc`, `btc`, or `bitcoin`. |
+| SHA-BCH | `quai_submitShaBchBlock` | Explicit BCH endpoint. |
+| SHA-BCH (legacy) | `quai_submitShaBlock` | Backward-compatible endpoint for templates requested through `sha` or `sha256d`. |
 | Scrypt | `quai_submitScryptBlock` | Use when the template was requested with `powType = "scrypt"`. |
 
 On success the RPC returns a JSON object of the form

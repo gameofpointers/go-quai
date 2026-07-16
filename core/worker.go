@@ -461,6 +461,10 @@ func (w *worker) GetBestAuxTemplate(powID types.PowID) *types.AuxTemplate {
 		return types.DefaultKawpowAuxTemplate()
 	case types.SHA_BCH:
 		return types.DefaultShaBchAuxTemplate()
+	case types.SHA_BTC:
+		// BTC has no embedded fallback because AuxTemplate signatures bind the
+		// donor-chain PowID. A signed SHA_BTC template must be received first.
+		return nil
 	case types.Scrypt:
 		return types.DefaultScryptAuxTemplate()
 	}
