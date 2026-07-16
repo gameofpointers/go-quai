@@ -138,6 +138,20 @@ func (mr *MockQuaiP2PNodeMockRecorder) GetWorkObject(hash, location any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkObject", reflect.TypeOf((*MockQuaiP2PNode)(nil).GetWorkObject), hash, location)
 }
 
+// GetWorkObjectBatch mocks base method.
+func (m *MockQuaiP2PNode) GetWorkObjectBatch(request *types.BlockBatchRequest, location common.Location) []*types.WorkObjectBlockView {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkObjectBatch", request, location)
+	ret0, _ := ret[0].([]*types.WorkObjectBlockView)
+	return ret0
+}
+
+// GetWorkObjectBatch indicates an expected call of GetWorkObjectBatch.
+func (mr *MockQuaiP2PNodeMockRecorder) GetWorkObjectBatch(request, location any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkObjectBatch", reflect.TypeOf((*MockQuaiP2PNode)(nil).GetWorkObjectBatch), request, location)
+}
+
 // GetWorkObjectsFrom mocks base method.
 func (m *MockQuaiP2PNode) GetWorkObjectsFrom(hash common.Hash, location common.Location, count int) []*types.WorkObjectBlockView {
 	m.ctrl.T.Helper()

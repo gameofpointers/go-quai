@@ -117,6 +117,7 @@ func NewCore(db ethdb.Database, config *Config, powConfig params.PowConfig, txCo
 
 	remoteTxQueue, _ := lru.New[common.Hash, types.Transaction](c_maxRemoteTxQueue)
 	c.remoteTxQueue = remoteTxQueue
+	c.refillDownloadedQueue()
 
 	go c.updateAppendQueue()
 	go c.startStatsTimer()
@@ -284,6 +285,33 @@ func (c *Core) procAppendQueue() {
 		}
 	}
 	c.procCounter++
+	if c.appendQueue.Len() < c_appendQueueThreshold {
+		c.refillDownloadedQueue()
+	}
+}
+
+// refillDownloadedQueue restores the in-memory import working set from the
+// durable download queue. Only a bounded prefix is loaded; the remaining
+// entries stay on disk until import makes room.
+func (c *Core) refillDownloadedQueue() {
+	loaded := make([]*types.WorkObject, 0, c_appendQueueThreshold)
+	for _, item := range rawdb.ReadDownloadedBlocksLimit(c.sl.sliceDb, c_maxAppendQueue) {
+		if c.appendQueue.Len() >= c_maxAppendQueue {
+			break
+		}
+		if c.GetHeaderByHash(item.Hash) != nil {
+			rawdb.DeleteDownloadedBlock(c.sl.sliceDb, item.Number, item.Hash)
+			continue
+		}
+		block := c.sl.hc.GetBlockOrCandidate(item.Hash, item.Number)
+		if block == nil {
+			rawdb.DeleteDownloadedBlock(c.sl.sliceDb, item.Number, item.Hash)
+			continue
+		}
+		_ = c.addToAppendQueue(block)
+		loaded = append(loaded, block)
+	}
+	c.scheduleSubordinateManifests(loaded)
 }
 
 // EntropyWindow calculates the entropy in terms of the current blocks intrinsic, and take a multiple of that value
@@ -453,6 +481,7 @@ func (c *Core) addToAppendQueue(block *types.WorkObject) error {
 // removeFromAppendQueue removes a block from the append queue
 func (c *Core) removeFromAppendQueue(block *types.WorkObject) {
 	c.appendQueue.Remove(block.Hash())
+	rawdb.DeleteDownloadedBlock(c.sl.sliceDb, block.NumberU64(c.NodeCtx()), block.Hash())
 }
 
 // updateAppendQueue is a time to procAppendQueue
@@ -529,9 +558,18 @@ func (c *Core) startStatsTimer() {
 
 // printStats displays stats on syncing, latestHeight, etc.
 func (c *Core) printStats() {
+	downloadedHeight, _ := c.DownloadedHead()
+	processedHeight := c.CurrentHeader().NumberU64(c.NodeCtx())
+	var downloadedHeadroom uint64
+	if downloadedHeight > processedHeight {
+		downloadedHeadroom = downloadedHeight - processedHeight
+	}
 	c.logger.WithFields(log.Fields{
-		"loc":              c.NodeLocation().Name(),
-		"len(appendQueue)": len(c.appendQueue.Keys()),
+		"loc":                c.NodeLocation().Name(),
+		"len(appendQueue)":   len(c.appendQueue.Keys()),
+		"downloadedHeight":   downloadedHeight,
+		"processedHeight":    processedHeight,
+		"downloadedHeadroom": downloadedHeadroom,
 	}).Info("Blocks waiting to be appended")
 
 	// Print hashes & heights of all queue entries.
@@ -1037,6 +1075,146 @@ func (c *Core) WriteBlock(block *types.WorkObject) {
 
 }
 
+// StageDownloadedBlocks validates and durably stores historical blocks without
+// invoking consensus/state processing. The regular append worker independently
+// consumes the durable queue.
+func (c *Core) StageDownloadedBlocks(blocks []*types.WorkObject) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+	staged := make([]*types.WorkObject, 0, len(blocks))
+	for _, block := range blocks {
+		if block == nil {
+			return errors.New("cannot stage nil block")
+		}
+		if block.Location() == nil {
+			return errors.New("cannot stage block with nil location")
+		}
+		if c.sl.IsBlockHashABadHash(block.Hash()) {
+			return ErrBadBlockHash
+		}
+		if err := c.sl.validator.SanityCheckWorkObjectBlockViewBody(block); err != nil {
+			return fmt.Errorf("invalid downloaded block %s: %w", block.Hash(), err)
+		}
+		if c.GetHeaderByHash(block.Hash()) == nil {
+			staged = append(staged, block)
+		}
+	}
+	if len(staged) != 0 {
+		if err := c.sl.hc.bc.StageBlocks(staged, c.NodeCtx()); err != nil {
+			return err
+		}
+	}
+	for _, block := range blocks {
+		if c.GetHeaderByHash(block.Hash()) == nil && c.appendQueue.Len() < c_maxAppendQueue {
+			_ = c.addToAppendQueue(block)
+		}
+	}
+	c.scheduleSubordinateManifests(blocks)
+	c.advanceDownloadedHead(blocks)
+	return nil
+}
+
+// scheduleSubordinateManifests eagerly turns downloaded dominant manifests into
+// subordinate network work. Calls are grouped by subordinate and dispatched
+// asynchronously so subordinate network latency cannot stall dominant download.
+func (c *Core) scheduleSubordinateManifests(blocks []*types.WorkObject) {
+	if c.NodeCtx() == common.ZONE_CTX {
+		return
+	}
+	type manifestGroup struct {
+		blockHash common.Hash
+		hashes    types.BlockManifest
+		entropy   *big.Int
+		seen      map[common.Hash]struct{}
+	}
+	groups := make(map[int]*manifestGroup)
+	for _, block := range blocks {
+		if len(block.Manifest()) == 0 {
+			continue
+		}
+		idx := block.Location().SubIndex(c.NodeCtx())
+		if idx < 0 || idx >= len(c.sl.subInterface) || c.sl.subInterface[idx] == nil {
+			continue
+		}
+		group := groups[idx]
+		if group == nil {
+			group = &manifestGroup{seen: make(map[common.Hash]struct{})}
+			groups[idx] = group
+		}
+		group.blockHash = block.Hash()
+		group.entropy = block.ParentEntropy(c.NodeCtx())
+		for _, hash := range block.Manifest() {
+			if _, exists := group.seen[hash]; exists {
+				continue
+			}
+			group.seen[hash] = struct{}{}
+			group.hashes = append(group.hashes, hash)
+		}
+	}
+	for idx, group := range groups {
+		sub := c.sl.subInterface[idx]
+		go sub.DownloadBlocksInManifest(group.blockHash, group.hashes, group.entropy)
+	}
+}
+
+func (c *Core) advanceDownloadedHead(blocks []*types.WorkObject) {
+	nodeCtx := c.NodeCtx()
+	number, hash, ok := rawdb.ReadDownloadedHead(c.sl.sliceDb)
+	if !ok {
+		head := c.CurrentHeader()
+		if head == nil {
+			return
+		}
+		number, hash = head.NumberU64(nodeCtx), head.Hash()
+	}
+	for _, block := range blocks {
+		blockNumber := block.NumberU64(nodeCtx)
+		if blockNumber <= number {
+			continue
+		}
+		if blockNumber != number+1 || block.ParentHash(nodeCtx) != hash {
+			break
+		}
+		number, hash = blockNumber, block.Hash()
+	}
+	rawdb.WriteDownloadedHead(c.sl.sliceDb, number, hash)
+}
+
+// DownloadedHead returns the durable network progress, never behind the
+// processed canonical head.
+func (c *Core) DownloadedHead() (uint64, common.Hash) {
+	if number, hash, ok := rawdb.ReadDownloadedHead(c.sl.sliceDb); ok {
+		if head := c.CurrentHeader(); head == nil || number >= head.NumberU64(c.NodeCtx()) {
+			return number, hash
+		}
+	}
+	head := c.CurrentHeader()
+	if head == nil {
+		return 0, common.Hash{}
+	}
+	return head.NumberU64(c.NodeCtx()), head.Hash()
+}
+
+// RewindDownloadedHead drops one unprocessed download checkpoint. It is used
+// when peers agree on a canonical range whose parent no longer matches our
+// staged tip. Processed canonical data is never rewound here.
+func (c *Core) RewindDownloadedHead() bool {
+	number, hash := c.DownloadedHead()
+	processed := c.CurrentHeader()
+	if processed == nil || number <= processed.NumberU64(c.NodeCtx()) {
+		return false
+	}
+	block := c.sl.hc.GetBlockOrCandidate(hash, number)
+	if block == nil {
+		return false
+	}
+	rawdb.DeleteDownloadedBlock(c.sl.sliceDb, number, hash)
+	c.appendQueue.Remove(hash)
+	rawdb.WriteDownloadedHead(c.sl.sliceDb, number-1, block.ParentHash(c.NodeCtx()))
+	return true
+}
+
 func (c *Core) Append(header *types.WorkObject, manifest types.BlockManifest, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, error) {
 	nodeCtx := c.NodeCtx()
 	// Set the coinbase into the right interface before calling append in the sub
@@ -1069,19 +1247,30 @@ func (c *Core) Append(header *types.WorkObject, manifest types.BlockManifest, do
 			c.logger.WithField("err", err).Error("Error in Dom Append in Core")
 		}
 	}
+	if err == nil {
+		if block := c.GetBlockOrCandidateByHash(header.Hash()); block != nil {
+			c.removeFromAppendQueue(block)
+		}
+	}
 	return newPendingEtxs, err
 }
 
 func (c *Core) DownloadBlocksInManifest(blockHash common.Hash, manifest types.BlockManifest, entropy *big.Int) {
 	// Fetch the blocks for each hash in the manifest
+	existing := make([]*types.WorkObject, 0)
 	for _, m := range manifest {
 		block := c.GetBlockOrCandidateByHash(m)
 		if block == nil {
-			c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: m, Entropy: entropy})
+			c.sl.missingBlockFeed.Send(types.BlockRequest{Hash: m, Entropy: entropy, Historical: true})
 		} else {
 			c.addToQueueIfNotAppended(block)
+			if c.GetHeaderByHash(block.Hash()) == nil {
+				rawdb.WriteDownloadedBlock(c.sl.sliceDb, block.NumberU64(c.NodeCtx()), block.Hash())
+			}
+			existing = append(existing, block)
 		}
 	}
+	c.scheduleSubordinateManifests(existing)
 	if c.NodeLocation().Context() == common.REGION_CTX {
 		block := c.GetBlockOrCandidateByHash(blockHash)
 		if block != nil {
@@ -1188,6 +1377,17 @@ func (c *Core) GetSlicesRunning() []common.Location {
 
 func (c *Core) SetSubInterface(subInterface CoreBackend, location common.Location) {
 	c.sl.SetSubInterface(subInterface, location)
+	// Interfaces are connected after cores and handlers start. Replay manifests
+	// from the recovered in-memory import window once the subordinate exists.
+	blocks := make([]*types.WorkObject, 0, c.appendQueue.Len())
+	for _, hash := range c.appendQueue.Keys() {
+		if item, ok := c.appendQueue.Peek(hash); ok {
+			if block := c.sl.hc.GetBlockOrCandidate(hash, item.number); block != nil {
+				blocks = append(blocks, block)
+			}
+		}
+	}
+	c.scheduleSubordinateManifests(blocks)
 }
 
 func (c *Core) AddGenesisPendingEtxs(block *types.WorkObject) {

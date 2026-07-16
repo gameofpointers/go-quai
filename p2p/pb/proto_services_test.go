@@ -1,10 +1,12 @@
 package pb
 
 import (
+	"math/big"
 	reflect "reflect"
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,6 +52,39 @@ func TestEncodeDecodeRequest(t *testing.T) {
 			assert.IsType(t, tc.expectedType, reflect.TypeOf(decodedType))
 		})
 	}
+}
+
+func TestBlockBatchRequestRoundTrip(t *testing.T) {
+	loc := common.Location{0, 1}
+	hashes := []common.Hash{{1}, {2}, {3}}
+	request := &types.BlockBatchRequest{Hashes: hashes, MaxBlocks: 3, MaxBytes: 2 * 1024 * 1024}
+	data, err := EncodeQuaiRequest(7, loc, request, []*types.WorkObjectBlockView{})
+	require.NoError(t, err)
+	message, err := DecodeQuaiMessage(data)
+	require.NoError(t, err)
+	id, responseType, decodedLoc, query, err := DecodeQuaiRequest(message.GetRequest())
+	require.NoError(t, err)
+	assert.Equal(t, uint32(7), id)
+	assert.Equal(t, loc, decodedLoc)
+	assert.IsType(t, []*types.WorkObjectBlockView{}, responseType)
+	assert.Equal(t, request, query)
+}
+
+func TestBlockRangeRequestRoundTrip(t *testing.T) {
+	request := &types.BlockBatchRequest{Origin: big.NewInt(42), MaxBlocks: 128, MaxBytes: 1024}
+	data, err := EncodeQuaiRequest(8, common.Location{}, request, []*types.WorkObjectBlockView{})
+	require.NoError(t, err)
+	message, err := DecodeQuaiMessage(data)
+	require.NoError(t, err)
+	_, _, _, query, err := DecodeQuaiRequest(message.GetRequest())
+	require.NoError(t, err)
+	assert.Equal(t, request, query)
+}
+
+func TestBlockBatchRequestRejectsAmbiguousQuery(t *testing.T) {
+	request := &types.BlockBatchRequest{Origin: big.NewInt(1), Hashes: []common.Hash{{1}}}
+	_, err := EncodeQuaiRequest(9, common.Location{}, request, []*types.WorkObjectBlockView{})
+	require.Error(t, err)
 }
 
 func TestDecodeQuaiRequestRejectsNil(t *testing.T) {

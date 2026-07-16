@@ -34,6 +34,34 @@ func EncodeQuaiRequest(id uint32, location common.Location, reqData interface{},
 		reqMsg.Data = &QuaiRequestMessage_Hash{Hash: d.ProtoEncode()}
 	case *big.Int:
 		reqMsg.Data = &QuaiRequestMessage_Number{Number: d.Bytes()}
+	case *types.BlockBatchRequest:
+		if d == nil {
+			return nil, errors.New("nil block batch request")
+		}
+		if d.Origin != nil && len(d.Hashes) != 0 {
+			return nil, errors.New("block batch request cannot contain both origin and hashes")
+		}
+		if len(d.Hashes) > 1024 || d.MaxBlocks > 1024 {
+			return nil, errors.New("block batch request exceeds maximum block count")
+		}
+		if d.MaxBytes > uint64(common.MaxStreamMessageSize) {
+			return nil, errors.New("block batch request exceeds maximum response bytes")
+		}
+		if d.Origin != nil {
+			reqMsg.Data = &QuaiRequestMessage_Number{Number: d.Origin.Bytes()}
+		} else if len(d.Hashes) != 0 {
+			// Keep the legacy hash data populated. An older peer will safely
+			// interpret this as the old ten-block request, and the caller can
+			// reject/fallback if the returned sequence is not the requested set.
+			reqMsg.Data = &QuaiRequestMessage_Hash{Hash: d.Hashes[0].ProtoEncode()}
+		} else {
+			return nil, errors.New("block batch request has no origin or hashes")
+		}
+		reqMsg.MaxBlocks = d.MaxBlocks
+		reqMsg.MaxBytes = d.MaxBytes
+		for _, hash := range d.Hashes {
+			reqMsg.Hashes = append(reqMsg.Hashes, hash.ProtoEncode())
+		}
 	default:
 		return nil, errors.Errorf("unsupported request input data field type: %T", reqData)
 	}
@@ -95,6 +123,28 @@ func DecodeQuaiRequest(reqMsg *QuaiRequestMessage) (uint32, interface{}, common.
 		reqType = &common.Hash{}
 	default:
 		return reqMsg.Id, nil, common.Location{}, common.Hash{}, errors.Errorf("unsupported request type: %T", reqMsg.Request)
+	}
+	if _, ok := reqMsg.Request.(*QuaiRequestMessage_WorkObjectBlocks); ok &&
+		(reqMsg.MaxBlocks != 0 || reqMsg.MaxBytes != 0 || len(reqMsg.Hashes) != 0) {
+		if len(reqMsg.Hashes) > 1024 || reqMsg.MaxBlocks > 1024 || reqMsg.MaxBytes > uint64(common.MaxStreamMessageSize) {
+			return reqMsg.Id, nil, common.Location{}, nil, errors.New("invalid block batch limits")
+		}
+		batch := &types.BlockBatchRequest{
+			MaxBlocks: reqMsg.MaxBlocks,
+			MaxBytes:  reqMsg.MaxBytes,
+		}
+		if number, ok := reqData.(*big.Int); ok {
+			batch.Origin = number
+		}
+		for _, protoHash := range reqMsg.Hashes {
+			hash := common.Hash{}
+			hash.ProtoDecode(protoHash)
+			batch.Hashes = append(batch.Hashes, hash)
+		}
+		if len(batch.Hashes) != 0 {
+			batch.Origin = nil
+		}
+		reqData = batch
 	}
 
 	return reqMsg.Id, reqType, *location, reqData, nil

@@ -149,6 +149,29 @@ func (bc *BodyDb) WriteBlock(block *types.WorkObject, nodeCtx int) {
 	}
 }
 
+// StageBlocks durably stores downloaded blocks and their import markers in one
+// database batch. It deliberately does not execute state or update canonical
+// chain data.
+func (bc *BodyDb) StageBlocks(blocks []*types.WorkObject, nodeCtx int) error {
+	batch := bc.db.NewBatch()
+	for _, block := range blocks {
+		if block == nil {
+			continue
+		}
+		rawdb.WriteWorkObject(batch, block.Hash(), block, types.BlockObject, nodeCtx)
+		rawdb.WriteDownloadedBlock(batch, block.NumberU64(nodeCtx), block.Hash())
+	}
+	if err := batch.Write(); err != nil {
+		return err
+	}
+	for _, block := range blocks {
+		if block != nil {
+			bc.blockCache.Add(block.Hash(), *block)
+		}
+	}
+	return nil
+}
+
 // HasBlock checks if a block is fully present in the database or not.
 func (bc *BodyDb) HasBlock(hash common.Hash, number uint64) bool {
 	if bc.blockCache.Contains(hash) {

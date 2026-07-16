@@ -2,7 +2,6 @@ package quai
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"runtime/debug"
 	"sync"
@@ -13,26 +12,28 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/event"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/p2p/protocol"
+	"github.com/dominant-strategies/go-quai/metrics_config"
 	"github.com/dominant-strategies/go-quai/params"
 	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-const (
-	// c_missingBlockChanSize is the size of channel listening to the MissingBlockEvent
-	c_missingBlockChanSize = 60
-	// c_checkNextPrimeBlockInterval is the interval for checking the next Block in Prime
-	c_checkNextPrimeBlockInterval = 10 * time.Second
-	// c_recentBlockReqCache is the size of the cache for the recent block requests
-	c_recentBlockReqCache = 1000
-	// c_recentBlockReqTimeout is the timeout for the recent block requests cache
-	c_recentBlockReqTimeout = 1 * time.Minute
-	// c_primeBlockSyncDepth is how far back the prime block downloading will start
-	c_primeBlockSyncDepth = 2000
+var (
+	historicalSyncCounters = metrics_config.NewCounterVec("HistoricalSync", "Historical sync blocks, bytes, requests, and failures")
+	historicalSyncGauges   = metrics_config.NewGaugeVec("HistoricalSyncHead", "Downloaded and processed historical sync heads")
 )
 
-var (
-	ErrBlockAlreadyAppended = errors.New("block has already been appended")
+const (
+	// c_missingBlockChanSize is the size of channel listening to the MissingBlockEvent
+	c_missingBlockChanSize = 4096
+	// Historical sync responses are bounded below the stream's 3 MiB cap.
+	c_syncBatchBlocks = 128
+	c_syncBatchBytes  = 2 * 1024 * 1024
+	c_syncWorkers     = 4
+	c_syncIdlePeriod  = time.Second
+	// c_recentBlockReqCache is the size of the cache for the recent block requests
+	c_recentBlockReqCache = 16384
+	// c_recentBlockReqTimeout is the timeout for the recent block requests cache
+	c_recentBlockReqTimeout = 1 * time.Minute
 )
 
 // handler manages the fetch requests from the core and tx pool also takes care of the tx broadcast
@@ -71,10 +72,12 @@ func newHandler(p2pBackend NetworkingAPI, core *core.Core, nodeLocation common.L
 }
 
 func (h *handler) Start() {
-	h.wg.Add(1)
 	h.missingBlockCh = make(chan types.BlockRequest, c_missingBlockChanSize)
 	h.missingBlockSub = h.core.SubscribeMissingBlockEvent(h.missingBlockCh)
-	go h.missingBlockLoop()
+	for i := 0; i < c_syncWorkers; i++ {
+		h.wg.Add(1)
+		go h.missingBlockLoop()
+	}
 
 	nodeCtx := h.nodeLocation.Context()
 	if nodeCtx == common.PRIME_CTX {
@@ -106,65 +109,17 @@ func (h *handler) missingBlockLoop() {
 	for {
 		select {
 		case blockRequest := <-h.missingBlockCh:
-
-			// If the blockRequest Hash is a bad block hash, node should not ask
-			// any peer for the hash
-			if h.core.IsBlockHashABadHash(blockRequest.Hash) {
-				continue
-			}
-
-			// get the current header and compare the entropy of the block that
-			// is getting fetched with the current header entropy
-			currentHeader := h.core.CurrentHeader()
-
-			if currentHeader != nil && !h.core.IsGenesisHash(currentHeader.Hash()) && currentHeader.NumberU64(common.ZONE_CTX) > params.MaxCodeSizeForkHeight {
-				currentHeaderPowHash, err := h.core.VerifySeal(currentHeader.WorkObjectHeader())
-				if err != nil {
-					continue
-				}
-				currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
-				currentS := h.core.CurrentHeader().ParentEntropy(h.core.NodeCtx())
-				MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, new(big.Int).SetUint64(params.MaxAllowableEntropyDist))
-
-				// If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS dont broadcast
-				if currentS.Cmp(new(big.Int).Add(blockRequest.Entropy, MaxAllowableEntropyDist)) > 0 {
-					continue
+			requests := []types.BlockRequest{blockRequest}
+		collect:
+			for len(requests) < c_syncBatchBlocks {
+				select {
+				case request := <-h.missingBlockCh:
+					requests = append(requests, request)
+				default:
+					break collect
 				}
 			}
-
-			_, exists := h.recentBlockReqCache.Get(blockRequest.Hash)
-			if !exists {
-				// Add the block request to the cache to avoid requesting the same block multiple times
-				h.recentBlockReqCache.Add(blockRequest.Hash, true)
-			} else {
-				// Don't ask for the same block multiple times within a min window
-				continue
-			}
-
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						h.logger.WithFields(log.Fields{
-							"error":      r,
-							"stacktrace": string(debug.Stack()),
-						}).Error("Go-Quai Panicked")
-					}
-				}()
-				if !h.core.ProcessingState() && h.nodeLocation.Context() == common.ZONE_CTX {
-					resultCh := h.p2pBackend.Request(h.nodeLocation, blockRequest.Hash, &types.WorkObjectHeaderView{})
-					block := <-resultCh
-					if block != nil {
-						h.core.WriteBlock(block.(*types.WorkObjectHeaderView).WorkObject)
-					}
-				} else {
-					resultCh := h.p2pBackend.Request(h.nodeLocation, blockRequest.Hash, &types.WorkObjectBlockView{})
-					block := <-resultCh
-					if block != nil {
-						h.core.WriteBlock(block.(*types.WorkObjectBlockView).WorkObject)
-					}
-				}
-				h.recentBlockReqCache.Remove(blockRequest.Hash)
-			}()
+			h.fetchMissingBatch(requests)
 		case <-h.missingBlockSub.Err():
 			return
 		case <-h.quitCh:
@@ -173,7 +128,125 @@ func (h *handler) missingBlockLoop() {
 	}
 }
 
-// checkNextPrimeBlock runs every c_checkNextPrimeBlockInterval and ask the peer for the next Block
+func (h *handler) fetchMissingBatch(requests []types.BlockRequest) {
+	unique := make(map[common.Hash]types.BlockRequest, len(requests))
+	hashes := make([]common.Hash, 0, len(requests))
+	for _, blockRequest := range requests {
+
+		// If the blockRequest Hash is a bad block hash, node should not ask
+		// any peer for the hash
+		if h.core.IsBlockHashABadHash(blockRequest.Hash) {
+			continue
+		}
+
+		// get the current header and compare the entropy of the block that
+		// is getting fetched with the current header entropy
+		currentHeader := h.core.CurrentHeader()
+
+		if !blockRequest.Historical && currentHeader != nil && !h.core.IsGenesisHash(currentHeader.Hash()) && currentHeader.NumberU64(common.ZONE_CTX) > params.MaxCodeSizeForkHeight {
+			currentHeaderPowHash, err := h.core.VerifySeal(currentHeader.WorkObjectHeader())
+			if err != nil {
+				continue
+			}
+			currentHeaderIntrinsic := common.IntrinsicLogEntropy(currentHeaderPowHash)
+			currentS := h.core.CurrentHeader().ParentEntropy(h.core.NodeCtx())
+			MaxAllowableEntropyDist := new(big.Int).Mul(currentHeaderIntrinsic, new(big.Int).SetUint64(params.MaxAllowableEntropyDist))
+
+			// If someone is mining not within MaxAllowableEntropyDist*currentIntrinsicS dont broadcast
+			if currentS.Cmp(new(big.Int).Add(blockRequest.Entropy, MaxAllowableEntropyDist)) > 0 {
+				continue
+			}
+		}
+
+		if _, exists := unique[blockRequest.Hash]; exists {
+			continue
+		}
+		if _, exists := h.recentBlockReqCache.Get(blockRequest.Hash); exists {
+			continue
+		}
+		h.recentBlockReqCache.Add(blockRequest.Hash, true)
+		unique[blockRequest.Hash] = blockRequest
+		hashes = append(hashes, blockRequest.Hash)
+	}
+	if len(hashes) == 0 {
+		return
+	}
+
+	batch := &types.BlockBatchRequest{Hashes: hashes, MaxBlocks: uint32(len(hashes)), MaxBytes: c_syncBatchBytes}
+	historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/requests").Inc()
+	result := <-h.p2pBackend.Request(h.nodeLocation, batch, []*types.WorkObjectBlockView{})
+	received := make(map[common.Hash]struct{}, len(hashes))
+	if result != nil {
+		views := result.([]*types.WorkObjectBlockView)
+		blocks := make([]*types.WorkObject, 0, len(views))
+		for _, view := range views {
+			if view != nil && view.WorkObject != nil {
+				blocks = append(blocks, view.WorkObject)
+				received[view.Hash()] = struct{}{}
+			}
+		}
+		if err := h.core.StageDownloadedBlocks(blocks); err != nil {
+			h.logger.WithField("err", err).Warn("Rejected downloaded block batch")
+			historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/failures").Inc()
+		} else {
+			h.recordDownloaded(blocks)
+		}
+	}
+	for _, hash := range hashes {
+		if _, ok := received[hash]; ok {
+			h.recentBlockReqCache.Remove(hash)
+		} else {
+			// This is also the rolling-deployment fallback for peers that only
+			// understand the legacy single-hash request.
+			h.wg.Add(1)
+			go func(request types.BlockRequest) {
+				defer h.wg.Done()
+				h.fetchMissingBlock(request)
+			}(unique[hash])
+		}
+	}
+}
+
+func (h *handler) fetchMissingBlock(request types.BlockRequest) {
+	defer h.recentBlockReqCache.Remove(request.Hash)
+	if h.ctx.Err() != nil {
+		return
+	}
+	if !h.core.ProcessingState() && h.nodeLocation.Context() == common.ZONE_CTX {
+		result := <-h.p2pBackend.Request(h.nodeLocation, request.Hash, &types.WorkObjectHeaderView{})
+		if result != nil {
+			h.core.WriteBlock(result.(*types.WorkObjectHeaderView).WorkObject)
+		}
+		return
+	}
+	result := <-h.p2pBackend.Request(h.nodeLocation, request.Hash, &types.WorkObjectBlockView{})
+	if result != nil {
+		blocks := []*types.WorkObject{result.(*types.WorkObjectBlockView).WorkObject}
+		if err := h.core.StageDownloadedBlocks(blocks); err != nil {
+			h.logger.WithField("err", err).Warn("Rejected downloaded block")
+			historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/failures").Inc()
+		} else {
+			h.recordDownloaded(blocks)
+		}
+	}
+}
+
+func (h *handler) recordDownloaded(blocks []*types.WorkObject) {
+	var bytes float64
+	for _, block := range blocks {
+		bytes += float64(block.Size())
+	}
+	historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/blocks").Add(float64(len(blocks)))
+	historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/bytes").Add(bytes)
+	downloaded, _ := h.core.DownloadedHead()
+	historicalSyncGauges.WithLabelValues(h.nodeLocation.Name() + "/downloaded").Set(float64(downloaded))
+	if head := h.core.CurrentHeader(); head != nil {
+		historicalSyncGauges.WithLabelValues(h.nodeLocation.Name() + "/processed").Set(float64(head.NumberU64(h.core.NodeCtx())))
+	}
+}
+
+// checkNextPrimeBlock continuously downloads byte-bounded prime ranges from the
+// durable downloaded head. Import/state processing advances independently.
 func (h *handler) checkNextPrimeBlock() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -185,105 +258,45 @@ func (h *handler) checkNextPrimeBlock() {
 	}()
 	defer h.wg.Done()
 
-	checkNextPrimeBlockTimer := time.NewTicker(c_checkNextPrimeBlockInterval)
-	defer checkNextPrimeBlockTimer.Stop()
 	for {
-		select {
-		case <-checkNextPrimeBlockTimer.C:
-
-			h.wg.Add(1)
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						h.logger.WithFields(log.Fields{
-							"error":      r,
-							"stacktrace": string(debug.Stack()),
-						}).Error("Go-Quai Panicked")
-					}
-				}()
-				defer h.wg.Done()
-
-				if h.ctx.Err() != nil {
-					return
-				}
-
-				// Start of the downloading process happens from the tip of the
-				// prime chain, Going back 10 blocks at a time and checking
-				// until we reach a point where we already have appended the
-				// block, then ask the next 20 prime blocks
-				currentHeight := h.core.CurrentHeader().Number(h.nodeLocation.Context())
-				syncHeight := new(big.Int).Set(currentHeight)
-				for i := 0; i < c_primeBlockSyncDepth; i += protocol.C_NumPrimeBlocksToDownload {
-					h.logger.Info("Downloading prime blocks from syncHeight ", syncHeight)
-
-					if h.ctx.Err() != nil {
-						return
-					}
-					// the prime block on this try already existed in the database
-					if err := h.GetNextPrimeBlock(syncHeight); err != nil {
-						// If i > 2 * protocol.C_NumPrimeBlocksToDownload that
-						// means the blocks that the node wanted has alreay been
-						// downloaded otherwise, download next 2 *
-						// protocol.C_NumPrimeBlocksToDownload
-						if i < 2*protocol.C_NumPrimeBlocksToDownload {
-							h.GetNextPrimeBlock(syncHeight.Add(syncHeight, big.NewInt(protocol.C_NumPrimeBlocksToDownload)))
-							h.GetNextPrimeBlock(syncHeight.Add(new(big.Int).Add(syncHeight, big.NewInt(protocol.C_NumPrimeBlocksToDownload)), big.NewInt(protocol.C_NumPrimeBlocksToDownload)))
-						}
-						break
-					}
-					syncHeight.Sub(syncHeight, big.NewInt(protocol.C_NumPrimeBlocksToDownload))
-					if syncHeight.Sign() == -1 {
-						break
-					}
-				}
-
-			}()
-		case <-h.quitCh:
+		if h.ctx.Err() != nil {
 			return
 		}
-	}
-}
-
-func (h *handler) GetNextPrimeBlock(number *big.Int) error {
-	// If the blockHash for the asked number is not present in the
-	// appended database we ask the peer for the block with this hash
-	resultCh := h.p2pBackend.Request(h.nodeLocation, new(big.Int).Add(number, big.NewInt(1)), []*types.WorkObjectBlockView{})
-	blocks := <-resultCh
-	if blocks != nil {
-		// peer returns a slice of blocks from the requested number
-		workObjects := blocks.([]*types.WorkObjectBlockView)
-		if len(workObjects) != protocol.C_NumPrimeBlocksToDownload {
-			h.logger.Error("did not get expected number of workobjects in prime")
-			return nil
+		number, hash := h.core.DownloadedHead()
+		request := &types.BlockBatchRequest{
+			Origin:    new(big.Int).SetUint64(number + 1),
+			MaxBlocks: c_syncBatchBlocks,
+			MaxBytes:  c_syncBatchBytes,
 		}
-		var parent *types.WorkObject
-		for i, wo := range workObjects {
-			if wo == nil {
-				h.logger.Error("one of the work objects is nil")
-				return nil
+		historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/requests").Inc()
+		result := <-h.p2pBackend.Request(h.nodeLocation, request, []*types.WorkObjectBlockView{})
+		if result == nil {
+			select {
+			case <-time.After(c_syncIdlePeriod):
+				continue
+			case <-h.quitCh:
+				return
 			}
-			workObject := wo.WorkObject
-			// Check that all the prime blocks form a continous chain of blocks
-			if i != 0 {
-				if workObject.ParentHash(common.PRIME_CTX) != parent.Hash() {
-					h.logger.Error("downloaded non continous chain of prime blocks")
-					return nil
-				}
-			}
-			parent = workObject
 		}
-
-		// Write all the blocks are the sanity check into the database and
-		// add it to the append queue
-		for _, wo := range workObjects {
-			// If the work object is already on chain, return a error back and start the sync from that point
-			block := h.core.GetBlockByHash(wo.WorkObjectHeader().Hash())
-			if block != nil {
-				return ErrBlockAlreadyAppended
-			} else {
-				h.core.WriteBlock(wo.WorkObject)
+		views := result.([]*types.WorkObjectBlockView)
+		blocks := make([]*types.WorkObject, 0, len(views))
+		for _, view := range views {
+			if view != nil && view.WorkObject != nil {
+				blocks = append(blocks, view.WorkObject)
 			}
+		}
+		if len(blocks) == 0 || blocks[0].ParentHash(common.PRIME_CTX) != hash {
+			h.logger.Warn("Peer returned prime range not anchored to downloaded head")
+			h.core.RewindDownloadedHead()
+			time.Sleep(c_syncIdlePeriod)
+			continue
+		}
+		if err := h.core.StageDownloadedBlocks(blocks); err != nil {
+			h.logger.WithField("err", err).Warn("Rejected downloaded prime range")
+			historicalSyncCounters.WithLabelValues(h.nodeLocation.Name() + "/failures").Inc()
+			time.Sleep(c_syncIdlePeriod)
+		} else {
+			h.recordDownloaded(blocks)
 		}
 	}
-	return nil
 }

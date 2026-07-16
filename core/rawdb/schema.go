@@ -124,6 +124,11 @@ var (
 	lockupDeltasPrefix           = []byte("ld")  // lockupDeltasPrefix + hash -> []types.LockupDelta
 )
 
+var (
+	downloadQueuePrefix = []byte("dq")                  // downloadQueuePrefix + number + hash -> staged, not imported
+	downloadHeadKey     = []byte("LastDownloadedBlock") // highest contiguous staged block
+)
+
 const (
 	// freezerHashTable indicates the name of the freezer canonical hash table.
 	freezerHashTable = "hashes"

@@ -18,6 +18,7 @@ type QuaiP2PNode interface {
 	// Returns nil if the block is not found.
 	GetWorkObject(hash common.Hash, location common.Location) *types.WorkObject
 	GetWorkObjectsFrom(hash common.Hash, location common.Location, count int) []*types.WorkObjectBlockView
+	GetWorkObjectBatch(request *types.BlockBatchRequest, location common.Location) []*types.WorkObjectBlockView
 	GetHeight(location common.Location) uint64
 	GetBlockHashByNumber(number *big.Int, location common.Location) *common.Hash
 	GetRequestManager() requestManager.RequestManager

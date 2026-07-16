@@ -29,6 +29,12 @@ message QuaiRequestMessage {
         common.ProtoHash block_hash = 8;
         block.ProtoAuxTemplate aux_template = 9;
     }
+    // Optional bulk-sync controls. These fields deliberately live outside the
+    // oneofs so older peers decode this as the legacy work_object_blocks
+    // request and safely ignore the additional limits.
+    uint32 max_blocks = 10;
+    uint64 max_bytes = 11;
+    repeated common.ProtoHash hashes = 12;
 }
 
 // QuaiResponseMessage is the main 'envelope' for QuaiProtocol response messages

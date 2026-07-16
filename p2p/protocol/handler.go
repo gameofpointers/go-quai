@@ -61,18 +61,14 @@ func ProcRequestRate(peerId peer.ID, inbound bool) error {
 	if tracker, exists := (*rateTrackers)[peerId]; exists {
 		t_now := time.Now()
 		dt_ms := t_now.UnixMilli() - tracker.last.UnixMilli()
-		avg_period := ((100-rateFilterAlphaPct)*tracker.avg_period + (rateFilterAlphaPct*dt_ms)/100)
+		avg_period := ((100-rateFilterAlphaPct)*tracker.avg_period + rateFilterAlphaPct*dt_ms) / 100
 		if inbound {
 			// inbound rate always updates, because request has already arrived
 			tracker.avg_period = avg_period
 			tracker.last = t_now
 		}
 		minPeriod := requestRateLimitPeriod_ms
-		if !inbound {
-			// Conservatively rate limit ourselves, to avoid tripping our peers rate limit
-			minPeriod /= 2
-		}
-		if avg_period < requestRateLimitPeriod_ms {
+		if avg_period < int64(minPeriod) {
 			return errors.New("peer exceeded request rate limit")
 		} else {
 			// since outbound requests wont be sent if the limit is exceeded, only update the outbound rate if there is no error
@@ -272,12 +268,29 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 			"number":      query,
 			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by number to handle")
+	case *types.BlockBatchRequest:
+		log.Global.WithFields(log.Fields{
+			"requestID": id,
+			"location":  loc,
+			"maxBlocks": query.(*types.BlockBatchRequest).MaxBlocks,
+			"maxBytes":  query.(*types.BlockBatchRequest).MaxBytes,
+		}).Debug("Received bulk block request")
 	default:
 		log.Global.Errorf("unsupported request input data field type: %T", query)
 	}
 
 	switch decodedType.(type) {
 	case *types.WorkObjectHeaderView, *types.WorkObjectBlockView, []*types.WorkObjectBlockView:
+		if batch, ok := query.(*types.BlockBatchRequest); ok {
+			if _, bulk := decodedType.([]*types.WorkObjectBlockView); !bulk {
+				log.Global.Error("bulk query used with non-bulk response type")
+				return
+			}
+			if err = handleBlockBatchRequest(id, loc, batch, stream, node); err != nil {
+				log.Global.WithField("err", err).Error("error handling bulk block request")
+			}
+			return
+		}
 		var requestedView types.WorkObjectView
 		switch decodedType.(type) {
 		case *types.WorkObjectHeaderView:
@@ -341,6 +354,15 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 		return
 
 	}
+}
+
+func handleBlockBatchRequest(id uint32, loc common.Location, request *types.BlockBatchRequest, stream network.Stream, node QuaiP2PNode) error {
+	blocks := node.GetWorkObjectBatch(request, loc)
+	data, err := pb.EncodeQuaiResponse(id, loc, []*types.WorkObjectBlockView{}, blocks)
+	if err != nil {
+		return err
+	}
+	return common.WriteMessageToStream(stream, data, ProtocolVersion, node.GetBandwidthCounter())
 }
 
 func handleResponse(quaiResp *pb.QuaiResponseMessage, node QuaiP2PNode) {

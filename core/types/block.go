@@ -1367,4 +1367,18 @@ type HashAndLocation struct {
 type BlockRequest struct {
 	Hash    common.Hash
 	Entropy *big.Int
+	// Historical bypasses the live-chain entropy distance filter. The hash is
+	// anchored by a validated dominant manifest instead.
+	Historical bool
+}
+
+// BlockBatchRequest describes a byte-bounded historical block request. Origin
+// is used for a contiguous canonical range; Hashes is used for manifest-driven
+// region and zone downloads. Exactly one of Origin or Hashes should be set.
+// MaxBlocks and MaxBytes are hard response limits enforced by the serving peer.
+type BlockBatchRequest struct {
+	Origin    *big.Int
+	Hashes    []common.Hash
+	MaxBlocks uint32
+	MaxBytes  uint64
 }

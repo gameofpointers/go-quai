@@ -15,7 +15,6 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p"
 	"github.com/dominant-strategies/go-quai/p2p/node/pubsubManager"
 	"github.com/dominant-strategies/go-quai/p2p/node/streamManager"
-	"github.com/dominant-strategies/go-quai/p2p/protocol"
 	quaiprotocol "github.com/dominant-strategies/go-quai/p2p/protocol"
 	"github.com/dominant-strategies/go-quai/quai"
 
@@ -166,18 +165,22 @@ func (p *P2PNode) requestFromPeers(topic *pubsubManager.Topic, requestData inter
 		case <-p.ctx.Done():
 			return
 		default:
-			// Use stream peers if the node has accumulated
-			// c_streamPeerThreshold number of streams otherwise look up peers
-			// from the database and create streams with them
-			peers := p.peerManager.GetStreamPeers()
-			if len(peers) < c_streamPeerThreshold {
-				peersMap := p.peerManager.GetPeers(topic)
-				peers = make([]peer.ID, 0)
-				for peer := range peersMap {
-					peers = append(peers, peer)
+			// Only use peers advertising this location and data type. A global
+			// stream peer may not serve the requested slice.
+			degree := pubsubManager.C_defaultRequestDegree
+			if _, bulk := requestData.(*types.BlockBatchRequest); bulk {
+				// Range ownership is assigned to one peer at a time. Retrying a
+				// failed range selects another peer without downloading every byte
+				// redundantly from the full request degree.
+				degree = 1
+			}
+			peersMap := p.peerManager.GetPeers(topic)
+			peers := make([]peer.ID, 0, degree)
+			for peerID := range peersMap {
+				peers = append(peers, peerID)
+				if len(peers) == degree {
+					break
 				}
-			} else {
-				peers = peers[:pubsubManager.C_defaultRequestDegree]
 			}
 			log.Global.WithFields(log.Fields{
 				"peers": peers,
@@ -186,11 +189,6 @@ func (p *P2PNode) requestFromPeers(topic *pubsubManager.Topic, requestData inter
 
 			var requestWg sync.WaitGroup
 			for _, peerID := range peers {
-				// if we have exceeded the outbound rate limit for this peer, skip them for now
-				if err := protocol.ProcRequestRate(peerID, false); err != nil {
-					log.Global.Warnf("Exceeded request rate to peer %s", peerID)
-					continue
-				}
 				requestWg.Add(1)
 				go func(peerID peer.ID) {
 					defer func() {
@@ -223,7 +221,7 @@ func (p *P2PNode) requestAndWait(peerID peer.ID, topic *pubsubManager.Topic, req
 	var err error
 	requestTimer := time.NewTimer(requestTimeout)
 	defer requestTimer.Stop()
-	if recvd, err = p.requestFromPeer(peerID, topic, reqData, respDataType); err == nil {
+	if recvd, err = p.requestFromPeer(peerID, topic, reqData, respDataType); err == nil && recvd != nil {
 		log.Global.WithFields(log.Fields{
 			"peerId": peerID,
 			"topic":  topic.String(),
@@ -362,6 +360,67 @@ func (p *P2PNode) GetWorkObjectsFrom(hash common.Hash, location common.Location,
 		response = append(response, next.ConvertToBlockView())
 	}
 	return response
+}
+
+// GetWorkObjectBatch returns a canonical range or an explicit set of blocks,
+// bounded by both block count and encoded bytes. The response is intentionally
+// capped below common.MaxStreamMessageSize to leave room for protobuf envelope
+// overhead.
+func (p *P2PNode) GetWorkObjectBatch(request *types.BlockBatchRequest, location common.Location) []*types.WorkObjectBlockView {
+	if request == nil {
+		return nil
+	}
+	maxBlocks := int(request.MaxBlocks)
+	if maxBlocks <= 0 || maxBlocks > 1024 {
+		maxBlocks = 128
+	}
+	maxBytes := request.MaxBytes
+	if maxBytes == 0 || maxBytes > uint64(common.MaxStreamMessageSize-64*1024) {
+		maxBytes = uint64(common.MaxStreamMessageSize - 64*1024)
+	}
+
+	blocks := make([]*types.WorkObjectBlockView, 0, maxBlocks)
+	var totalBytes uint64
+	appendBlock := func(block *types.WorkObject) bool {
+		if block == nil {
+			return false
+		}
+		size := uint64(block.Size())
+		if len(blocks) != 0 && totalBytes+size > maxBytes {
+			return false
+		}
+		// Always permit one block so a large but valid block does not create
+		// an unserviceable range. The stream-level hard limit remains active.
+		blocks = append(blocks, block.ConvertToBlockView())
+		totalBytes += size
+		return len(blocks) < maxBlocks && totalBytes < maxBytes
+	}
+
+	if len(request.Hashes) != 0 {
+		for _, hash := range request.Hashes {
+			if !appendBlock(p.consensus.LookupBlock(hash, location)) {
+				break
+			}
+		}
+		return blocks
+	}
+	if request.Origin == nil {
+		return nil
+	}
+	for i := 0; i < maxBlocks; i++ {
+		number := new(big.Int).Add(request.Origin, new(big.Int).SetUint64(uint64(i)))
+		block := p.consensus.LookupBlockByNumber(number, location)
+		if block == nil {
+			break
+		}
+		if len(blocks) != 0 && block.ParentHash(location.Context()) != blocks[len(blocks)-1].Hash() {
+			break
+		}
+		if !appendBlock(block) {
+			break
+		}
+	}
+	return blocks
 }
 
 func (p *P2PNode) GetHeight(location common.Location) uint64 {

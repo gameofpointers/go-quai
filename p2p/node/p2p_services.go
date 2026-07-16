@@ -130,6 +130,47 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, topic *pubsubManager.Topic, re
 				return nil, errors.New("invalid response")
 			}
 			return nil, errors.Errorf("invalid response: got block with different number")
+		case *types.BlockBatchRequest:
+			blocks, ok := recvdType.([]*types.WorkObjectBlockView)
+			if !ok || len(blocks) == 0 {
+				return nil, errors.New("invalid empty bulk block response")
+			}
+			if reqData.MaxBlocks != 0 && len(blocks) > int(reqData.MaxBlocks) {
+				return nil, errors.New("bulk block response exceeds requested count")
+			}
+			if reqData.MaxBytes != 0 && len(blocks) > 1 {
+				var responseBytes uint64
+				for _, block := range blocks {
+					if block != nil && block.WorkObject != nil {
+						responseBytes += uint64(block.Size())
+					}
+				}
+				if responseBytes > reqData.MaxBytes {
+					return nil, errors.New("bulk block response exceeds requested bytes")
+				}
+			}
+			if len(reqData.Hashes) != 0 {
+				if len(blocks) > len(reqData.Hashes) {
+					return nil, errors.New("bulk block response exceeds requested hashes")
+				}
+				for i, block := range blocks {
+					if block == nil || block.Hash() != reqData.Hashes[i] {
+						return nil, errors.New("bulk block response hash mismatch")
+					}
+				}
+			} else if reqData.Origin != nil {
+				nodeCtx := topic.GetLocation().Context()
+				for i, block := range blocks {
+					expected := new(big.Int).Add(reqData.Origin, new(big.Int).SetUint64(uint64(i)))
+					if block == nil || block.Number(nodeCtx).Cmp(expected) != 0 {
+						return nil, errors.New("bulk block response number mismatch")
+					}
+					if i != 0 && block.ParentHash(nodeCtx) != blocks[i-1].Hash() {
+						return nil, errors.New("bulk block response is not continuous")
+					}
+				}
+			}
+			return blocks, nil
 		}
 		return nil, errors.New("block request invalid response")
 	case common.Hash:
