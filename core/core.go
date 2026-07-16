@@ -17,7 +17,6 @@ import (
 
 	"github.com/btcsuite/btcd/wire"
 	ltcdwire "github.com/dominant-strategies/ltcd/wire"
-	bchdwire "github.com/gcash/bchd/wire"
 	lru "github.com/hashicorp/golang-lru/v2"
 	expireLru "github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -579,7 +578,6 @@ func (c *Core) ReceiveMinedHeader(workObject *types.WorkObject) (*types.WorkObje
 
 func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObject, error) {
 	const (
-		bitcoinHeaderSize   = 80
 		ravencoinHeaderSize = 120
 		minPayloadSize      = bitcoinHeaderSize
 	)
@@ -662,75 +660,21 @@ func (c *Core) SubmitBlock(raw hexutil.Bytes, powId types.PowID) (*types.WorkObj
 			auxHeader = types.NewAuxPowHeader(litecoinHeaderWrapper)
 			powType = types.Scrypt
 		}
-	case types.SHA_BCH:
-		shaHeaderBytes := data[:bitcoinHeaderSize]
-		// Decode using btcd wire protocol
-		shaHeader := &bchdwire.BlockHeader{}
-		shaErr := shaHeader.Deserialize(bytes.NewReader(shaHeaderBytes))
-		if shaErr == nil {
-			// Successfully decoded as Bitcoin - parse coinbase to extract seal hash
-			extra := data[bitcoinHeaderSize:]
-
-			if len(extra) == 0 {
-				c.logger.Error("No transaction data after SHA256d header - must include coinbase transaction")
-				return nil, errors.New("SHA256d block submission must include coinbase transaction after 80-byte header")
-			}
-
-			// Parse the var_int transaction count (Bitcoin block format)
-			reader := bytes.NewReader(extra)
-			txCount, err := wire.ReadVarInt(reader, 0)
-			if err != nil {
-				c.logger.WithField("error", err.Error()).Error("Failed to read SHA256d transaction count")
-				return nil, errors.New("failed to read SHA256d transaction count: " + err.Error())
-			}
-			if txCount == 0 {
-				c.logger.Error("SHA256d block has zero transactions")
-				return nil, errors.New("SHA256d block must have at least one transaction (coinbase)")
-			}
-
-			// Now deserialize the first transaction (coinbase)
-			// Create an AuxPowTx with correct type (Bitcoin) for deserialization
-			coinbaseTx = extra[1:] // Skip var_int byte(s)
-			scriptSig := types.ExtractScriptSigFromCoinbaseTx(coinbaseTx)
-			if len(scriptSig) == 0 {
-				c.logger.Error("Failed to extract scriptSig from SHA256d coinbase transaction, will try KAWPOW")
-				coinbaseTx = nil
-			} else {
-				// Extract seal hash from the parsed transaction
-				sealHash, err = types.ExtractSealHashFromCoinbase(scriptSig)
-				if err != nil {
-					c.logger.WithFields(log.Fields{
-						"type":  "SHA256d",
-						"error": err.Error(),
-					}).Error("Failed to extract seal hash from SHA256d block, will try KAWPOW")
-					coinbaseTx = nil
-				} else {
-					// Successfully parsed as SHA256d
-					// Create wrapped Bitcoin header
-					btcHeaderWrapper := &types.BitcoinCashHeaderWrapper{BlockHeader: shaHeader}
-					auxHeader = types.NewAuxPowHeader(btcHeaderWrapper)
-					powType = types.SHA_BCH
-
-					heightFromCoinbase, err = types.ExtractHeightFromCoinbase(scriptSig)
-					if err != nil {
-						c.logger.WithFields(log.Fields{
-							"type":  "SHA256d",
-							"error": err.Error(),
-						}).Error("Failed to extract height from SHA256d block")
-					}
-
-					c.logger.WithFields(log.Fields{
-						"type":       "SHA256d",
-						"version":    shaHeader.Version,
-						"nonce":      shaHeader.Nonce,
-						"bits":       shaHeader.Bits,
-						"headerHash": shaHeader.BlockHash().String(),
-						"height":     heightFromCoinbase,
-						"seal":       sealHash.Hex(),
-					}).Info("Received mined SHA256d block")
-				}
-			}
+	case types.SHA_BTC, types.SHA_BCH:
+		auxHeader, coinbaseTx, sealHash, heightFromCoinbase, err = decodeSHA256dSubmission(data, powId)
+		if err != nil {
+			return nil, err
 		}
+		powType = powId
+		c.logger.WithFields(log.Fields{
+			"type":       powType.String(),
+			"version":    auxHeader.Version(),
+			"nonce":      auxHeader.Nonce(),
+			"bits":       auxHeader.Bits(),
+			"headerHash": auxHeader.BlockHash().Hex(),
+			"height":     heightFromCoinbase,
+			"seal":       sealHash.Hex(),
+		}).Info("Received mined SHA256d block")
 	case types.Kawpow:
 		rvnHeaderBytes := data[:ravencoinHeaderSize]
 		ravencoinHeader, rvnErr := types.DecodeRavencoinHeader(rvnHeaderBytes)
