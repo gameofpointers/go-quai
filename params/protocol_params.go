@@ -268,7 +268,7 @@ var (
 )
 
 var (
-	KawPowForkBlock            uint64 = 1171500            // Block at which KawPow activates
+	KawPowForkBlock            uint64 = 5                  // Block at which KawPow activates
 	KawPowTransitionPeriod     uint64 = BlocksPerMonth / 4 // Progpow grace period after kawpow upgrade, 4 weeks
 	TotalPowEngines            uint64 = 2                  // Total number of PoW engines supported (Progpow, Kawpow)
 	AuxTemplateLivenessTime    uint64 = 15
@@ -281,9 +281,9 @@ var (
 	ScryptBlockTime = big.NewInt(60)  // Doge block time 1 min in secs
 
 	// PoW share difficulty parameters
-	InitialShaDiffMultiple    = big.NewInt(167000)
+	InitialShaDiffMultiple    = big.NewInt(100)
 	InitialScryptDiffMultiple = big.NewInt(12)
-	ShaDiffLowerBound         = big.NewInt(7e15)
+	ShaDiffLowerBound         = big.NewInt(100)
 	ScryptDiffLowerBound      = big.NewInt(7e11)
 
 	PowDiffAdjustmentFactor    = big.NewInt(300000)
@@ -322,9 +322,9 @@ var (
 	// MuSig2 2-of-3 public keys for AuxTemplate signing
 	// Add this to go-quai/params/protocol_params.go
 	MuSig2PublicKeys = []string{
-		"02cae78e4905da54dc93d6009119d56a2ef91b11e129c8fa41342310ec3a9b499c",
-		"03374cbfcea6cb8172b2fdc09e9f7ec0cc2ff10aaa2192fb19fa04d9391b0a75c2",
-		"03abfe95f7d487a44cac59c9d62fe63e9e01dc3e06dc9fe96b7038d73d99a62fa6",
+		"03c12f57c98b98e8c1f49f09806bfa7588d5387877940d5bd6799d20d742eb0fc7", // Key 1
+		"02a5c13c5a9f43045f310977db3bd563fd6a7416723cbfca49f6a997b2336f8406", // Key 2
+		"0351b58593293ab0ad1a53b2959caeaeb8a9df297ec0224162dee23e0231a87ee9", // Key 3
 	}
 
 	// MerkleNonce, MerkleSize is used for the auxpow2
@@ -338,7 +338,7 @@ var (
 	KQuaiResetAfterKawPowForkBlock        uint64 = KawPowForkBlock
 	ExchangeRateResetValueAfterKawpowFork        = new(big.Int).Mul(big.NewInt(30), ExchangeRate)
 	ExchangeRateHoldInterval              uint64 = 5 * BlocksPerMonth / 4 // 5 months in prime block terms
-	KQuaiDifficultyDivisor                uint64 = 300000000000           // Minimum difficulty after kawpow fork for the reward calculation
+	KQuaiDifficultyDivisor                uint64 = 1000                   // Minimum difficulty after kawpow fork for the reward calculation
 
 	ShaEquivalentDifficultyForkBlock                     uint64 = 1755000
 	MinDifficultyForShaEquivalentDifficulty                     = big.NewInt(750000000000)
