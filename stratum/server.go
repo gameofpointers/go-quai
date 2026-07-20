@@ -2750,7 +2750,7 @@ func fullReverse(b []byte) []byte {
 func powIDFromChain(chain string) types.PowID {
 	switch strings.ToLower(chain) {
 	case "sha256":
-		return types.SHA_BCH
+		return types.SHA_BTC
 	case "scrypt":
 		return types.Scrypt
 	case "kawpow":
