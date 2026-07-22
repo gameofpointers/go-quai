@@ -2156,6 +2156,9 @@ func (s *Server) submitAsWorkShare(sess *session, curJob *job, ex2hex, ntimeHex,
 	if pending == nil || pending.WorkObjectHeader() == nil || pending.WorkObjectHeader().AuxPow() == nil {
 		return false, fmt.Errorf("no pending header for job")
 	}
+	// A generic SHA session may receive either a BTC or BCH template. Rebuild
+	// the submitted share using the donor-chain PowID stored with that job.
+	powID = pending.AuxPow().PowID()
 
 	// Rebuild donor header for SHA chains with updated merkle root and nTime
 	templateHeader := pending.AuxPow().Header()

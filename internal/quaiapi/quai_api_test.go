@@ -1,13 +1,70 @@
 package quaiapi
 
 import (
+	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/core/types"
 )
+
+func TestSubmitShaWithPowID(t *testing.T) {
+	t.Run("BCH success does not try BTC", func(t *testing.T) {
+		wantHash := common.HexToHash("0x01")
+		var calls []types.PowID
+		hash, number, validity, err := submitShaWithPowID(func(powID types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
+			calls = append(calls, powID)
+			return wantHash, 11, types.Block, nil
+		})
+		if err != nil {
+			t.Fatalf("submitShaWithPowID returned error: %v", err)
+		}
+		if len(calls) != 1 || calls[0] != types.SHA_BCH {
+			t.Fatalf("expected only SHA_BCH, got %v", calls)
+		}
+		if hash != wantHash || number != 11 || validity != types.Block {
+			t.Fatalf("unexpected result: hash=%s number=%d validity=%v", hash, number, validity)
+		}
+	})
+
+	t.Run("BTC is tried after BCH failure", func(t *testing.T) {
+		wantHash := common.HexToHash("0x02")
+		var calls []types.PowID
+		hash, number, validity, err := submitShaWithPowID(func(powID types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
+			calls = append(calls, powID)
+			if powID == types.SHA_BCH {
+				return common.Hash{}, 0, types.Invalid, errors.New("not a BCH template")
+			}
+			return wantHash, 12, types.Valid, nil
+		})
+		if err != nil {
+			t.Fatalf("submitShaWithPowID returned error: %v", err)
+		}
+		if len(calls) != 2 || calls[0] != types.SHA_BCH || calls[1] != types.SHA_BTC {
+			t.Fatalf("expected SHA_BCH then SHA_BTC, got %v", calls)
+		}
+		if hash != wantHash || number != 12 || validity != types.Valid {
+			t.Fatalf("unexpected result: hash=%s number=%d validity=%v", hash, number, validity)
+		}
+	})
+
+	t.Run("both failures are returned", func(t *testing.T) {
+		var calls []types.PowID
+		_, _, _, err := submitShaWithPowID(func(powID types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
+			calls = append(calls, powID)
+			return common.Hash{}, 0, types.Invalid, errors.New(powID.String() + " rejected")
+		})
+		if len(calls) != 2 || calls[0] != types.SHA_BCH || calls[1] != types.SHA_BTC {
+			t.Fatalf("expected SHA_BCH then SHA_BTC, got %v", calls)
+		}
+		if err == nil || !strings.Contains(err.Error(), "BCH") || !strings.Contains(err.Error(), "BTC") {
+			t.Fatalf("expected both failures in error, got %v", err)
+		}
+	})
+}
 
 func TestBlockTemplatePowID(t *testing.T) {
 	tests := []struct {

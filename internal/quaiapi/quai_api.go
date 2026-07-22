@@ -1427,21 +1427,13 @@ func (s *PublicBlockChainQuaiAPI) SubmitKawpowBlock(ctx context.Context, raw hex
 }
 
 func (s *PublicBlockChainQuaiAPI) SubmitShaBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
-	return s.submitShaBlock(raw, types.SHA_BCH)
+	return s.submitShaBlock(raw)
 }
 
-// SubmitShaBchBlock is the explicit BCH alias for the legacy SubmitShaBlock endpoint.
-func (s *PublicBlockChainQuaiAPI) SubmitShaBchBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
-	return s.submitShaBlock(raw, types.SHA_BCH)
-}
-
-// SubmitShaBtcBlock submits SHA256d work built from a SHA_BTC template.
-func (s *PublicBlockChainQuaiAPI) SubmitShaBtcBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
-	return s.submitShaBlock(raw, types.SHA_BTC)
-}
-
-func (s *PublicBlockChainQuaiAPI) submitShaBlock(raw hexutil.Bytes, powID types.PowID) (map[string]interface{}, error) {
-	hash, number, validity, err := s.b.SubmitBlock(raw, powID)
+func (s *PublicBlockChainQuaiAPI) submitShaBlock(raw hexutil.Bytes) (map[string]interface{}, error) {
+	hash, number, validity, err := submitShaWithPowID(func(powID types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
+		return s.b.SubmitBlock(raw, powID)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1458,6 +1450,25 @@ func (s *PublicBlockChainQuaiAPI) submitShaBlock(raw hexutil.Bytes, powID types.
 		fields["status"] = hexutil.Uint64(2)
 	}
 	return fields, nil
+}
+
+type shaSubmitFn func(types.PowID) (common.Hash, uint64, types.WorkShareValidity, error)
+
+// submitShaWithPowID keeps the pool-facing RPC chain-agnostic. A signed SHA
+// template can validate for only its committed PowID, so try the legacy BCH
+// interpretation first and retry as BTC only when BCH validation fails.
+func submitShaWithPowID(submit shaSubmitFn) (common.Hash, uint64, types.WorkShareValidity, error) {
+	hash, number, validity, bchErr := submit(types.SHA_BCH)
+	if bchErr == nil {
+		return hash, number, validity, nil
+	}
+
+	hash, number, validity, btcErr := submit(types.SHA_BTC)
+	if btcErr == nil {
+		return hash, number, validity, nil
+	}
+
+	return common.Hash{}, 0, types.Invalid, fmt.Errorf("SHA submission failed as BCH (%v) and BTC (%v)", bchErr, btcErr)
 }
 
 // ReceiveMinedHeader will run checks on the block and add to canonical chain if valid.
