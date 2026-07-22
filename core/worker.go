@@ -453,18 +453,32 @@ func (w *worker) close() {
 func (w *worker) GetBestAuxTemplate(powID types.PowID) *types.AuxTemplate {
 	w.auxpowMu.RLock()
 	defer w.auxpowMu.RUnlock()
+	if powID == types.SHA_BCH || powID == types.SHA_BTC {
+		bchTemplate, bchExists := w.auxpowCache[types.SHA_BCH]
+		btcTemplate, btcExists := w.auxpowCache[types.SHA_BTC]
+		// A SHA request can be served by either donor chain.
+		if !bchExists && btcExists {
+			return btcTemplate
+		}
+		if !btcExists && bchExists {
+			return bchTemplate
+		}
+		if bchExists && btcExists {
+			if bchTemplate.SignatureTime() > btcTemplate.SignatureTime() {
+				return bchTemplate
+			} else {
+				return btcTemplate
+			}
+		}
+	}
 	if template, ok := w.auxpowCache[powID]; ok {
 		return template
 	}
 	switch powID {
 	case types.Kawpow:
 		return types.DefaultKawpowAuxTemplate()
-	case types.SHA_BCH:
+	case types.SHA_BCH, types.SHA_BTC:
 		return types.DefaultShaBchAuxTemplate()
-	case types.SHA_BTC:
-		// BTC has no embedded fallback because AuxTemplate signatures bind the
-		// donor-chain PowID. A signed SHA_BTC template must be received first.
-		return nil
 	case types.Scrypt:
 		return types.DefaultScryptAuxTemplate()
 	}
