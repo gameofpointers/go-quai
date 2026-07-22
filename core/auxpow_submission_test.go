@@ -49,3 +49,46 @@ func TestDecodeSHA256dSubmissionRejectsWrongPowID(t *testing.T) {
 	_, _, _, _, err := decodeSHA256dSubmission(make([]byte, bitcoinHeaderSize), types.Kawpow)
 	require.ErrorContains(t, err, "unsupported SHA256d pow id")
 }
+
+func TestDecodeSHA256dSubmissionRejectsMalformedPayloads(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+		errText string
+	}{
+		{
+			name:    "short header",
+			payload: make([]byte, bitcoinHeaderSize-1),
+			errText: "submission too short",
+		},
+		{
+			name:    "missing transaction count",
+			payload: make([]byte, bitcoinHeaderSize),
+			errText: "must include coinbase transaction",
+		},
+		{
+			name:    "zero transactions",
+			payload: append(make([]byte, bitcoinHeaderSize), 0),
+			errText: "must have at least one transaction",
+		},
+		{
+			name:    "truncated transaction count",
+			payload: append(make([]byte, bitcoinHeaderSize), 0xfd),
+			errText: "read SHA256d transaction count",
+		},
+		{
+			name:    "malformed coinbase",
+			payload: append(append(make([]byte, bitcoinHeaderSize), 1), 0),
+			errText: "failed to extract scriptSig",
+		},
+	}
+
+	for _, powID := range []types.PowID{types.SHA_BTC, types.SHA_BCH} {
+		for _, test := range tests {
+			t.Run(powID.String()+"/"+test.name, func(t *testing.T) {
+				_, _, _, _, err := decodeSHA256dSubmission(test.payload, powID)
+				require.ErrorContains(t, err, test.errText)
+			})
+		}
+	}
+}
