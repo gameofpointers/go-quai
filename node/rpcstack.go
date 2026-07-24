@@ -56,9 +56,10 @@ type rpcHandler struct {
 }
 
 type httpServer struct {
-	logger   *log.Logger
-	timeouts rpc.HTTPTimeouts
-	mux      http.ServeMux // registered handlers go here
+	logger      *log.Logger
+	timeouts    rpc.HTTPTimeouts
+	rateLimiter *rpc.RateLimiter
+	mux         http.ServeMux // registered handlers go here
 
 	mu       sync.Mutex
 	server   *http.Server
@@ -295,6 +296,7 @@ func (h *httpServer) enableHTTP(apis []rpc.API, config httpConfig) error {
 
 	// Create RPC server and handler.
 	srv := rpc.NewServer(h.logger)
+	srv.SetRateLimiter(h.rateLimiter)
 	if err := RegisterApis(apis, config.Modules, srv, false, h.logger); err != nil {
 		return err
 	}
@@ -327,6 +329,7 @@ func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error {
 
 	// Create RPC server and handler.
 	srv := rpc.NewServer(h.logger)
+	srv.SetRateLimiter(h.rateLimiter)
 	if err := RegisterApis(apis, config.Modules, srv, false, h.logger); err != nil {
 		return err
 	}

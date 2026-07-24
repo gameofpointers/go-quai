@@ -117,6 +117,14 @@ type Config struct {
 	// HTTPPathPrefix specifies a path prefix on which http-rpc is to be served.
 	HTTPPathPrefix string `toml:",omitempty"`
 
+	// RPCRateLimit is the per-client request rate shared by HTTP and WebSocket
+	// RPC. Zero disables rate limiting.
+	RPCRateLimit float64 `toml:",omitempty"`
+
+	// RPCRateLimitBurst is the maximum per-client burst. Zero defaults to one
+	// second of configured RPC traffic.
+	RPCRateLimitBurst int `toml:",omitempty"`
+
 	// WSHost is the host interface on which to start the websocket RPC server. If
 	// this field is empty, no websocket API endpoint will be started.
 	WSHost string

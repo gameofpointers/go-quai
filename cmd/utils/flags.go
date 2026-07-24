@@ -157,6 +157,8 @@ var RPCFlags = []Flag{
 	HTTPApiFlag,
 	HTTPPathPrefixFlag,
 	HTTPPortStartFlag,
+	RPCRateLimitFlag,
+	RPCRateLimitBurstFlag,
 	WSEnabledFlag,
 	WSListenAddrFlag,
 	WSMaxSubsFlag,
@@ -688,6 +690,18 @@ var (
 		Usage: "HTTP-RPC server listening port" + generateEnvDoc(c_RPCFlagPrefix+"http-port"),
 	}
 
+	RPCRateLimitFlag = Flag{
+		Name:  c_RPCFlagPrefix + "rate-limit",
+		Value: float64(0),
+		Usage: "Per-client HTTP and WS RPC requests per second (0 = disabled)" + generateEnvDoc(c_RPCFlagPrefix+"rate-limit"),
+	}
+
+	RPCRateLimitBurstFlag = Flag{
+		Name:  c_RPCFlagPrefix + "rate-limit-burst",
+		Value: 0,
+		Usage: "Maximum per-client RPC burst (0 = one second of configured traffic)" + generateEnvDoc(c_RPCFlagPrefix+"rate-limit-burst"),
+	}
+
 	WSEnabledFlag = Flag{
 		Name:  c_RPCFlagPrefix + "ws",
 		Value: true,
@@ -943,6 +957,8 @@ func setHTTP(cfg *node.Config, nodeLocation common.Location) {
 	}
 
 	cfg.HTTPPort = GetHttpPort(nodeLocation)
+	cfg.RPCRateLimit = viper.GetFloat64(RPCRateLimitFlag.Name)
+	cfg.RPCRateLimitBurst = viper.GetInt(RPCRateLimitBurstFlag.Name)
 
 	if viper.IsSet(HTTPCORSDomainFlag.Name) {
 		cfg.HTTPCors = SplitAndTrim(viper.GetString(HTTPCORSDomainFlag.Name))

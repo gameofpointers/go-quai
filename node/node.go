@@ -46,13 +46,14 @@ type Node struct {
 	startStopLock sync.Mutex        // Start/Stop are protected by an additional lock
 	state         int               // Tracks state of node lifecycle
 
-	lock          sync.Mutex
-	lifecycles    []Lifecycle // All registered backends, services, and auxiliary services that have a lifecycle
-	rpcAPIs       []rpc.API   // List of APIs currently provided by the node
-	http          *httpServer //
-	ws            *httpServer //
-	inprocHandler *rpc.Server // In-process RPC request handler to process the API requests
-	location      []byte
+	lock           sync.Mutex
+	lifecycles     []Lifecycle // All registered backends, services, and auxiliary services that have a lifecycle
+	rpcAPIs        []rpc.API   // List of APIs currently provided by the node
+	http           *httpServer //
+	ws             *httpServer //
+	inprocHandler  *rpc.Server // In-process RPC request handler to process the API requests
+	location       []byte
+	rpcRateLimiter *rpc.RateLimiter
 
 	databases map[*closeTrackingDB]struct{} // All open databases
 }
@@ -69,6 +70,12 @@ func New(conf *Config, logger *log.Logger) (*Node, error) {
 	// working directory don't affect the node.
 	confCopy := *conf
 	conf = &confCopy
+	if conf.RPCRateLimit < 0 {
+		return nil, errors.New("Config.RPCRateLimit cannot be negative")
+	}
+	if conf.RPCRateLimitBurst < 0 {
+		return nil, errors.New("Config.RPCRateLimitBurst cannot be negative")
+	}
 	if conf.DataDir != "" {
 		absdatadir, err := filepath.Abs(conf.DataDir)
 		if err != nil {
@@ -94,6 +101,22 @@ func New(conf *Config, logger *log.Logger) (*Node, error) {
 		databases:     make(map[*closeTrackingDB]struct{}),
 		logger:        logger,
 	}
+	node.rpcRateLimiter = rpc.NewRateLimiter(rpc.RateLimitConfig{
+		RequestsPerSecond: conf.RPCRateLimit,
+		Burst:             conf.RPCRateLimitBurst,
+	}, logger)
+	node.rpcAPIs = append(node.rpcAPIs, rpc.API{
+		Namespace: "rpcstats",
+		Version:   "1.0",
+		Service:   rpc.NewRateLimitAPI(node.rpcRateLimiter),
+		Public:    false,
+	})
+	if status := node.rpcRateLimiter.Status(); status.Enabled {
+		logger.WithFields(log.Fields{
+			"rate_limit_rps":   status.RequestsPerSecond,
+			"rate_limit_burst": status.Burst,
+		}).Info("RPC rate limiter enabled")
+	}
 
 	// Acquire the instance directory lock.
 	if err := node.openDataDir(); err != nil {
@@ -111,6 +134,8 @@ func New(conf *Config, logger *log.Logger) (*Node, error) {
 	// Configure RPC servers.
 	node.http = newHTTPServer(node.logger, conf.HTTPTimeouts)
 	node.ws = newHTTPServer(node.logger, rpc.DefaultHTTPTimeouts)
+	node.http.rateLimiter = node.rpcRateLimiter
+	node.ws.rateLimiter = node.rpcRateLimiter
 
 	return node, nil
 }

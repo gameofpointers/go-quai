@@ -75,10 +75,11 @@ type BatchElem struct {
 
 // Client represents a connection to an RPC server.
 type Client struct {
-	idgen    func() ID // for subscriptions
-	isHTTP   bool
-	services *serviceRegistry
-	log      *log.Logger
+	idgen       func() ID // for subscriptions
+	isHTTP      bool
+	services    *serviceRegistry
+	log         *log.Logger
+	rateLimiter *RateLimiter
 
 	idCounter uint32
 
@@ -113,7 +114,7 @@ type clientConn struct {
 
 func (c *Client) newClientConn(conn ServerCodec) *clientConn {
 	ctx := context.WithValue(context.Background(), clientContextKey{}, c)
-	handler := newHandler(ctx, conn, c.idgen, c.services, c.log)
+	handler := newHandlerWithRateLimiter(ctx, conn, c.idgen, c.services, c.log, c.rateLimiter)
 	return &clientConn{conn, handler}
 }
 
@@ -197,12 +198,12 @@ func newClient(initctx context.Context, connect reconnectFunc) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	c := initClient(conn, randomIDGenerator(), new(serviceRegistry), log.Global)
+	c := initClient(conn, randomIDGenerator(), new(serviceRegistry), log.Global, nil)
 	c.reconnectFunc = connect
 	return c, nil
 }
 
-func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry, log *log.Logger) *Client {
+func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry, log *log.Logger, limiter *RateLimiter) *Client {
 	_, isHTTP := conn.(*httpConn)
 	c := &Client{
 		idgen:       idgen,
@@ -219,6 +220,7 @@ func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry, lo
 		reqSent:     make(chan error, 1),
 		reqTimeout:  make(chan *requestOp),
 		log:         log,
+		rateLimiter: limiter,
 	}
 	if !isHTTP {
 		go c.dispatch(conn)

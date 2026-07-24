@@ -44,11 +44,12 @@ const (
 
 // Server is an RPC server.
 type Server struct {
-	services serviceRegistry
-	idgen    func() ID
-	run      int32
-	codecs   mapset.Set
-	log      *log.Logger
+	services    serviceRegistry
+	idgen       func() ID
+	run         int32
+	codecs      mapset.Set
+	log         *log.Logger
+	rateLimiter *RateLimiter
 }
 
 // NewServer creates a new server instance with no registered handlers.
@@ -67,6 +68,11 @@ func NewServer(log *log.Logger) *Server {
 // service collection this server provides to clients.
 func (s *Server) RegisterName(name string, receiver interface{}) error {
 	return s.services.registerName(name, receiver)
+}
+
+// SetRateLimiter attaches a process-local limiter to this server.
+func (s *Server) SetRateLimiter(limiter *RateLimiter) {
+	s.rateLimiter = limiter
 }
 
 // ServeCodec reads incoming requests from codec, calls the appropriate callback and writes
@@ -94,7 +100,7 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 	s.codecs.Add(codec)
 	defer s.codecs.Remove(codec)
 
-	c := initClient(codec, s.idgen, &s.services, s.log)
+	c := initClient(codec, s.idgen, &s.services, s.log, s.rateLimiter)
 	<-codec.closed()
 	c.Close()
 }
@@ -108,7 +114,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		return
 	}
 
-	h := newHandler(ctx, codec, s.idgen, &s.services, s.log)
+	h := newHandlerWithRateLimiter(ctx, codec, s.idgen, &s.services, s.log, s.rateLimiter)
 	h.allowSubscribe = false
 	defer h.close(io.EOF, nil)
 

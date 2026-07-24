@@ -66,6 +66,7 @@ type handler struct {
 	conn           jsonWriter                     // where responses will be sent
 	log            *log.Logger
 	allowSubscribe bool
+	rateLimiter    *RateLimiter
 
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
@@ -77,6 +78,10 @@ type callProc struct {
 }
 
 func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, logger *log.Logger) *handler {
+	return newHandlerWithRateLimiter(connCtx, conn, idgen, reg, logger, nil)
+}
+
+func newHandlerWithRateLimiter(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, logger *log.Logger, limiter *RateLimiter) *handler {
 	rootCtx, cancelRoot := context.WithCancel(connCtx)
 	h := &handler{
 		reg:            reg,
@@ -89,6 +94,7 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 		allowSubscribe: true,
 		serverSubs:     make(map[ID]*Subscription),
 		log:            logger,
+		rateLimiter:    limiter,
 	}
 	h.unsubscribeCb = newCallback(reflect.Value{}, reflect.ValueOf(h.unsubscribe))
 	return h
@@ -111,6 +117,17 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		return
 	}
 
+	allowed := make([]*jsonrpcMessage, 0, len(msgs))
+	rejected := make([]*jsonrpcMessage, 0)
+	for _, msg := range msgs {
+		if h.allowMessage(msg) {
+			allowed = append(allowed, msg)
+		} else if !msg.isNotification() {
+			rejected = append(rejected, msg.errorResponse(new(rateLimitError)))
+		}
+	}
+	msgs = allowed
+
 	// Handle non-call messages first:
 	calls := make([]*jsonrpcMessage, 0, len(msgs))
 	for _, msg := range msgs {
@@ -119,12 +136,18 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		}
 	}
 	if len(calls) == 0 {
+		if len(rejected) > 0 {
+			h.startCallProc(func(cp *callProc) {
+				h.conn.writeJSON(cp.ctx, rejected)
+			})
+		}
 		return
 	}
 	totalResponseSize := 0
 	// Process calls on a goroutine because they may block indefinitely:
 	h.startCallProc(func(cp *callProc) {
-		answers := make([]*jsonrpcMessage, 0, len(msgs))
+		answers := make([]*jsonrpcMessage, 0, len(msgs)+len(rejected))
+		answers = append(answers, rejected...)
 		for _, msg := range calls {
 			if answer := h.handleCallMsg(cp, msg); answer != nil {
 				totalResponseSize += len(answer.String())
@@ -147,6 +170,14 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 
 // handleMsg handles a single message.
 func (h *handler) handleMsg(msg *jsonrpcMessage) {
+	if !h.allowMessage(msg) {
+		if !msg.isNotification() {
+			h.startCallProc(func(cp *callProc) {
+				h.conn.writeJSON(cp.ctx, msg.errorResponse(new(rateLimitError)))
+			})
+		}
+		return
+	}
 	if ok := h.handleImmediate(msg); ok {
 		return
 	}
@@ -160,6 +191,14 @@ func (h *handler) handleMsg(msg *jsonrpcMessage) {
 			n.activate()
 		}
 	})
+}
+
+func (h *handler) allowMessage(msg *jsonrpcMessage) bool {
+	if h.rateLimiter == nil || msg.isResponse() ||
+		(msg.isNotification() && strings.HasSuffix(msg.Method, notificationMethodSuffix)) {
+		return true
+	}
+	return h.rateLimiter.Allow(h.conn.remoteAddr(), msg.Method)
 }
 
 // close cancels all requests except for inflightReq and waits for

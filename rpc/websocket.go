@@ -248,8 +248,12 @@ type websocketCodec struct {
 
 func newWebsocketCodec(conn *websocket.Conn) ServerCodec {
 	conn.SetReadLimit(wsMessageSizeLimit)
+	jsonCodec := NewFuncCodec(conn, conn.WriteJSON, conn.ReadJSON).(*jsonCodec)
+	if remote := conn.RemoteAddr(); remote != nil {
+		jsonCodec.remote = remote.String()
+	}
 	wc := &websocketCodec{
-		jsonCodec: NewFuncCodec(conn, conn.WriteJSON, conn.ReadJSON).(*jsonCodec),
+		jsonCodec: jsonCodec,
 		conn:      conn,
 		pingReset: make(chan struct{}, 1),
 	}
