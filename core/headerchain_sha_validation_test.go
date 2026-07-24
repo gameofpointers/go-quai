@@ -153,7 +153,7 @@ func TestVerifyUnclesValidatesShaAuxPow(t *testing.T) {
 			oldHeader := types.NewBlockHeader(powID, 1, types.EmptyRootHash, oldHeaderTimeAuxPow.Header().MerkleRoot(), 0, 0x1d00ffff, 0, 100)
 			oldHeaderTimeAuxPow.SetHeader(oldHeader)
 			err = hc.VerifyUncles(oldHeaderTimeBlock)
-			require.ErrorContains(t, err, "auxpow header time 0 is less than signature time 1")
+			require.ErrorContains(t, err, "invalid auxpow signature")
 		})
 	}
 }

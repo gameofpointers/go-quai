@@ -2739,12 +2739,14 @@ func (w *worker) AddAuxPowTemplate(auxTemplate *types.AuxTemplate) error {
 	w.auxpowMu.Lock()
 	signatureTime := auxTemplate.SignatureTime()
 	oldAuxpow, exist := w.auxpowCache[auxTemplate.PowID()]
-	if exist && oldAuxpow.SignatureTime() >= signatureTime {
+	// Equal MTP values can represent refreshed Bitcoin templates, so only a
+	// strictly older timestamp is suppressed.
+	if exist && oldAuxpow.SignatureTime() > signatureTime {
 		w.logger.WithFields(log.Fields{
 			"powId":            auxTemplate.PowID(),
 			"signatureTime":    signatureTime,
 			"oldSignatureTime": oldAuxpow.SignatureTime(),
-		}).Debug("Received an auxpow template with an older or equal signature time, ignoring")
+		}).Debug("Received an auxpow template with an older signature time, ignoring")
 		w.auxpowMu.Unlock()
 		return nil
 	}

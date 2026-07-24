@@ -83,3 +83,24 @@ func TestGetBestAuxTemplateSelectsLatestShaTemplate(t *testing.T) {
 		})
 	}
 }
+
+func TestAddAuxPowTemplateReplacesEqualMTP(t *testing.T) {
+	const signatureTime = uint32(100)
+
+	oldTemplate := types.NewAuxTemplate()
+	oldTemplate.SetPowID(types.SHA_BTC)
+	oldTemplate.SetSignatureTime(signatureTime)
+
+	newTemplate := types.NewAuxTemplate()
+	newTemplate.SetPowID(types.SHA_BTC)
+	newTemplate.SetSignatureTime(signatureTime)
+
+	w := &worker{
+		auxpowCache: map[types.PowID]*types.AuxTemplate{
+			types.SHA_BTC: oldTemplate,
+		},
+	}
+
+	require.NoError(t, w.AddAuxPowTemplate(newTemplate))
+	require.Same(t, newTemplate, w.auxpowCache[types.SHA_BTC])
+}

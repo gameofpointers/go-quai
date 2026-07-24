@@ -430,28 +430,13 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 
 				scryptSig := types.ExtractScriptSigFromCoinbaseTx(block.WorkObject.AuxPow().Transaction())
 
-				signatureTime, err := types.ExtractSignatureTimeFromCoinbase(scryptSig)
+				_, err := types.ExtractSignatureTimeFromCoinbase(scryptSig)
 				if err != nil {
 					backend.Logger().WithField("err", err).Error("signature time not found in the auxpow")
 					return pubsub.ValidationReject
 				}
-				// auxpow header time and quai block time cannot be less than the
-				// signature time in the coinbase (time at which the template was
-				// signed)
-				if block.WorkObject.AuxPow().Header().Timestamp() < signatureTime {
-					backend.Logger().WithFields(log.Fields{
-						"auxpowHeaderTime": block.WorkObject.AuxPow().Header().Timestamp(),
-						"signatureTime":    signatureTime,
-					}).Error("auxpowheader time is less than signature time")
-					return pubsub.ValidationReject
-				}
-				if block.WorkObject.Time() < uint64(signatureTime) {
-					backend.Logger().WithFields(log.Fields{
-						"auxpowHeaderTime": block.WorkObject.Time(),
-						"signatureTime":    signatureTime,
-					}).Error("quai block time is less than signature time")
-					return pubsub.ValidationReject
-				}
+				// TEMPORARY: Allow MTP-derived signature times without ordering
+				// the AuxPoW or Quai header timestamp against the template time.
 
 				coinbaseSealHash, err := types.ExtractSealHashFromCoinbase(scryptSig)
 				if err != nil {
@@ -657,31 +642,9 @@ func (g *PubsubManager) ValidatorFunc() func(ctx context.Context, id p2p.PeerID,
 			if !auxTemplate.VerifySignature() {
 				return pubsub.ValidationReject
 			}
+			// TEMPORARY: Accept signed templates regardless of their age or
+			// distance from the local wall clock while testing Bitcoin MTP.
 
-			// AuxTemplate specific checks
-
-			signatureTime := auxTemplate.SignatureTime()
-			backend := *g.consensus.GetBackend(topic.location)
-			if backend == nil {
-				log.Global.WithFields(log.Fields{
-					"peer": id,
-				}).Error("no backend found for this location")
-			}
-
-			currentTime := uint64(time.Now().Unix())
-
-			// If the signature time is too far in the future, reject the message
-			if currentTime+params.AuxTemplateLivenessTime < uint64(signatureTime) {
-				return pubsub.ValidationReject
-			}
-			// If the signature time is too old, reject the message
-			if currentTime > uint64(signatureTime)+params.AuxTemplateStaleTime {
-				return pubsub.ValidationReject
-			}
-			// If the signature time is older than the liveness time, ignore the message
-			if currentTime > uint64(signatureTime)+params.AuxTemplateLivenessTime {
-				return pubsub.ValidationIgnore
-			}
 		}
 		return pubsub.ValidationAccept
 	}
