@@ -121,6 +121,7 @@ type Config struct {
 	WorkShareMining       bool            // Whether to mine work shares from raw transactions.
 	WorkShareThreshold    int             // WorkShareThreshold is the minimum fraction of a share that this node will accept to mine a transaction.
 	Endpoints             []string        // Holds RPC endpoints to send minimally mined transactions to for further mining/propagation.
+	StratumEnabled        bool            // Whether the stratum proxy is enabled (increases pending block body cache size).
 }
 
 type transactionOrderingInfo struct {
@@ -268,7 +269,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 	// Set the GasFloor of the worker to the minGasLimit
 	worker.config.GasFloor = params.MinGasLimit(headerchain.CurrentHeader().NumberU64(common.ZONE_CTX))
 
-	phBodyCache, _ := lru.New[common.Hash, types.WorkObject](pendingBlockBodyLimit)
+	// Use larger pending block body cache when stratum is enabled (more concurrent miners)
+	phBodyCacheSize := pendingBlockBodyLimit
+	if config.StratumEnabled {
+		phBodyCacheSize = 1000
+	}
+	phBodyCache, _ := lru.New[common.Hash, types.WorkObject](phBodyCacheSize)
 	worker.pendingBlockBody = phBodyCache
 
 	auxPowCache, _ := lru.New[[c_auxpowCacheKeySize]byte, types.AuxPow](1000)
@@ -447,13 +453,31 @@ func (w *worker) close() {
 func (w *worker) GetBestAuxTemplate(powID types.PowID) *types.AuxTemplate {
 	w.auxpowMu.RLock()
 	defer w.auxpowMu.RUnlock()
+	if powID == types.SHA_BCH || powID == types.SHA_BTC {
+		bchTemplate, bchExists := w.auxpowCache[types.SHA_BCH]
+		btcTemplate, btcExists := w.auxpowCache[types.SHA_BTC]
+		// A SHA request can be served by either donor chain.
+		if !bchExists && btcExists {
+			return btcTemplate
+		}
+		if !btcExists && bchExists {
+			return bchTemplate
+		}
+		if bchExists && btcExists {
+			if bchTemplate.SignatureTime() > btcTemplate.SignatureTime() {
+				return bchTemplate
+			} else {
+				return btcTemplate
+			}
+		}
+	}
 	if template, ok := w.auxpowCache[powID]; ok {
 		return template
 	}
 	switch powID {
 	case types.Kawpow:
 		return types.DefaultKawpowAuxTemplate()
-	case types.SHA_BCH:
+	case types.SHA_BCH, types.SHA_BTC:
 		return types.DefaultShaBchAuxTemplate()
 	case types.Scrypt:
 		return types.DefaultScryptAuxTemplate()

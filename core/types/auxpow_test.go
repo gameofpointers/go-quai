@@ -71,6 +71,34 @@ func TestAuxPowProtoEncodeDecode(t *testing.T) {
 	require.NotNil(t, decoded.Transaction())
 }
 
+func TestShaAuxPowProtoRoundTripPreservesDonorChain(t *testing.T) {
+	for _, powID := range []PowID{SHA_BTC, SHA_BCH} {
+		t.Run(powID.String(), func(t *testing.T) {
+			original := auxPowTestData(powID)
+			encoded := original.ProtoEncode()
+
+			decoded := &AuxPow{}
+			require.NoError(t, decoded.ProtoDecode(encoded))
+			require.Equal(t, powID, decoded.PowID())
+			require.Equal(t, original.Header().Bytes(), decoded.Header().Bytes())
+			require.Equal(t, original.Header().PowHash(), decoded.Header().PowHash())
+			require.Equal(t, original.Transaction(), decoded.Transaction())
+			require.Equal(t, original.ConvertToTemplate().Hash(), decoded.ConvertToTemplate().Hash())
+		})
+	}
+}
+
+func TestAuxTemplateHashBindsShaDonorChain(t *testing.T) {
+	template := testAuxTemplate()
+	template.SetPowID(SHA_BTC)
+	btcHash := template.Hash()
+
+	template.SetPowID(SHA_BCH)
+	bchHash := template.Hash()
+
+	require.NotEqual(t, btcHash, bchHash)
+}
+
 // TestAuxPowProtoEncodeNil tests encoding nil AuxPow
 func TestAuxPowProtoEncodeNil(t *testing.T) {
 	var auxPow *AuxPow

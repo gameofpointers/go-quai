@@ -17,7 +17,6 @@
 package quaiapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -1144,7 +1143,7 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 
 // BlockTemplateRequest represents a getblocktemplate request
 type BlockTemplateRequest struct {
-	Rules          []string                `json:"rules,omitempty"`          // "kawpow", "sha", "scrypt"
+	Rules          []string                `json:"rules,omitempty"`          // "kawpow", "sha", "sha_btc", "sha_bch", "scrypt"
 	ExtraNonce1    string                  `json:"extranonce1,omitempty"`    // 4 byte hex string
 	ExtraNonce2    string                  `json:"extranonce2,omitempty"`    // 8 byte hex string
 	ExtraNonce2Len int                     `json:"extranonce2len,omitempty"` // extra nonce2 length in bytes
@@ -1155,46 +1154,76 @@ type BlockTemplateRequest struct {
 // GetBlockTemplate retrieves a new block template to mine
 // Supports Bitcoin-compatible getblocktemplate API with PoW algorithm selection via "rules" parameter
 func (s *PublicBlockChainQuaiAPI) GetBlockTemplate(ctx context.Context, request *BlockTemplateRequest) (map[string]interface{}, error) {
-	// Default to KAWPOW if no request or rules specified
-	powId := types.Kawpow
-
-	// Parse rules to determine PoW algorithm
-	if request != nil && len(request.Rules) > 0 {
-		for _, rule := range request.Rules {
-			ruleLower := strings.ToLower(rule)
-			switch ruleLower {
-			case "kawpow":
-				powId = types.Kawpow
-			case "sha", "sha256d":
-				powId = types.SHA_BCH
-			case "scrypt":
-				powId = types.Scrypt
-			default:
-				return nil, fmt.Errorf("unsupported rule: %s", rule)
-			}
-		}
+	var rules []string
+	if request != nil {
+		rules = request.Rules
+	}
+	powId, err := blockTemplatePowID(rules)
+	if err != nil {
+		return nil, err
 	}
 
 	var coinbase common.Address
 	if request != nil && !request.Coinbase.Address().Equal(common.Address{}) {
 		coinbase = common.Bytes20ToAddress(request.Coinbase.Address().Bytes20(), s.b.NodeLocation())
 
-		_, err := coinbase.InternalAddress()
+		_, err = coinbase.InternalAddress()
 		if err != nil {
 			return nil, fmt.Errorf("out of scope or invalid coinbase address: %w", err)
 		}
 	}
 
 	// Get the pending header for the specified PoW algorithm
-	pendingHeader, err := s.b.GetPendingHeader(powId, coinbase)
+	pendingHeader, err := s.b.GetPendingHeader(powId, coinbase, []byte{}, 0)
 	if err != nil {
 		return nil, err
 	}
 	return s.marshalAuxPowTemplate(pendingHeader, request)
 }
 
-// marshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response
+func blockTemplatePowID(rules []string) (types.PowID, error) {
+	// Default to KAWPOW if no rules are specified.
+	powID := types.Kawpow
+	for _, rule := range rules {
+		switch strings.ToLower(rule) {
+		case "kawpow":
+			powID = types.Kawpow
+		case "btc", "bitcoin", "sha_btc", "sha-btc":
+			powID = types.SHA_BTC
+		case "sha", "sha256d", "bch", "bitcoin-cash", "sha_bch", "sha-bch":
+			// Keep the historical generic SHA names mapped to BCH.
+			powID = types.SHA_BCH
+		case "scrypt":
+			powID = types.Scrypt
+		default:
+			return types.Progpow, fmt.Errorf("unsupported rule: %s", rule)
+		}
+	}
+	return powID, nil
+}
+
+// marshalAuxPowTemplate is a method wrapper that calls the standalone MarshalAuxPowTemplate function
 func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, request *BlockTemplateRequest) (map[string]interface{}, error) {
+	powID := wo.AuxPow().PowID()
+	var extraNonce1, extraNonce2, extraData string
+	var extraNonce2Len = 8
+	if request != nil {
+		extraNonce1 = request.ExtraNonce1
+		extraNonce2 = request.ExtraNonce2
+		extraData = request.ExtraData
+		if request.ExtraNonce2Len == 4 {
+			extraNonce2Len = request.ExtraNonce2Len
+		}
+	}
+	return MarshalAuxPowTemplate(wo, powID, extraNonce1, extraNonce2, extraNonce2Len, extraData)
+}
+
+// MarshalAuxPowTemplate formats a WorkObject as a SHA256d/Bitcoin getblocktemplate response.
+// This is an exported standalone function so it can be used by both the RPC API and subscriptions.
+// The powID parameter determines which algorithm's target to calculate.
+// The extraNonce1, extraNonce2, and extraData parameters are optional hex strings for customizing the coinbase.
+func MarshalAuxPowTemplate(wo *types.WorkObject, powID types.PowID, extraNonce1Hex, extraNonce2Hex string, extraNonce2Len int, extraDataStr string) (map[string]interface{}, error) {
+
 	auxPow := wo.AuxPow()
 	if auxPow == nil {
 		return nil, errors.New("no AuxPow in pending header")
@@ -1227,7 +1256,7 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 	// - coinb1: entire start of the tx up to the start of the combined extranonce push data
 	// <12 bytes of data>
 	// - coinb2: everything after the combined extranonce push data (coinb2 includes the 32 bytes of extradata)
-	coinb1, coinb2, err := extractCoinb1AndCoinb2FromAuxPowTx(txBytes)
+	coinb1, coinb2, err := types.ExtractCoinb1AndCoinb2FromAuxPowTx(txBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract coinb1 and coinb2 from AuxPowTx: %w", err)
 	}
@@ -1236,20 +1265,13 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		return nil, errors.New("empty coinbase tx bytes in AuxPow")
 	}
 
-	var updatedTxBytes []byte
-
 	// extranonce1, extranonce2, and extradata are optional fields
 	var extraNonce1 [4]byte
 
-	extraNonce2Len := 8
-	if request != nil && request.ExtraNonce2Len == 4 {
-		extraNonce2Len = 4
-	}
 	extraNonce2 := make([]byte, extraNonce2Len)
 
-	var extraData [30]byte
-	if request != nil && len(request.ExtraNonce1) > 0 {
-		extraNonce1Bytes, err := hex.DecodeString(request.ExtraNonce1)
+	if len(extraNonce1Hex) > 0 {
+		extraNonce1Bytes, err := hex.DecodeString(extraNonce1Hex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid extranonce1: %w", err)
 		}
@@ -1258,8 +1280,8 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		}
 		copy(extraNonce1[:], extraNonce1Bytes)
 	}
-	if request != nil && len(request.ExtraNonce2) > 0 {
-		extraNonce2Bytes, err := hex.DecodeString(request.ExtraNonce2)
+	if len(extraNonce2Hex) > 0 {
+		extraNonce2Bytes, err := hex.DecodeString(extraNonce2Hex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid extranonce2: %w", err)
 		}
@@ -1268,22 +1290,21 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		}
 		copy(extraNonce2[:], extraNonce2Bytes)
 	}
-	if request != nil && len(request.ExtraData) > 0 {
-		extraDataBytes := []byte(request.ExtraData)
+	if len(extraDataStr) > 0 {
+		extraDataBytes := []byte(extraDataStr)
 		if len(extraDataBytes) > 30 {
 			return nil, fmt.Errorf("input extraData length exceeds 30 bytes")
 		}
-		copy(extraData[:], extraDataBytes)
 		// update the first 30 bytes of the coinb2
-		copy(coinb2[:30], extraData[:])
+		copy(coinb2[:30], extraDataBytes)
 	}
 	// Add 4 bytes of padding if the requested extra nonce was only 4 bytes
-	if request != nil && request.ExtraNonce2Len == 4 {
+	if extraNonce2Len == 4 {
 		coinb2 = append([]byte{0, 0, 0, 0}, coinb2...)
 	}
 
 	// Build the updated transaction bytes by concatenating coinb1, extraNonce1, extraNonce2, and coinb2
-	updatedTxBytes = append(coinb1, extraNonce1[:]...)
+	updatedTxBytes := append(coinb1, extraNonce1[:]...)
 	updatedTxBytes = append(updatedTxBytes, extraNonce2[:]...)
 	updatedTxBytes = append(updatedTxBytes, coinb2...)
 
@@ -1314,12 +1335,10 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 	// Convert bits to hex without 0x prefix
 	bitsHex := fmt.Sprintf("%08x", auxHeader.Bits())
 
-	powId := auxPow.PowID()
-
 	var targetHex string
 	// Get target hex from Quai difficulty (not AuxPow bits)
 	// based on the powid need to use the correct target calculation
-	switch powId {
+	switch powID {
 	case types.SHA_BCH, types.SHA_BTC:
 		// Bitcoin-style target calculation
 		targetHex = common.GetTargetInHex(wo.WorkObjectHeader().ShaDiffAndCount().Difficulty())
@@ -1335,15 +1354,12 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		targetHex = targetHex[2:]
 	}
 
-	// set the pendingheader time to empty
+	// Set the pendingheader time to empty
+	// This ensures the sealHash is stable and doesn't change every second
 	woCopy := types.CopyWorkObjectHeader(wo.WorkObjectHeader())
 	woCopy.SetTime(0)
-	sealHashString := hex.EncodeToString(wo.SealHash().Bytes()[:6])
 
-	extraNonce2Length := 8
-	if request != nil && request.ExtraNonce2Len == 4 {
-		extraNonce2Length = 4
-	}
+	sealHashString := hex.EncodeToString(woCopy.SealHash().Bytes()[:6])
 
 	return map[string]interface{}{
 		"version":           auxHeader.Version(),
@@ -1358,8 +1374,8 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		"bits":              bitsHex,
 		"height":            uint64(blockHeight),
 		"coinb1":            hex.EncodeToString(coinb1),
-		"extranonce1Length": 4,                 // 4 bytes
-		"extranonce2Length": extraNonce2Length, // 8 bytes
+		"extranonce1Length": 4,              // 4 bytes
+		"extranonce2Length": extraNonce2Len, // 8 bytes
 		// Keep the 30-byte aux extra data inside coinb2; miners do not fill it
 		"coinbaseAuxExtraBytesLength": 30, // 32 bytes
 		"coinb2":                      hex.EncodeToString(coinb2),
@@ -1369,145 +1385,6 @@ func (s *PublicBlockChainQuaiAPI) marshalAuxPowTemplate(wo *types.WorkObject, re
 		"quaiheight":                  wo.WorkObjectHeader().NumberU64(),
 		"quaidifficulty":              wo.WorkObjectHeader().Difficulty(),
 	}, nil
-}
-
-func extractCoinb1AndCoinb2FromAuxPowTx(txBytes []byte) ([]byte, []byte, error) {
-	// Helpers to parse CompactSize varints and script pushes
-	readVarInt := func(b []byte) (val uint64, size int, err error) {
-		if len(b) == 0 {
-			return 0, 0, errors.New("short varint")
-		}
-		prefix := b[0]
-		switch prefix {
-		case 0xFF:
-			if len(b) < 9 {
-				return 0, 0, errors.New("short varint 0xff")
-			}
-			return binary.LittleEndian.Uint64(b[1:9]), 9, nil
-		case 0xFE:
-			if len(b) < 5 {
-				return 0, 0, errors.New("short varint 0xfe")
-			}
-			return uint64(binary.LittleEndian.Uint32(b[1:5])), 5, nil
-		case 0xFD:
-			if len(b) < 3 {
-				return 0, 0, errors.New("short varint 0xfd")
-			}
-			return uint64(binary.LittleEndian.Uint16(b[1:3])), 3, nil
-		default:
-			return uint64(prefix), 1, nil
-		}
-	}
-
-	// Returns (dataStartOffset, dataLen, headerLen) for the next push
-	parsePushHeader := func(script []byte) (int, int, int, error) {
-		if len(script) == 0 {
-			return 0, 0, 0, errors.New("empty script segment")
-		}
-		opcode := script[0]
-		if opcode <= 75 {
-			return 1, int(opcode), 1, nil
-		}
-		if opcode == 0x4c { // OP_PUSHDATA1
-			if len(script) < 2 {
-				return 0, 0, 0, errors.New("short OP_PUSHDATA1")
-			}
-			return 2, int(script[1]), 2, nil
-		}
-		if opcode == 0x4d { // OP_PUSHDATA2
-			if len(script) < 3 {
-				return 0, 0, 0, errors.New("short OP_PUSHDATA2")
-			}
-			ln := int(binary.LittleEndian.Uint16(script[1:3]))
-			return 3, ln, 3, nil
-		}
-		return 0, 0, 0, fmt.Errorf("unsupported opcode 0x%x in coinbase script", opcode)
-	}
-
-	// Walk the transaction encoding to find scriptSig and split positions
-	pos := 0
-	// version (4 bytes)
-	if len(txBytes) < pos+4 {
-		return nil, nil, errors.New("tx too short for version")
-	}
-	pos += 4
-	// input count (varint)
-	vinCount, sz, err := readVarInt(txBytes[pos:])
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse vin count: %w", err)
-	}
-	pos += sz
-	if vinCount == 0 {
-		return nil, nil, errors.New("coinbase tx has zero vin")
-	}
-	// prevout (32 + 4)
-	if len(txBytes) < pos+36 {
-		return nil, nil, errors.New("tx too short for prevout")
-	}
-	pos += 36
-	// scriptSig length (varint)
-	scriptLenU64, sz2, err := readVarInt(txBytes[pos:])
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse scriptsig length: %w", err)
-	}
-	pos += sz2
-	scriptLen := int(scriptLenU64)
-	if scriptLen < 0 || len(txBytes) < pos+scriptLen {
-		return nil, nil, errors.New("tx too short for scriptsig bytes")
-	}
-	scriptStart := pos
-	script := txBytes[scriptStart : scriptStart+scriptLen]
-
-	// Parse pushes per our format
-	// 1) height
-	_, l, hdr, err := parsePushHeader(script)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse height push: %w", err)
-	}
-	cur := hdr + l
-	// 2) AuxPoW commitment as a single push: magic(4) | root(32) | size(4 LE) | nonce(4 LE)
-	if cur >= len(script) {
-		return nil, nil, errors.New("unexpected end after height push")
-	}
-	off, l, hdr, err := parsePushHeader(script[cur:])
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse auxpow commitment push: %w", err)
-	}
-	if l != 44 || cur+off+l > len(script) {
-		return nil, nil, errors.New("invalid auxpow commitment length; expected 44 bytes")
-	}
-	payload := script[cur+off : cur+off+l]
-	if !bytes.Equal(payload[0:4], []byte{0xfa, 0xbe, 0x6d, 0x6d}) {
-		return nil, nil, errors.New("unexpected magic marker in auxpow commitment")
-	}
-
-	cur += hdr + l
-	// 6) combined extranonces + extraData push
-	if cur >= len(script) {
-		return nil, nil, errors.New("unexpected end before extranonce push")
-	}
-	dataStartOff, dataLen, _, err := parsePushHeader(script[cur:])
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse extranonce push: %w", err)
-	}
-	if dataLen < 1 || cur+dataStartOff+dataLen > len(script) {
-		return nil, nil, errors.New("invalid extranonce push bounds")
-	}
-
-	pushDataAbsStart := scriptStart + cur + dataStartOff
-	pushDataAbsEnd := pushDataAbsStart + dataLen
-
-	if pushDataAbsStart < 0 || pushDataAbsEnd > len(txBytes) || pushDataAbsStart > pushDataAbsEnd {
-		return nil, nil, errors.New("computed coinbase split out of bounds")
-	}
-	// Only carve out extranonce1 (4B) and extranonce2 (8B). Keep the trailing 32B zeros in coinb2.
-	coinb1 := txBytes[:pushDataAbsStart]
-	coinb2Start := pushDataAbsStart + 4 + 8
-	if coinb2Start < 0 || coinb2Start > len(txBytes) {
-		return nil, nil, errors.New("computed coinb2 start out of bounds")
-	}
-	coinb2 := txBytes[coinb2Start:]
-	return coinb1, coinb2, nil
 }
 
 func (s *PublicBlockChainQuaiAPI) SubmitScryptBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
@@ -1550,7 +1427,13 @@ func (s *PublicBlockChainQuaiAPI) SubmitKawpowBlock(ctx context.Context, raw hex
 }
 
 func (s *PublicBlockChainQuaiAPI) SubmitShaBlock(ctx context.Context, raw hexutil.Bytes) (map[string]interface{}, error) {
-	hash, number, validity, err := s.b.SubmitBlock(raw, types.SHA_BCH)
+	return s.submitShaBlock(raw)
+}
+
+func (s *PublicBlockChainQuaiAPI) submitShaBlock(raw hexutil.Bytes) (map[string]interface{}, error) {
+	hash, number, validity, err := submitShaWithPowID(func(powID types.PowID) (common.Hash, uint64, types.WorkShareValidity, error) {
+		return s.b.SubmitBlock(raw, powID)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1567,6 +1450,25 @@ func (s *PublicBlockChainQuaiAPI) SubmitShaBlock(ctx context.Context, raw hexuti
 		fields["status"] = hexutil.Uint64(2)
 	}
 	return fields, nil
+}
+
+type shaSubmitFn func(types.PowID) (common.Hash, uint64, types.WorkShareValidity, error)
+
+// submitShaWithPowID keeps the pool-facing RPC chain-agnostic. A signed SHA
+// template can validate for only its committed PowID, so try the legacy BCH
+// interpretation first and retry as BTC only when BCH validation fails.
+func submitShaWithPowID(submit shaSubmitFn) (common.Hash, uint64, types.WorkShareValidity, error) {
+	hash, number, validity, bchErr := submit(types.SHA_BCH)
+	if bchErr == nil {
+		return hash, number, validity, nil
+	}
+
+	hash, number, validity, btcErr := submit(types.SHA_BTC)
+	if btcErr == nil {
+		return hash, number, validity, nil
+	}
+
+	return common.Hash{}, 0, types.Invalid, fmt.Errorf("SHA submission failed as BCH (%v) and BTC (%v)", bchErr, btcErr)
 }
 
 // ReceiveMinedHeader will run checks on the block and add to canonical chain if valid.
@@ -1629,7 +1531,7 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (hexutil
 		return nil, errors.New("getPendingHeader call can only be made on chain processing the state")
 	}
 
-	pendingHeader, err := s.b.GetPendingHeader(types.Progpow, common.Address{}) // 0 is default progpow
+	pendingHeader, err := s.b.GetPendingHeader(types.Progpow, common.Address{}, []byte{}, 0) // 0 is default progpow
 	if err != nil {
 		return nil, err
 	} else if pendingHeader == nil {
@@ -2395,6 +2297,10 @@ func (s *PublicBlockChainQuaiAPI) GetSubsidyChainHeight(ctx context.Context) (ma
 	at = s.b.GetBestAuxTemplate(types.SHA_BCH)
 	if at != nil {
 		fields["bch"] = hexutil.Uint64(at.Height())
+	}
+	at = s.b.GetBestAuxTemplate(types.SHA_BTC)
+	if at != nil {
+		fields["btc"] = hexutil.Uint64(at.Height())
 	}
 	at = s.b.GetBestAuxTemplate(types.Scrypt)
 	if at != nil {
