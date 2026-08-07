@@ -430,6 +430,15 @@ func (hc *HierarchicalCoordinator) recoverPendingHeaders(quaiBackend quai.Consen
 		return
 	}
 
+	// A crash or stale pending-header choice can leave every subordinate head
+	// consistently referencing the next Prime block while Prime itself remains
+	// on that block's parent. In that state the old logic below skips recovery
+	// because the subordinate heights are ahead, and newly generated work keeps
+	// failing PCRC. Only promote a direct child that every running Region and
+	// Zone agrees on and whose current termini are coherent with one another.
+	var promoted bool
+	primeHead, promoted = hc.recoverPrimeHeadFromSubordinates(quaiBackend, primeHead, currentRegions, currentZones)
+
 	var wg sync.WaitGroup
 	for i := 0; i < currentRegions; i++ {
 		regionLoc := common.Location{byte(i)}
@@ -445,6 +454,18 @@ func (hc *HierarchicalCoordinator) recoverPendingHeaders(quaiBackend quai.Consen
 			zoneHead := zoneBackend.CurrentHeader()
 			if zoneHead == nil {
 				log.Global.WithField("location", zoneLoc.Name()).Warn("Skipping pending header recovery: zone head is nil")
+				continue
+			}
+
+			if promoted {
+				log.Global.WithFields(log.Fields{
+					"location":   zoneLoc.Name(),
+					"primeHead":  primeHead.NumberArray(),
+					"regionHead": regionHead.NumberArray(),
+					"zoneHead":   zoneHead.NumberArray(),
+				}).Info("Regenerating pending header after Prime head recovery")
+				wg.Add(1)
+				go hc.computePendingHeaderWithConsensus(&wg, quaiBackend, primeHead.Hash(), regionHead.Hash(), zoneHead.Hash(), zoneLoc)
 				continue
 			}
 
@@ -472,6 +493,112 @@ func (hc *HierarchicalCoordinator) recoverPendingHeaders(quaiBackend quai.Consen
 		}
 	}
 	wg.Wait()
+}
+
+// recoverPrimeHeadFromSubordinates promotes Prime by one block when all
+// subordinate heads already agree that the direct child is their Prime
+// terminus. The strict agreement, ancestry, and PCRC checks keep this startup
+// repair from choosing a fork merely because one subordinate is ahead.
+func (hc *HierarchicalCoordinator) recoverPrimeHeadFromSubordinates(quaiBackend quai.ConsensusAPI, primeHead *types.WorkObject, currentRegions, currentZones int) (*types.WorkObject, bool) {
+	if currentRegions == 0 || currentZones == 0 {
+		return primeHead, false
+	}
+
+	expectedPrimeNumber := primeHead.NumberU64(common.PRIME_CTX) + 1
+	candidateHash := common.Hash{}
+
+	for i := 0; i < currentRegions; i++ {
+		regionLoc := common.Location{byte(i)}
+		regionBackendRef := quaiBackend.GetBackend(regionLoc)
+		if regionBackendRef == nil {
+			return primeHead, false
+		}
+		regionHead := (*regionBackendRef).CurrentHeader()
+		if regionHead == nil || regionHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber {
+			return primeHead, false
+		}
+		if candidateHash == (common.Hash{}) {
+			candidateHash = regionHead.PrimeTerminusHash()
+		}
+		if candidateHash == (common.Hash{}) || regionHead.PrimeTerminusHash() != candidateHash {
+			return primeHead, false
+		}
+
+		for j := 0; j < currentZones; j++ {
+			zoneLoc := common.Location{byte(i), byte(j)}
+			zoneBackendRef := quaiBackend.GetBackend(zoneLoc)
+			if zoneBackendRef == nil {
+				return primeHead, false
+			}
+			zoneHead := (*zoneBackendRef).CurrentHeader()
+			if zoneHead == nil || zoneHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber || zoneHead.PrimeTerminusHash() != candidateHash {
+				return primeHead, false
+			}
+		}
+	}
+
+	primeBackendRef := quaiBackend.GetBackend(common.Location{})
+	if primeBackendRef == nil {
+		return primeHead, false
+	}
+	primeBackend := *primeBackendRef
+	candidate := primeBackend.GetBlockByHash(candidateHash)
+	if candidate == nil || candidate.NumberU64(common.PRIME_CTX) != expectedPrimeNumber || candidate.ParentHash(common.PRIME_CTX) != primeHead.Hash() {
+		log.Global.WithFields(log.Fields{
+			"candidate":      candidateHash,
+			"currentPrime":   primeHead.Hash(),
+			"expectedNumber": expectedPrimeNumber,
+		}).Warn("Skipping Prime head recovery: subordinate Prime terminus is not the direct child")
+		return primeHead, false
+	}
+
+	primeTermini := primeBackend.GetTerminiByHash(candidateHash)
+	if primeTermini == nil || !primeTermini.IsValid() {
+		log.Global.WithField("candidate", candidateHash).Warn("Skipping Prime head recovery: candidate termini are unavailable")
+		return primeHead, false
+	}
+
+	for i := 0; i < currentRegions; i++ {
+		regionLoc := common.Location{byte(i)}
+		regionBackend := *quaiBackend.GetBackend(regionLoc)
+		regionHead := regionBackend.CurrentHeader()
+		regionTermini := regionBackend.GetTerminiByHash(regionHead.Hash())
+		if regionTermini == nil || !regionTermini.IsValid() {
+			return primeHead, false
+		}
+		if regionTermini.DomTerminus(regionLoc) != primeTermini.SubTerminiAtIndex(i) {
+			log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": regionLoc.Name()}).Warn("Skipping Prime head recovery: Region is not PCRC-coherent")
+			return primeHead, false
+		}
+		for j := 0; j < currentZones; j++ {
+			zoneLoc := common.Location{byte(i), byte(j)}
+			zoneBackend := *quaiBackend.GetBackend(zoneLoc)
+			zoneHead := zoneBackend.CurrentHeader()
+			zoneTermini := zoneBackend.GetTerminiByHash(zoneHead.Hash())
+			if zoneTermini == nil || !zoneTermini.IsValid() || zoneTermini.DomTerminus(zoneLoc) != regionTermini.SubTerminiAtIndex(j) {
+				log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": zoneLoc.Name()}).Warn("Skipping Prime head recovery: Zone is not PCRC-coherent")
+				return primeHead, false
+			}
+		}
+	}
+
+	if _, err := primeBackend.GeneratePendingHeader(candidate, false); err != nil {
+		log.Global.WithFields(log.Fields{"candidate": candidateHash, "err": err}).Error("Failed to promote recovered Prime head")
+		return primeHead, false
+	}
+	recoveredHead := primeBackend.CurrentHeader()
+	if recoveredHead == nil || recoveredHead.Hash() != candidateHash {
+		log.Global.WithField("candidate", candidateHash).Error("Prime head recovery did not update the current head")
+		return primeHead, false
+	}
+
+	log.Global.WithFields(log.Fields{
+		"oldHash":   primeHead.Hash(),
+		"oldNumber": primeHead.NumberU64(common.PRIME_CTX),
+		"newHash":   recoveredHead.Hash(),
+		"newNumber": recoveredHead.NumberU64(common.PRIME_CTX),
+	}).Warn("Recovered Prime head from unanimous subordinate termini")
+	return recoveredHead, true
 }
 
 func (hc *HierarchicalCoordinator) startNode(logPath string, quaiBackend quai.ConsensusAPI, location common.Location, genesisBlock *types.WorkObject) {
