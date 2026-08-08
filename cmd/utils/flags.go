@@ -121,6 +121,7 @@ var NodeFlags = []Flag{
 	IndexAddressUtxos,
 	ReIndex,
 	ValidateIndexer,
+	RecoverHierarchyCheckpointFlag,
 	StartingExpansionNumberFlag,
 	NodeLogLevelFlag,
 	GenesisNonce,
@@ -600,6 +601,12 @@ var (
 		Name:  c_NodeFlagPrefix + "validate-indexer",
 		Value: false,
 		Usage: "Validate the UTXO indexer. This will take a long time!" + generateEnvDoc(c_NodeFlagPrefix+"validate-index"),
+	}
+
+	RecoverHierarchyCheckpointFlag = Flag{
+		Name:  c_NodeFlagPrefix + "recover-hierarchy-checkpoint",
+		Value: "",
+		Usage: "One-time Prime checkpoint hash used to recover all hierarchy heads and pending headers" + generateEnvDoc(c_NodeFlagPrefix+"recover-hierarchy-checkpoint"),
 	}
 
 	EnvironmentFlag = Flag{
