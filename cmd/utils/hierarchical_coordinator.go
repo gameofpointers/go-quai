@@ -1417,6 +1417,11 @@ func (hc *HierarchicalCoordinator) ComputePendingHeaders(nodeSet NodeSet) {
 
 func (hc *HierarchicalCoordinator) computePendingHeaders(nodeSet NodeSet) {
 	numRegions, numZones := common.GetHierarchySizeForExpansionNumber(hc.expansionNumber())
+	if err := hc.validateNodeSetPCRC(nodeSet, numRegions, numZones); err != nil {
+		hc.rejectPendingHeaderNodeSet(nodeSet, err)
+		return
+	}
+
 	var wg sync.WaitGroup
 	primeLocation := common.Location{}.Name()
 	for i := 0; i < int(numRegions); i++ {
@@ -1431,17 +1436,98 @@ func (hc *HierarchicalCoordinator) computePendingHeaders(nodeSet NodeSet) {
 	wg.Wait()
 }
 
+// validateNodeSetPCRC is the final invariant check before pending-header
+// generation. Every subordinate node must reference the terminus selected by
+// its dominant node. Keeping this check at the generation boundary also covers
+// node sets populated by the fast event path and startup recovery.
+func (hc *HierarchicalCoordinator) validateNodeSetPCRC(nodeSet NodeSet, numRegions, numZones uint64) error {
+	return validateNodeSetPCRC(nodeSet, numRegions, numZones, func(location common.Location, hash common.Hash) *types.Termini {
+		backendRef := hc.consensus.GetBackend(location)
+		if backendRef == nil || *backendRef == nil {
+			return nil
+		}
+		return (*backendRef).GetTerminiByHash(hash)
+	})
+}
+
+func validateNodeSetPCRC(nodeSet NodeSet, numRegions, numZones uint64, terminiForNode func(common.Location, common.Hash) *types.Termini) error {
+	primeLocation := common.Location{}
+	primeNode, exists := nodeSet.nodes[primeLocation.Name()]
+	if !exists {
+		return errors.New("prime node is missing")
+	}
+	primeTermini := terminiForNode(primeLocation, primeNode.hash)
+	if !primeTermini.IsValid() {
+		return fmt.Errorf("prime termini are missing or invalid for %s", primeNode.hash)
+	}
+
+	for i := 0; i < int(numRegions); i++ {
+		regionLocation := common.Location{byte(i)}
+		regionNode, exists := nodeSet.nodes[regionLocation.Name()]
+		if !exists {
+			return fmt.Errorf("region node is missing at %s", regionLocation.Name())
+		}
+		regionTermini := terminiForNode(regionLocation, regionNode.hash)
+		if !regionTermini.IsValid() {
+			return fmt.Errorf("region termini are missing or invalid at %s for %s", regionLocation.Name(), regionNode.hash)
+		}
+		expectedRegionTerminus := primeTermini.SubTerminiAtIndex(i)
+		actualRegionTerminus := regionTermini.DomTerminus(regionLocation)
+		if !pcrcMatches(regionTermini, expectedRegionTerminus, regionLocation) {
+			return fmt.Errorf("prime-to-region PCRC failed at %s: prime requires %s, region references %s", regionLocation.Name(), expectedRegionTerminus, actualRegionTerminus)
+		}
+
+		for j := 0; j < int(numZones); j++ {
+			zoneLocation := common.Location{byte(i), byte(j)}
+			zoneNode, exists := nodeSet.nodes[zoneLocation.Name()]
+			if !exists {
+				return fmt.Errorf("zone node is missing at %s", zoneLocation.Name())
+			}
+			zoneTermini := terminiForNode(zoneLocation, zoneNode.hash)
+			if !zoneTermini.IsValid() {
+				return fmt.Errorf("zone termini are missing or invalid at %s for %s", zoneLocation.Name(), zoneNode.hash)
+			}
+			expectedZoneTerminus := regionTermini.SubTerminiAtIndex(j)
+			actualZoneTerminus := zoneTermini.DomTerminus(zoneLocation)
+			if !pcrcMatches(zoneTermini, expectedZoneTerminus, zoneLocation) {
+				return fmt.Errorf("region-to-zone PCRC failed at %s: region requires %s, zone references %s", zoneLocation.Name(), expectedZoneTerminus, actualZoneTerminus)
+			}
+		}
+	}
+	return nil
+}
+
+func (hc *HierarchicalCoordinator) rejectPendingHeaderNodeSet(nodeSet NodeSet, validationErr error) {
+	key := nodeSetKey(nodeSet)
+
+	hc.pendingMu.Lock()
+	hc.pendingHeaders.collection.Remove(key)
+	if hc.hasQueuedGeneration && nodeSetKey(hc.queuedHeaderGeneration) == key {
+		hc.queuedHeaderGeneration = NodeSet{}
+		hc.hasQueuedGeneration = false
+	}
+	// The current worker will consume this queued candidate after returning
+	// from computePendingHeaders.
+	_, _ = hc.queueBestHeaderGenerationLocked()
+	hc.pendingMu.Unlock()
+
+	log.Global.WithField("error", validationErr).Error("Rejected pending-header NodeSet: PCRC validation failed")
+
+	select {
+	case hc.pendingHeaderBackupCh <- struct{}{}:
+	default:
+	}
+}
+
 // PCRC previous coincidence reference check makes sure there are not any cyclic references in the graph and calculates new termini and the block terminus
 func (hc *HierarchicalCoordinator) pcrc(subParentHash common.Hash, domTerminus common.Hash, location common.Location, ctx int) bool {
 	backend := hc.GetBackend(location)
 	termini := backend.GetTerminiByHash(subParentHash)
-	if termini == nil {
-		return false
-	}
-	if termini.DomTerminus(location) != domTerminus {
-		return false
-	}
-	return true
+	return pcrcMatches(termini, domTerminus, location)
+}
+
+func pcrcMatches(termini *types.Termini, domTerminus common.Hash, location common.Location) bool {
+	return termini.IsValid() && termini.DomTerminus(location) == domTerminus
 }
 
 func CopyConstraintMap(constraintMap map[string]common.Hash) map[string]common.Hash {
