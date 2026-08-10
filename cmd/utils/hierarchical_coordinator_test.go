@@ -191,3 +191,46 @@ func TestRejectPendingHeaderNodeSetQueuesFallback(t *testing.T) {
 		t.Fatal("backup reconstruction was not requested")
 	}
 }
+
+func TestValidPrimeRecoveryRelation(t *testing.T) {
+	parentHash := common.HexToHash("0x01")
+	currentHash := common.HexToHash("0x02")
+	childHash := common.HexToHash("0x03")
+	unrelatedHash := common.HexToHash("0x04")
+
+	tests := []struct {
+		name            string
+		candidateHash   common.Hash
+		candidateParent common.Hash
+		candidateNumber uint64
+		forced          bool
+		want            bool
+	}{
+		{"automatic direct child", childHash, currentHash, 101, false, true},
+		{"automatic current rejected", currentHash, parentHash, 100, false, false},
+		{"automatic parent rejected", parentHash, common.Hash{}, 99, false, false},
+		{"forced current", currentHash, parentHash, 100, true, true},
+		{"forced direct child", childHash, currentHash, 101, true, true},
+		{"forced direct parent", parentHash, common.Hash{}, 99, true, true},
+		{"forced unrelated same height", unrelatedHash, parentHash, 100, true, false},
+		{"forced unrelated parent", unrelatedHash, common.Hash{}, 99, true, false},
+		{"forced deep ancestor", common.HexToHash("0x05"), common.Hash{}, 98, true, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := validPrimeRecoveryRelation(
+				test.candidateHash,
+				test.candidateParent,
+				test.candidateNumber,
+				currentHash,
+				parentHash,
+				100,
+				test.forced,
+			)
+			if got != test.want {
+				t.Fatalf("got %t, want %t", got, test.want)
+			}
+		})
+	}
+}

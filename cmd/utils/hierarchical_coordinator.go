@@ -498,9 +498,10 @@ func (hc *HierarchicalCoordinator) recoverPendingHeaders(quaiBackend quai.Consen
 
 // recoverHierarchyFromSubordinatePrimeTerminus recovers every context to a
 // Prime checkpoint when all subordinate heads agree that the direct child of
-// the current Prime head is their Prime terminus. The strict agreement,
-// ancestry, availability, and PCRC checks keep this startup repair from
-// choosing a fork merely because one subordinate is ahead.
+// the current Prime head is their Prime terminus. An explicitly configured
+// checkpoint may additionally select the current Prime head or either adjacent
+// Prime block. The strict ancestry, availability, and PCRC checks keep this
+// startup repair from choosing an unrelated fork.
 func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(quaiBackend quai.ConsensusAPI, primeHead *types.WorkObject, currentRegions, currentZones int, forcedCheckpoint *common.Hash) (*types.WorkObject, bool) {
 	if currentRegions == 0 || currentZones == 0 {
 		return primeHead, false
@@ -512,32 +513,38 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 		candidateHash = *forcedCheckpoint
 	}
 
-	for i := 0; i < currentRegions; i++ {
-		regionLoc := common.Location{byte(i)}
-		regionBackendRef := quaiBackend.GetBackend(regionLoc)
-		if regionBackendRef == nil {
-			return primeHead, false
-		}
-		regionHead := (*regionBackendRef).CurrentHeader()
-		if regionHead == nil || (forcedCheckpoint == nil && regionHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber) {
-			return primeHead, false
-		}
-		if candidateHash == (common.Hash{}) {
-			candidateHash = regionHead.PrimeTerminusHash()
-		}
-		if candidateHash == (common.Hash{}) || regionHead.PrimeTerminusHash() != candidateHash {
-			return primeHead, false
-		}
-
-		for j := 0; j < currentZones; j++ {
-			zoneLoc := common.Location{byte(i), byte(j)}
-			zoneBackendRef := quaiBackend.GetBackend(zoneLoc)
-			if zoneBackendRef == nil {
+	// Automatic recovery must be derived from unanimous current subordinate
+	// heads. A forced checkpoint is instead validated from the stored termini of
+	// that checkpoint, which is necessary when deliberately rewinding one Prime
+	// block from subordinate heads that already reference the current Prime.
+	if forcedCheckpoint == nil {
+		for i := 0; i < currentRegions; i++ {
+			regionLoc := common.Location{byte(i)}
+			regionBackendRef := quaiBackend.GetBackend(regionLoc)
+			if regionBackendRef == nil {
 				return primeHead, false
 			}
-			zoneHead := (*zoneBackendRef).CurrentHeader()
-			if zoneHead == nil || (forcedCheckpoint == nil && zoneHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber) || zoneHead.PrimeTerminusHash() != candidateHash {
+			regionHead := (*regionBackendRef).CurrentHeader()
+			if regionHead == nil || regionHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber {
 				return primeHead, false
+			}
+			if candidateHash == (common.Hash{}) {
+				candidateHash = regionHead.PrimeTerminusHash()
+			}
+			if candidateHash == (common.Hash{}) || regionHead.PrimeTerminusHash() != candidateHash {
+				return primeHead, false
+			}
+
+			for j := 0; j < currentZones; j++ {
+				zoneLoc := common.Location{byte(i), byte(j)}
+				zoneBackendRef := quaiBackend.GetBackend(zoneLoc)
+				if zoneBackendRef == nil {
+					return primeHead, false
+				}
+				zoneHead := (*zoneBackendRef).CurrentHeader()
+				if zoneHead == nil || zoneHead.NumberU64(common.PRIME_CTX) != expectedPrimeNumber || zoneHead.PrimeTerminusHash() != candidateHash {
+					return primeHead, false
+				}
 			}
 		}
 	}
@@ -548,14 +555,16 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 	}
 	primeBackend := *primeBackendRef
 	candidate := primeBackend.GetBlockByHash(candidateHash)
-	isCurrentCheckpoint := candidate != nil && candidate.Hash() == primeHead.Hash()
-	isDirectChild := candidate != nil && candidate.NumberU64(common.PRIME_CTX) == expectedPrimeNumber && candidate.ParentHash(common.PRIME_CTX) == primeHead.Hash()
-	if candidate == nil || (forcedCheckpoint == nil && !isDirectChild) || (forcedCheckpoint != nil && !isCurrentCheckpoint && !isDirectChild) {
+	if candidate == nil || !validPrimeRecoveryRelation(
+		candidate.Hash(), candidate.ParentHash(common.PRIME_CTX), candidate.NumberU64(common.PRIME_CTX),
+		primeHead.Hash(), primeHead.ParentHash(common.PRIME_CTX), primeHead.NumberU64(common.PRIME_CTX),
+		forcedCheckpoint != nil,
+	) {
 		log.Global.WithFields(log.Fields{
 			"candidate":      candidateHash,
 			"currentPrime":   primeHead.Hash(),
 			"expectedNumber": expectedPrimeNumber,
-		}).Warn("Skipping Prime head recovery: subordinate Prime terminus is not the direct child")
+		}).Warn("Skipping Prime head recovery: checkpoint is not an allowed adjacent Prime block")
 		return primeHead, false
 	}
 
@@ -567,15 +576,22 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 
 	for i := 0; i < currentRegions; i++ {
 		regionLoc := common.Location{byte(i)}
-		regionBackend := *quaiBackend.GetBackend(regionLoc)
-		regionHead := regionBackend.CurrentHeader()
-		regionTermini := regionBackend.GetTerminiByHash(regionHead.Hash())
-		if regionTermini == nil || !regionTermini.IsValid() {
+		regionBackendRef := quaiBackend.GetBackend(regionLoc)
+		if regionBackendRef == nil {
 			return primeHead, false
 		}
-		if regionTermini.DomTerminus(regionLoc) != primeTermini.SubTerminiAtIndex(i) {
-			log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": regionLoc.Name()}).Warn("Skipping Prime head recovery: Region is not PCRC-coherent")
-			return primeHead, false
+		regionBackend := *regionBackendRef
+		var currentRegionTermini *types.Termini
+		if forcedCheckpoint == nil {
+			regionHead := regionBackend.CurrentHeader()
+			if regionHead == nil {
+				return primeHead, false
+			}
+			currentRegionTermini = regionBackend.GetTerminiByHash(regionHead.Hash())
+			if !pcrcMatches(currentRegionTermini, primeTermini.SubTerminiAtIndex(i), regionLoc) {
+				log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": regionLoc.Name()}).Warn("Skipping Prime head recovery: Region is not PCRC-coherent")
+				return primeHead, false
+			}
 		}
 
 		regionCheckpointHash := primeTermini.SubTerminiAtIndex(i)
@@ -585,14 +601,27 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 			log.Global.WithFields(log.Fields{"candidate": candidateHash, "checkpoint": regionCheckpointHash, "location": regionLoc.Name()}).Warn("Skipping hierarchy recovery: Region checkpoint is unavailable")
 			return primeHead, false
 		}
+		if !pcrcMatches(regionCheckpointTermini, regionCheckpointHash, regionLoc) {
+			log.Global.WithFields(log.Fields{"candidate": candidateHash, "checkpoint": regionCheckpointHash, "location": regionLoc.Name()}).Warn("Skipping hierarchy recovery: Region checkpoint is not PCRC-coherent")
+			return primeHead, false
+		}
 		for j := 0; j < currentZones; j++ {
 			zoneLoc := common.Location{byte(i), byte(j)}
-			zoneBackend := *quaiBackend.GetBackend(zoneLoc)
-			zoneHead := zoneBackend.CurrentHeader()
-			zoneTermini := zoneBackend.GetTerminiByHash(zoneHead.Hash())
-			if zoneTermini == nil || !zoneTermini.IsValid() || zoneTermini.DomTerminus(zoneLoc) != regionTermini.SubTerminiAtIndex(j) {
-				log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": zoneLoc.Name()}).Warn("Skipping Prime head recovery: Zone is not PCRC-coherent")
+			zoneBackendRef := quaiBackend.GetBackend(zoneLoc)
+			if zoneBackendRef == nil {
 				return primeHead, false
+			}
+			zoneBackend := *zoneBackendRef
+			if forcedCheckpoint == nil {
+				zoneHead := zoneBackend.CurrentHeader()
+				if zoneHead == nil {
+					return primeHead, false
+				}
+				zoneTermini := zoneBackend.GetTerminiByHash(zoneHead.Hash())
+				if !pcrcMatches(zoneTermini, currentRegionTermini.SubTerminiAtIndex(j), zoneLoc) {
+					log.Global.WithFields(log.Fields{"candidate": candidateHash, "location": zoneLoc.Name()}).Warn("Skipping Prime head recovery: Zone is not PCRC-coherent")
+					return primeHead, false
+				}
 			}
 
 			zoneCheckpointHash := regionCheckpointTermini.SubTerminiAtIndex(j)
@@ -600,6 +629,10 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 			zoneCheckpointTermini := zoneBackend.GetTerminiByHash(zoneCheckpointHash)
 			if zoneCheckpoint == nil || zoneCheckpointTermini == nil || !zoneCheckpointTermini.IsValid() {
 				log.Global.WithFields(log.Fields{"candidate": candidateHash, "checkpoint": zoneCheckpointHash, "location": zoneLoc.Name()}).Warn("Skipping hierarchy recovery: Zone checkpoint is unavailable")
+				return primeHead, false
+			}
+			if !pcrcMatches(zoneCheckpointTermini, zoneCheckpointHash, zoneLoc) {
+				log.Global.WithFields(log.Fields{"candidate": candidateHash, "checkpoint": zoneCheckpointHash, "location": zoneLoc.Name()}).Warn("Skipping hierarchy recovery: Zone checkpoint is not PCRC-coherent")
 				return primeHead, false
 			}
 		}
@@ -666,6 +699,16 @@ func (hc *HierarchicalCoordinator) recoverHierarchyFromSubordinatePrimeTerminus(
 		"newNumber": recoveredHead.NumberU64(common.PRIME_CTX),
 	}).Warn("Recovered hierarchy to unanimous Prime checkpoint")
 	return recoveredHead, true
+}
+
+func validPrimeRecoveryRelation(candidateHash, candidateParent common.Hash, candidateNumber uint64, currentHash, currentParent common.Hash, currentNumber uint64, forced bool) bool {
+	isCurrent := candidateHash == currentHash && candidateNumber == currentNumber
+	isDirectChild := candidateNumber > currentNumber && candidateNumber-currentNumber == 1 && candidateParent == currentHash
+	if !forced {
+		return isDirectChild
+	}
+	isDirectParent := currentNumber > candidateNumber && currentNumber-candidateNumber == 1 && currentParent == candidateHash
+	return isCurrent || isDirectChild || isDirectParent
 }
 
 func (hc *HierarchicalCoordinator) startNode(logPath string, quaiBackend quai.ConsensusAPI, location common.Location, genesisBlock *types.WorkObject) {
