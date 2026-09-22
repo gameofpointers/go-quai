@@ -710,6 +710,9 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 	if wo == nil {
 		return fmt.Errorf("wo is nil")
 	}
+	if wo.PrimeTerminusNumber() == nil || !wo.PrimeTerminusNumber().IsUint64() {
+		return fmt.Errorf("wo has invalid prime terminus number")
+	}
 	if wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 		if wo.AuxPow() != nil {
 			return fmt.Errorf("wo auxpow powid is not nil before kawpow fork")
@@ -736,6 +739,9 @@ func (hc *HeaderChain) CheckPowIdValidity(wo *types.WorkObjectHeader) error {
 func (hc *HeaderChain) CheckPowIdValidityForWorkshare(wo *types.WorkObjectHeader) error {
 	if wo == nil {
 		return fmt.Errorf("wo is nil")
+	}
+	if wo.PrimeTerminusNumber() == nil || !wo.PrimeTerminusNumber().IsUint64() {
+		return fmt.Errorf("workshare has invalid prime terminus number")
 	}
 	if wo.PrimeTerminusNumber().Uint64() < params.KawPowForkBlock {
 		if wo.AuxPow() != nil {
@@ -999,12 +1005,44 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 				return err
 			}
 			sutxos = append(sutxos, trimmedUtxos...)
+			// Older blocks affected by the trim read-your-writes bug can contain
+			// the same outpoint in both journals. Recreating the UTXO key twice is
+			// harmless, but appending it twice corrupts the optional address index.
+			uniqueSutxos := make([]*types.SpentUtxoEntry, 0, len(sutxos))
+			seenSutxos := make(map[types.OutPoint]struct{}, len(sutxos))
 			for _, sutxo := range sutxos {
+				if _, seen := seenSutxos[sutxo.OutPoint]; seen {
+					continue
+				}
+				seenSutxos[sutxo.OutPoint] = struct{}{}
+				uniqueSutxos = append(uniqueSutxos, sutxo)
+			}
+			sutxos = uniqueSutxos
+			restoredUtxos := make(map[types.OutPoint]*types.UtxoEntry, len(sutxos))
+			utxoKeys, err := rawdb.ReadCreatedUTXOKeys(hc.headerDb, prevHeader.Hash())
+			if err != nil {
+				return err
+			}
+			createdOutpoints := make(map[types.OutPoint]struct{}, len(utxoKeys))
+			for _, createdKey := range utxoKeys {
+				if len(createdKey) != rawdb.UtxoKeyWithDenominationLength {
+					continue
+				}
+				txHash, index, err := rawdb.ReverseUtxoKey(createdKey[:rawdb.UtxoKeyLength])
+				if err == nil {
+					createdOutpoints[types.OutPoint{TxHash: txHash, Index: index}] = struct{}{}
+				}
+			}
+			for _, sutxo := range sutxos {
+				restoredUtxos[sutxo.OutPoint] = sutxo.UtxoEntry
 				rawdb.CreateUTXO(batch, sutxo.TxHash, sutxo.Index, sutxo.UtxoEntry)
 			}
 			if hc.config.IndexAddressUtxos {
 				addressOutpointsToAddMap := make(map[[20]byte][]*types.OutpointAndDenomination)
 				for _, sutxo := range sutxos {
+					if _, createdInBlock := createdOutpoints[sutxo.OutPoint]; createdInBlock {
+						continue
+					}
 					addressOutpointsToAddMap[common.AddressBytes(sutxo.Address)] = append(addressOutpointsToAddMap[common.AddressBytes(sutxo.Address)], &types.OutpointAndDenomination{
 						TxHash:       sutxo.TxHash,
 						Index:        sutxo.Index,
@@ -1015,10 +1053,6 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 				if err := rawdb.WriteAddressUTXOs(batch, hc.headerDb, addressOutpointsToAddMap); err != nil {
 					hc.logger.Errorf("failed to write address utxos: %v", err)
 				}
-			}
-			utxoKeys, err := rawdb.ReadCreatedUTXOKeys(hc.headerDb, prevHeader.Hash())
-			if err != nil {
-				return err
 			}
 			for _, key := range utxoKeys {
 				if len(key) == rawdb.UtxoKeyWithDenominationLength {
@@ -1039,6 +1073,11 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 					txHash, index, err := rawdb.ReverseUtxoKey(key)
 					if err != nil {
 						hc.logger.Errorf("failed to reverse utxo key: %v", err)
+						continue
+					}
+					if _, spentInBlock := restoredUtxos[types.OutPoint{TxHash: txHash, Index: index}]; spentInBlock {
+						// This outpoint was both created and spent by the block,
+						// so it was never present in the pre-block address index.
 						continue
 					}
 					utxo := rawdb.GetUTXO(hc.headerDb, txHash, index)
@@ -1129,6 +1168,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 		if nodeCtx == common.ZONE_CTX {
 			block := hc.GetBlockOrCandidate(hashStack[i].Hash(), hashStack[i].NumberU64(nodeCtx))
 			if block == nil {
+				rawdb.DeleteCanonicalHash(hc.headerDb, hashStack[i].NumberU64(hc.NodeCtx()))
 				return errors.New("could not find block during SetCurrentState: " + hashStack[i].Hash().String())
 			}
 			err := hc.AppendBlock(block)
@@ -1835,13 +1875,29 @@ func (hc *HeaderChain) ComputeEfficiencyScore(parent *types.WorkObject) (uint16,
 	return ewma, nil
 }
 
-// ComputeAverageTxFees computes the ema of the half of the total fees generated in quai over past 100 blocks
-func (hc *HeaderChain) ComputeAverageTxFees(parent *types.WorkObject, totalTxFeesInQuai *big.Int) *big.Int {
+// ComputeAverageTxFees computes the EMA of half the Quai-equivalent fee signal.
+// After the conversion-lock fork, TotalFees retains the parent's real fees and
+// the hard feedback cap is applied only as that sample enters the EMA. This
+// one-block lag makes AvgTxFees known before current transactions are processed.
+func (hc *HeaderChain) ComputeAverageTxFees(block, parent *types.WorkObject, currentHalfFeesInQuai, feeFreeReward *big.Int) *big.Int {
 	if rawdb.IsGenesisHash(hc.headerDb, parent.Hash()) {
 		return big.NewInt(0)
 	}
+	feeSignal := currentHalfFeesInQuai
+	if block.PrimeTerminusNumber().Uint64() >= params.ConversionLockChangeForkBlock {
+		// The pre-fork parent average already includes its own fees. Carry it
+		// across the transition once instead of counting those fees twice.
+		if parent.PrimeTerminusNumber().Uint64() < params.ConversionLockChangeForkBlock {
+			return new(big.Int).Set(parent.AvgTxFees())
+		}
+		cappedFees := misc.CapFeeFeedbackSignal(feeFreeReward, parent.TotalFees())
+		feeSignal = new(big.Int).Div(cappedFees, common.Big2)
+	}
+	if feeSignal == nil {
+		feeSignal = common.Big0
+	}
 	newAvgTxFees := new(big.Int).Mul(parent.AvgTxFees(), big.NewInt(99))
-	newAvgTxFees = new(big.Int).Add(newAvgTxFees, totalTxFeesInQuai)
+	newAvgTxFees = new(big.Int).Add(newAvgTxFees, feeSignal)
 	newAvgTxFees = new(big.Int).Div(newAvgTxFees, big.NewInt(100))
 	return newAvgTxFees
 }

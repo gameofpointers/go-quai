@@ -15,6 +15,55 @@ import (
 	"modernc.org/mathutil"
 )
 
+func TestPowIDValidationRejectsOversizedPrimeTerminus(t *testing.T) {
+	hc := &HeaderChain{}
+	header := &types.WorkObjectHeader{}
+	header.SetPrimeTerminusNumber(new(big.Int).Lsh(big.NewInt(1), 80))
+
+	if err := hc.CheckPowIdValidity(header); err == nil {
+		t.Fatal("expected block PoW validation to reject oversized prime terminus number")
+	}
+	if err := hc.CheckPowIdValidityForWorkshare(header); err == nil {
+		t.Fatal("expected workshare PoW validation to reject oversized prime terminus number")
+	}
+
+	header.SetPrimeTerminusNumber(big.NewInt(0))
+	if err := hc.CheckPowIdValidity(header); err != nil {
+		t.Fatalf("expected ordinary ProgPoW block header to remain valid: %v", err)
+	}
+	if err := hc.CheckPowIdValidityForWorkshare(header); err != nil {
+		t.Fatalf("expected ordinary ProgPoW workshare to remain valid: %v", err)
+	}
+}
+
+func TestComputeAverageTxFeesCapsLaggedRealFeesAfterFork(t *testing.T) {
+	db := rawdb.NewMemoryDatabase(log.Global)
+	defer db.Close()
+	hc := &HeaderChain{headerDb: db}
+
+	parent := types.EmptyWorkObject(common.ZONE_CTX)
+	parent.WorkObjectHeader().SetPrimeTerminusNumber(new(big.Int).SetUint64(params.ConversionLockChangeForkBlock))
+	parent.Header().SetAvgTxFees(big.NewInt(1000))
+	parent.Header().SetTotalFees(big.NewInt(400))
+
+	block := types.EmptyWorkObject(common.ZONE_CTX)
+	block.WorkObjectHeader().SetPrimeTerminusNumber(new(big.Int).SetUint64(params.ConversionLockChangeForkBlock))
+
+	// The hard limit is four times the 100 fee-free reward. The parent's real
+	// 400 fee sample therefore enters the EMA as 200 after halving.
+	require.Equal(t, big.NewInt(992), hc.ComputeAverageTxFees(block, parent, big.NewInt(999999), big.NewInt(100)))
+
+	// Real fees above the hard limit remain stored in TotalFees but have the
+	// same bounded effect on AvgTxFees.
+	parent.Header().SetTotalFees(big.NewInt(20_000))
+	require.Equal(t, big.NewInt(992), hc.ComputeAverageTxFees(block, parent, nil, big.NewInt(100)))
+
+	// On the transition block, the pre-fork parent average already contains
+	// that parent's fees, so it is carried once without another update.
+	parent.WorkObjectHeader().SetPrimeTerminusNumber(new(big.Int).SetUint64(params.ConversionLockChangeForkBlock - 1))
+	require.Equal(t, big.NewInt(1000), hc.ComputeAverageTxFees(block, parent, nil, nil))
+}
+
 func TestComputeKQuaiDiscount(t *testing.T) {
 
 	// First value is the current block(5004000) exchange rate
