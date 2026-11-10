@@ -865,6 +865,10 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		if tracer, err = New(*config.Tracer, txctx, api.backend.Logger(), api.backend.NodeLocation()); err != nil {
 			return nil, err
 		}
+		// Some transactions complete in the state transition without entering the
+		// EVM. They never call CaptureStart, so bind the state before execution to
+		// keep database access in the JavaScript result function safe.
+		tracer.(*Tracer).dbWrapper.db = statedb
 		// Handle timeouts and RPC cancellations
 		deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
 		go func() {

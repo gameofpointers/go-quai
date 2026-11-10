@@ -673,6 +673,15 @@ func (jst *Tracer) CaptureEnd(output []byte, gasUsed uint64, t time.Duration, er
 
 // GetResult calls the Javascript 'result' function and returns its value, or any accumulated error
 func (jst *Tracer) GetResult() (json.RawMessage, error) {
+	if jst.dbWrapper.db == nil {
+		err := jst.err
+		if err == nil {
+			err = errors.New("tracing failed: state database was not initialized")
+		}
+		jst.vm.DestroyHeap()
+		jst.vm.Destroy()
+		return nil, err
+	}
 	// Transform the context into a JavaScript object and inject into the state
 	obj := jst.vm.PushObject()
 
